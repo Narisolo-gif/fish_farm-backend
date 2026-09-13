@@ -1,0 +1,28 @@
+services:
+  backend:
+    build: .
+    container_name: fish_farm_backend
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16
+    container_name: fish_farm_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: fish_farm
+      POSTGRES_USER: fish_farm
+      POSTGRES_PASSWORD: fish_farm_password
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
