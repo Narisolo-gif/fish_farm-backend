@@ -55,7 +55,7 @@ INSTALLED_APPS = [
     "apps.grossissement.apps.GrossissementConfig",
     "apps.monitoring.apps.MonitoringConfig",
 ]
-
+AUTH_USER_MODEL = "core.Utilisateur"
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -119,6 +119,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+}
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
