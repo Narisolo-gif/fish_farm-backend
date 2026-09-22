@@ -2,6 +2,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.decorators import api_view, permission_classes
 
 from .models import Role, Utilisateur
 from .serializers import (
@@ -73,3 +74,11 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
             "detail": "Mot de passe réinitialisé avec succès.",
             "mot_de_passe_temporaire": password,
         })
+        
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def me(request):
+	return Response(
+		UtilisateurSerializer(request.user).data
+	)
