@@ -19,5 +19,16 @@ from django.urls import include, path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path("api/", include("farm.urls")),
+    path("api/", include("apps.core.urls")),
+    path("api/v1/auth/", include("apps.core.urls")),
+    path("api/v1/bassins/", include("apps.bassins.urls")),
+    path("api/v1/environnement/", include("apps.environnement.urls")),
+    path("api/v1/provende/", include("apps.provende.urls")),
+    path("api/v1/lots/", include("apps.lots.urls")),
+    path("api/v1/reproduction/", include("apps.reproduction.urls")),
+    path("api/v1/ecloserie/", include("apps.ecloserie.urls")),
+    path("api/v1/traitement/", include("apps.traitement.urls")),
+    path("api/v1/stocks/", include("apps.stocks.urls")),
+    path("api/v1/grossissement/", include("apps.grossissement.urls")),
+    path("api/v1/monitoring/", include("apps.monitoring.urls")),
 ]

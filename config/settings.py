@@ -42,8 +42,18 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
 
-    # Local
-    "farm",
+    # Local applications
+    "apps.core.apps.CoreConfig",
+    "apps.bassins.apps.BassinsConfig",
+    "apps.environnement.apps.EnvironnementConfig",
+    "apps.provende.apps.ProvendeConfig",
+    "apps.lots.apps.LotsConfig",
+    "apps.reproduction.apps.ReproductionConfig",
+    "apps.ecloserie.apps.EcloserieConfig",
+    "apps.traitement.apps.TraitementConfig",
+    "apps.stocks.apps.StocksConfig",
+    "apps.grossissement.apps.GrossissementConfig",
+    "apps.monitoring.apps.MonitoringConfig",
 ]
 
 MIDDLEWARE = [
