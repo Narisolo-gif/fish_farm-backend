@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Role, Utilisateur
 from .serializers import (
@@ -23,7 +24,6 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
     queryset = Utilisateur.objects.all()
     serializer_class = UtilisateurSerializer
     permission_classes = [IsAdministrateur]
-
     @action(
         detail=False,
         methods=["post"],
@@ -82,3 +82,29 @@ def me(request):
 	return Response(
 		UtilisateurSerializer(request.user).data
 	)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def logout(request):
+	refresh_token = request.data.get("refresh")
+
+	if not refresh_token:
+		return Response(
+			{"detail": "Refresh token requis."},
+			status=400,
+		)
+
+	try:
+		token = RefreshToken(refresh_token)
+		token.blacklist()
+
+		return Response(
+			{"detail": "Déconnexion réussie."},
+			status=200,
+		)
+
+	except Exception:
+		return Response(
+			{"detail": "Refresh token invalide."},
+			status=400,
+		)

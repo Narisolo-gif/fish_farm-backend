@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     # Third-party
     "rest_framework",
     "corsheaders",
+    "rest_framework_simplejwt.token_blacklist",
 
     # Local applications
     "apps.core.apps.CoreConfig",
