@@ -1,4 +1,18 @@
-from django.urls import path
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
+
+from .viewsets import ParametreEnvironnementalViewSet
 
 
-urlpatterns = []
+router = DefaultRouter()
+
+router.register(
+    "",
+    ParametreEnvironnementalViewSet,
+    basename="environnement",
+)
+
+
+urlpatterns = [
+    *router.urls,
+]
