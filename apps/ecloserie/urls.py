@@ -1,4 +1,12 @@
-from django.urls import path
+from rest_framework.routers import DefaultRouter
 
+from .viewsets import EclosionViewSet
 
-urlpatterns = []
+router = DefaultRouter()
+router.register(
+    r"",
+    EclosionViewSet,
+    basename="eclosion",
+)
+
+urlpatterns = router.urls
