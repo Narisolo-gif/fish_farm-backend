@@ -37,7 +37,7 @@ class BassinViewSet(viewsets.ModelViewSet):
         Détermine les permissions selon l'opération demandée.
         """
 
-        if self.action in ["list", "retrieve"]:
+        if self.action in ["list", "retrieve", "create"]:
             return [IsAdministrateurOuGestionnaire()]
 
         return [IsAdministrateur()]
