@@ -16,6 +16,11 @@ class Lot(models.Model):
         EN_STOCK = "EN_STOCK", "En stock"
         CLOTUREE = "CLOTUREE", "Clôturée"
 
+    # Définit le parcours de production choisi pour le lot.
+    class ParcoursProduction(models.TextChoices):
+        TRAITEMENT_REQUIS = "TRAITEMENT_REQUIS", "Traitement requis"
+        SANS_TRAITEMENT = "SANS_TRAITEMENT", "Sans traitement"
+
     reference = models.CharField(
         max_length=100,
         unique=True,
@@ -36,6 +41,14 @@ class Lot(models.Model):
         related_name="lots_crees",
     )
     quantite_initiale = models.PositiveIntegerField()
+
+    # Valeur par défaut compatible avec les créations de lots existantes.
+    parcours_production = models.CharField(
+        max_length=30,
+        choices=ParcoursProduction.choices,
+        default=ParcoursProduction.TRAITEMENT_REQUIS,
+    )
+
     stade = models.CharField(
         max_length=20,
         choices=Stade.choices,

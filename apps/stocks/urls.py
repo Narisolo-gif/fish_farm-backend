@@ -1,4 +1,8 @@
-from django.urls import path
+from rest_framework.routers import DefaultRouter
 
+from .viewsets import MiseEnStockViewSet
 
-urlpatterns = []
+router = DefaultRouter()
+router.register("", MiseEnStockViewSet, basename="mise-en-stock")
+
+urlpatterns = router.urls

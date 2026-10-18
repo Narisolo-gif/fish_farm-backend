@@ -41,6 +41,7 @@ class LotSerializer(serializers.ModelSerializer):
             "espece",
             "id_utilisateur_createur",
             "quantite_initiale",
+            "parcours_production",
             "stade",
             "observations",
             "created_at",
@@ -73,6 +74,19 @@ class LotSerializer(serializers.ModelSerializer):
                     )
                 })
 
+        # Le parcours est défini à la création et ne change plus ensuite.
+        if instance and "parcours_production" in attrs:
+            if (
+                attrs["parcours_production"]
+                != instance.parcours_production
+            ):
+                raise serializers.ValidationError({
+                    "parcours_production": (
+                        "Le parcours de production ne peut pas être "
+                        "modifié après la création du lot."
+                    )
+                })
+
         eclosion = attrs.get(
             "eclosion",
             instance.eclosion if instance else None,
@@ -82,8 +96,7 @@ class LotSerializer(serializers.ModelSerializer):
             if eclosion.statut != Eclosion.Statut.ACTIF:
                 raise serializers.ValidationError({
                     "id_eclosion": (
-                        "L'éclosion doit être active pour "
-                        "créer un lot."
+                        "L'éclosion doit être active pour créer un lot."
                     )
                 })
 
@@ -104,9 +117,7 @@ class LotSerializer(serializers.ModelSerializer):
             instance.date_creation if instance else None,
         )
 
-        if date_creation is not None and timezone.is_naive(
-            date_creation
-        ):
+        if date_creation is not None and timezone.is_naive(date_creation):
             attrs["date_creation"] = timezone.make_aware(
                 date_creation,
                 timezone.get_current_timezone(),
@@ -115,19 +126,14 @@ class LotSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        # Récupère l'éclosion sélectionnée par l'utilisateur.
+        # Les données biologiques proviennent de l'éclosion liée.
         eclosion = validated_data["eclosion"]
-
-        # Remonte de l'éclosion vers la ponte, puis vers la reproduction.
         reproduction = eclosion.ponte.reproduction
 
-        # L'espèce du lot provient de la reproduction existante.
         validated_data["espece"] = reproduction.espece
-
-        # La quantité initiale est celle des alevins obtenus à l'éclosion.
         validated_data["quantite_initiale"] = (
             eclosion.quantite_alevins_obtenu
         )
 
-        # Crée le lot avec les données calculées et celles validées.
+        # Si le client omet le parcours, le défaut du modèle s'applique.
         return super().create(validated_data)

@@ -17,6 +17,30 @@ def creer_traitement(validated_data, utilisateur):
     lot = Lot.objects.select_for_update().get(
         pk=validated_data["lot"].pk
     )
+        # Un lot destiné au traitement ne peut pas contourner cette étape.
+    if (
+        lot.parcours_production
+        == Lot.ParcoursProduction.TRAITEMENT_REQUIS
+        and not hasattr(lot, "traitement")
+    ):
+        raise ValidationError({
+            "id_lot": (
+                "Ce lot doit suivre un traitement avant sa mise en stock."
+            )
+        })
+
+    # Un lot avec traitement doit obligatoirement avoir terminé cette étape.
+    traitement = getattr(lot, "traitement", None)
+
+    if (
+        traitement is not None
+        and traitement.statut != Traitement.Statut.CLOTUREE
+    ):
+        raise ValidationError({
+            "id_lot": (
+                "Le traitement doit être clôturé avant la mise en stock."
+            )
+        })
 
     # Nouvelle vérification métier avant l'insertion en base.
     if Traitement.objects.filter(lot=lot).exists():
@@ -92,6 +116,16 @@ def supprimer_traitement(traitement_id):
     lot = Lot.objects.select_for_update().get(
         pk=traitement.lot.pk
     )
+    
+    # Un traitement ne peut pas être supprimé si le lot a déjà été mis en stock.
+    # Sinon, la suppression pourrait invalider l'historique de production.
+    if hasattr(lot, "mise_en_stock"):
+        raise ValidationError({
+            "detail": (
+                "Ce traitement ne peut pas être supprimé, car le lot "
+                "possède déjà une mise en stock."
+            )
+        })
 
     try:
         # Si une autre donnée protège le traitement, la transaction sera annulée.
