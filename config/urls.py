@@ -32,6 +32,7 @@ urlpatterns = [
     path("api/v1/stocks/", include("apps.stocks.urls")),
     path("api/v1/grossissement/", include("apps.grossissement.urls")),
     path("api/v1/monitoring/", include("apps.monitoring.urls")),
+    path("api/v1/effectifs/", include("apps.effectifs.urls")),
     path("api/auth/login/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 ]

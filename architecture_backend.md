@@ -30,7 +30,7 @@ En reprenant les mêmes trois catégories qu'à l'étape frontend :
 ### Règle de dépendance entre apps
 
 Pour éviter les imports circulaires et garder le graphe de dépendances lisible :
-- Les apps transverses (`core`, `bassins`, `environnement`, `provende`, `lots`) **ne dépendent d'aucune app de domaine**.
+- Les apps transverses (`core`, `bassins`, `environnement`, `provende`, `lots`, `effectifs`) **ne dépendent d'aucune app de domaine**. `effectifs` peut référencer les modèles transverses `Bassin` et `Lot`.
 - Les apps de domaine (`reproduction`, `ecloserie`, `traitement`, `stocks`, `grossissement`, `monitoring`) peuvent dépendre des apps transverses, jamais l'inverse, et **ne dépendent pas les unes des autres** (ex. `traitement` ne doit pas importer de modèle de `grossissement`).
 - Seule exception naturelle : `ecloserie` dépend de `reproduction` (`Eclosion.ponte` → FK vers `Ponte`), ce qui reflète la relation du MCD.
 
@@ -81,6 +81,12 @@ backend/
 │   │   ├── services.py                          # historique transverse (agrège traitement,
 │   │   │                                          # stockage, grossissement, vente pour un lot)
 │   │   └── urls.py
+│   │
+│   ├── effectifs/                               # ── transverse (registre) ──
+│   │   ├── models.py                            # MouvementEffectif immuable
+│   │   ├── services.py                          # écritures, annulations, soldes par bassin/espèce
+│   │   ├── viewsets.py                          # consultation et annulation contrôlée
+│   │   └── management/commands/                 # reprise et réconciliation
 │   │
 │   ├── reproduction/                            # ── domaine ──
 │   │   ├── models.py                            # Reproduction, Ponte
@@ -158,6 +164,7 @@ backend/
 | `PARAMETRE_ENVIRONNEMENTAL`, `REFERENTIEL_MESURE`, `MESURE_ENVIRONNEMENTALE` | `environnement` | `shared/environnement` |
 | `TYPE_PROVENDE`, `FOURNISSEUR`, `PROVENDE`, `MOUVEMENT_STOCK_PROVENDE` | `provende` | `shared/provende-ui` (catalogue) |
 | `LOT` | `lots` | `shared/lot` |
+| `MOUVEMENT_EFFECTIF` | `effectifs` | registre transverse des poissons par bassin et espèce |
 | `REPRODUCTION`, `PONTE` | `reproduction` | `features/production/reproduction` |
 | `ECLOSION` | `ecloserie` | `features/production/ecloserie` |
 | `TRAITEMENT`, `TRAITEMENT_HAPA`, `MORTALITE_TRAITEMENT`, `CONSOMMATION_TRAITEMENT` | `traitement` | `features/production/traitement` |
@@ -175,6 +182,7 @@ backend/
 - **`environnement`** : une seule table de mesures pour les cinq domaines ⇒ une seule app, filtrée par `bassin`/`hapa` en query params côté API.
 - **`provende`** : le **catalogue** (types, fournisseurs, stock) est unique ⇒ une seule app exposant les endpoints de lecture/consultation utilisés par `traitement`, `stocks`, `grossissement`. Les **actions de consommation** restent dans l'app appelante (voir ci-dessous).
 - **`lots`** : entité pivot, une seule app qui expose l'historique transverse (agrégé via `services.py` en interrogeant `traitement`, `stocks`, `grossissement`, `ecloserie` en lecture seule).
+- **`effectifs`** : journal append-only des entrées et sorties par bassin et espèce. Les opérations de reproduction, traitement et mise en stock appellent son service dans leur transaction ; l'API du registre ne permet pas de créer ou modifier directement un mouvement.
 - **`common/`** : pagination, gestion d'erreurs DRF, mixins techniques (ex. horodatage) — zéro connaissance métier.
 
 ### À NE PAS mutualiser
@@ -195,6 +203,7 @@ Chaque app expose son propre `urls.py` avec un `DefaultRouter` DRF, monté dans 
 /api/v1/environnement/mesures/  → environnement
 /api/v1/provende/...            → provende (catalogue, mouvements de stock)
 /api/v1/lots/...                → lots
+/api/v1/effectifs/...           → journal en lecture seule, solde et annulation contrôlée
 /api/v1/reproduction/...        → reproduction (reproductions, pontes)
 /api/v1/ecloserie/...           → ecloserie
 /api/v1/traitement/...          → traitement (+ /mortalites, /consommations imbriqués)

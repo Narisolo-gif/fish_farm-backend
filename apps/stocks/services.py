@@ -1,10 +1,16 @@
 
 from django.db import transaction
 from django.db.models.deletion import ProtectedError
+from django.utils import timezone
 
 from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.bassins.models import Bassin
+from apps.effectifs.models import MouvementEffectif
+from apps.effectifs.services import (
+    enregistrer_mouvement_operation,
+    operation_a_mouvements,
+)
 from apps.lots.models import Lot
 from apps.traitement.models import Traitement
 
@@ -133,12 +139,50 @@ def creer_mise_en_stock(validated_data, utilisateur):
 
     _verifier_effectif_entrant(lot, effectif)
     _verifier_justification(lot, effectif, justification)
+    if (
+        traitement is not None
+        and effectif != traitement.effectif_final
+    ):
+        raise ValidationError({
+            "effectif_entrant": (
+                "La mise en stock doit correspondre à l’effectif final du "
+                "traitement. Les écarts nécessitent un événement de perte "
+                "ou de mortalité."
+            )
+        })
 
     # Les champs d'identité sont contrôlés côté serveur.
     validated_data["lot"] = lot
     validated_data["utilisateur"] = utilisateur
 
     mise_en_stock = MiseEnStock.objects.create(**validated_data)
+
+    date_evenement = timezone.localtime(
+        mise_en_stock.date_mise_en_stock
+    ).date()
+
+    if traitement is not None:
+        enregistrer_mouvement_operation(
+            operation=mise_en_stock,
+            bassin=traitement.bassin,
+            espece=lot.espece,
+            type_mouvement=MouvementEffectif.TypeMouvement.SORTIE,
+            quantite=traitement.effectif_final,
+            date_evenement=date_evenement,
+            saisi_par=utilisateur,
+            lot_origine=lot,
+        )
+
+    enregistrer_mouvement_operation(
+        operation=mise_en_stock,
+        bassin=bassin,
+        espece=lot.espece,
+        type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
+        quantite=effectif,
+        date_evenement=date_evenement,
+        saisi_par=utilisateur,
+        lot_origine=lot,
+    )
 
     # Le changement de stade et la création sont dans la même transaction.
     lot.stade = Lot.Stade.EN_STOCK
@@ -160,6 +204,14 @@ def modifier_mise_en_stock(mise_en_stock_id, validated_data):
 
     # Le verrou du lot protège également son cycle de vie.
     lot = Lot.objects.select_for_update().get(pk=mise.lot_id)
+
+    if operation_a_mouvements(mise):
+        raise ValidationError({
+            "detail": (
+                "Une mise en stock référencée par le registre ne peut pas "
+                "être modifiée."
+            )
+        })
 
     if lot.stade != Lot.Stade.EN_STOCK:
         raise ValidationError({
@@ -200,6 +252,14 @@ def supprimer_mise_en_stock(mise_en_stock_id):
         raise NotFound("Mise en stock introuvable.") from exc
 
     lot = Lot.objects.select_for_update().get(pk=mise.lot_id)
+
+    if operation_a_mouvements(mise):
+        raise ValidationError({
+            "detail": (
+                "Une mise en stock référencée par le registre ne peut pas "
+                "être supprimée."
+            )
+        })
 
     # Ne pas réinitialiser un lot qui a déjà progressé au-delà du stock.
     if lot.stade != Lot.Stade.EN_STOCK:

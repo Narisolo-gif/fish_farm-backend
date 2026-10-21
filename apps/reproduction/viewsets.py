@@ -2,6 +2,7 @@ from django.db import transaction
 
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -9,6 +10,11 @@ from apps.bassins.models import Bassin
 from apps.core.permissions import (
     IsAdministrateur,
     IsAdministrateurOuGestionnaire,
+)
+from apps.effectifs.models import MouvementEffectif
+from apps.effectifs.services import (
+    enregistrer_mouvement_operation,
+    operation_a_mouvements,
 )
 
 from .models import Ponte, Reproduction
@@ -82,7 +88,19 @@ class ReproductionViewSet(viewsets.ModelViewSet):
             id=bassin_id
         )
 
-        serializer.save()
+        reproduction = serializer.save()
+        enregistrer_mouvement_operation(
+            operation=reproduction,
+            bassin=reproduction.bassin,
+            espece=reproduction.espece,
+            type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
+            quantite=(
+                reproduction.quantite_male
+                + reproduction.quantite_femelle
+            ),
+            date_evenement=reproduction.date_ajout,
+            saisi_par=self.request.user,
+        )
 
     @transaction.atomic
     def perform_update(self, serializer):
@@ -94,7 +112,37 @@ class ReproductionViewSet(viewsets.ModelViewSet):
             id=bassin.id
         )
 
+        instance = serializer.instance
+        if operation_a_mouvements(instance):
+            for field in (
+                "quantite_male",
+                "quantite_femelle",
+                "espece",
+                "date_ajout",
+                "bassin",
+            ):
+                if (
+                    field in serializer.validated_data
+                    and serializer.validated_data[field]
+                    != getattr(instance, field)
+                ):
+                    raise ValidationError({
+                        field: (
+                            "Les données qui déterminent le mouvement d’une "
+                            "reproduction enregistrée ne peuvent pas être modifiées."
+                        )
+                    })
         serializer.save()
+
+    def perform_destroy(self, instance):
+        if operation_a_mouvements(instance):
+            raise ValidationError({
+                "detail": (
+                    "Une reproduction référencée par le registre ne peut "
+                    "pas être supprimée."
+                )
+            })
+        instance.delete()
 
     @action(
         detail=True,

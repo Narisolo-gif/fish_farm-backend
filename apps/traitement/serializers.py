@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.bassins.models import Bassin
+from apps.effectifs.services import operation_a_mouvements
 from apps.lots.models import Lot
 from apps.provende.models import Provende
 
@@ -142,6 +143,19 @@ class TraitementSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     "Un traitement clôturé ne peut plus être modifié."
                 )
+
+            if operation_a_mouvements(self.instance):
+                for field in ("effectif_initial", "date_ouverture", "bassin"):
+                    if (
+                        field in attrs
+                        and attrs[field] != getattr(self.instance, field)
+                    ):
+                        raise serializers.ValidationError({
+                            field: (
+                                "Cette donnée ne peut pas être modifiée "
+                                "après son enregistrement dans le registre."
+                            )
+                        })
 
             # Le lot associé ne peut pas être remplacé.
             if "lot" in attrs and attrs["lot"].pk != self.instance.lot_id:

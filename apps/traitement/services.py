@@ -4,6 +4,11 @@ from django.utils import timezone
 
 from rest_framework.exceptions import NotFound, ValidationError
 
+from apps.effectifs.models import MouvementEffectif
+from apps.effectifs.services import (
+    enregistrer_mouvement_operation,
+    operation_a_mouvements,
+)
 from apps.lots.models import Lot
 
 from .models import Traitement
@@ -17,35 +22,23 @@ def creer_traitement(validated_data, utilisateur):
     lot = Lot.objects.select_for_update().get(
         pk=validated_data["lot"].pk
     )
-        # Un lot destiné au traitement ne peut pas contourner cette étape.
+
     if (
         lot.parcours_production
-        == Lot.ParcoursProduction.TRAITEMENT_REQUIS
-        and not hasattr(lot, "traitement")
+        == Lot.ParcoursProduction.SANS_TRAITEMENT
     ):
         raise ValidationError({
-            "id_lot": (
-                "Ce lot doit suivre un traitement avant sa mise en stock."
-            )
+            "id_lot": "Ce lot a été déclaré sans traitement."
         })
 
-    # Un lot avec traitement doit obligatoirement avoir terminé cette étape.
-    traitement = getattr(lot, "traitement", None)
-
-    if (
-        traitement is not None
-        and traitement.statut != Traitement.Statut.CLOTUREE
-    ):
-        raise ValidationError({
-            "id_lot": (
-                "Le traitement doit être clôturé avant la mise en stock."
-            )
-        })
-
-    # Nouvelle vérification métier avant l'insertion en base.
     if Traitement.objects.filter(lot=lot).exists():
         raise ValidationError({
             "id_lot": "Ce lot possède déjà un traitement."
+        })
+
+    if lot.stade != Lot.Stade.CREEE:
+        raise ValidationError({
+            "id_lot": "Seul un lot au stade CREEE peut être mis en traitement."
         })
 
     # Les champs contrôlés par le serveur ne viennent pas du client.
@@ -59,6 +52,17 @@ def creer_traitement(validated_data, utilisateur):
     # Le traitement et le changement de stade sont validés ensemble.
     lot.stade = Lot.Stade.EN_TRAITEMENT
     lot.save(update_fields=["stade", "updated_at"])
+
+    enregistrer_mouvement_operation(
+        operation=traitement,
+        bassin=traitement.bassin,
+        espece=lot.espece,
+        type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
+        quantite=traitement.effectif_initial,
+        date_evenement=traitement.date_ouverture,
+        saisi_par=utilisateur,
+        lot_origine=lot,
+    )
 
     return traitement
 
@@ -83,6 +87,14 @@ def cloturer_traitement(traitement_id, effectif_final):
             "effectif_final": (
                 "L'effectif final doit être compris entre zéro "
                 "et l'effectif initial."
+            )
+        })
+
+    if effectif_final != traitement.effectif_initial:
+        raise ValidationError({
+            "effectif_final": (
+                "Jusqu’à l’activation du journal de mortalité/perte, "
+                "l’effectif final doit égaler l’effectif initial."
             )
         })
 
@@ -116,6 +128,14 @@ def supprimer_traitement(traitement_id):
     lot = Lot.objects.select_for_update().get(
         pk=traitement.lot.pk
     )
+
+    if operation_a_mouvements(traitement):
+        raise ValidationError({
+            "detail": (
+                "Un traitement référencé par le registre ne peut pas être "
+                "supprimé."
+            )
+        })
     
     # Un traitement ne peut pas être supprimé si le lot a déjà été mis en stock.
     # Sinon, la suppression pourrait invalider l'historique de production.

@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "apps.stocks.apps.StocksConfig",
     "apps.grossissement.apps.GrossissementConfig",
     "apps.monitoring.apps.MonitoringConfig",
+    "apps.effectifs.apps.EffectifsConfig",
 ]
 AUTH_USER_MODEL = "core.Utilisateur"
 MIDDLEWARE = [

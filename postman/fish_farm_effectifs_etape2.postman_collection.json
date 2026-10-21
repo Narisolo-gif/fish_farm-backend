@@ -1,0 +1,560 @@
+{
+  "info": {
+    "_postman_id": "d36ecce0-4959-4d5b-ad78-762e1a6150c3",
+    "name": "Fish Farm - Registre d'effectif - Etape 2",
+    "description": "Flux API de reproduction, traitement et mise en stock avec vérification du registre. Pré-requis : serveur démarré, migrations appliquées, compte administrateur existant.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "username", "value": "admin" },
+    { "key": "password", "value": "CHANGE_ME" },
+    { "key": "accessToken", "value": "" },
+    { "key": "today", "value": "" },
+    { "key": "suffix", "value": "" },
+    { "key": "reproductionBassinId", "value": "" },
+    { "key": "treatmentBassinId", "value": "" },
+    { "key": "stockBassinId", "value": "" },
+    { "key": "reproductionId", "value": "" },
+    { "key": "lotId", "value": "" },
+    { "key": "provendeTypeId", "value": "" },
+    { "key": "provendeId", "value": "" },
+    { "key": "treatmentId", "value": "" },
+    { "key": "miseEnStockId", "value": "" },
+    { "key": "mouvementId", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.collectionVariables.set('today', new Date().toISOString().slice(0, 10));",
+          "if (!pm.collectionVariables.get('suffix')) pm.collectionVariables.set('suffix', Date.now().toString());"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Authentification JWT",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/auth/login/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('JWT obtenu', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('accessToken', body.access);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Créer bassin de reproduction",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reference\": \"PM-REP-{{suffix}}\",\n  \"categorie\": \"REPRODUCTION\",\n  \"capacity\": 100,\n  \"statut\": \"ACTIF\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/bassins/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Bassin de reproduction créé', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('reproductionBassinId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Créer bassin de traitement",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reference\": \"PM-TRAIT-{{suffix}}\",\n  \"categorie\": \"TRAITEMENT\",\n  \"capacity\": 100,\n  \"statut\": \"ACTIF\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/bassins/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Bassin de traitement créé', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('treatmentBassinId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Créer bassin de stock",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reference\": \"PM-STOCK-{{suffix}}\",\n  \"categorie\": \"STOCKS\",\n  \"capacity\": 100,\n  \"statut\": \"ACTIF\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/bassins/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Bassin de stock créé', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('stockBassinId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Mise en place en reproduction (crée une ENTREE)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reference\": \"PM-REPRO-{{suffix}}\",\n  \"bassin\": {{reproductionBassinId}},\n  \"espece\": \"CARPE\",\n  \"date_ajout\": \"{{today}}\",\n  \"quantite_male\": 4,\n  \"quantite_femelle\": 6,\n  \"observation\": \"Essai Postman registre\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/reproduction/reproductions/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Reproduction créée', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('reproductionId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - PATCH reproduction : quantité immuable (attendu 400)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"quantite_male\": 5\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/reproduction/reproductions/{{reproductionId}}/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('La modification d’effectif est refusée', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Créer ponte",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reference\": \"PM-PONTE-{{suffix}}\",\n  \"bassin\": {{reproductionBassinId}},\n  \"date_ponte\": \"{{today}}\",\n  \"quantite_oeuf_obtenu\": \"100.00\",\n  \"observation\": \"Essai Postman\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/reproduction/pontes/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Ponte créée', () => pm.response.to.have.status(201));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Créer éclosion",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reference\": \"PM-ECLOSION-{{suffix}}\",\n  \"reference_ponte\": \"PM-PONTE-{{suffix}}\",\n  \"date_eclosion\": \"{{today}}\",\n  \"quantite_oeufs_eclos\": \"80.00\",\n  \"quantite_alevins_obtenu\": 20,\n  \"observation\": \"Essai Postman\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/ecloserie/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Éclosion créée', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('eclosionId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Créer lot destiné au traitement",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reference\": \"PM-LOT-{{suffix}}\",\n  \"id_eclosion\": {{eclosionId}},\n  \"date_creation\": \"{{today}}T12:00:00Z\",\n  \"parcours_production\": \"TRAITEMENT_REQUIS\",\n  \"observations\": \"Essai Postman registre\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/lots/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Lot créé avec 20 poissons', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('lotId', pm.response.json().id);",
+              "pm.test('Espèce issue de la reproduction', () => pm.expect(pm.response.json().espece).to.eql('CARPE'));",
+              "pm.test('Quantité issue de l’éclosion', () => pm.expect(pm.response.json().quantite_initiale).to.eql(20));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Trouver le type de provende TRAITEMENT",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/api/v1/provende/types/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Types de provende disponibles', () => pm.response.to.have.status(200));",
+              "const type = pm.response.json().find(item => item.type === 'TRAITEMENT');",
+              "pm.expect(type, 'Type TRAITEMENT préchargé').to.exist;",
+              "pm.collectionVariables.set('provendeTypeId', type.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 - Créer provende nécessaire au traitement",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type_provende\": {{provendeTypeId}},\n  \"reference\": \"PM-PROVENDE-{{suffix}}\",\n  \"date_creation\": \"{{today}}\",\n  \"remarques\": \"Essai Postman\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/provende/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Provende créée', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('provendeId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 - Mise en traitement (crée une ENTREE)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id_lot\": {{lotId}},\n  \"effectif_initial\": 20,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentBassinId}},\n  \"id_used_provende\": {{provendeId}},\n  \"observation\": \"Essai Postman registre\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/traitement/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Traitement créé', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('treatmentId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 - Vérifier solde en traitement = 20",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/api/v1/effectifs/solde/?bassin={{treatmentBassinId}}&espece=CARPE&date={{today}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Solde du bassin de traitement', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.json().effectif_vivant).to.eql(20);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 - Clôture avec écart non journalisé : refus attendu",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"effectif_final\": 19\n}" },
+        "url": "{{baseUrl}}/api/v1/traitement/{{treatmentId}}/cloturer/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Écart refusé en attendant le journal de pertes', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 - Clôturer traitement avec effectif inchangé",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"effectif_final\": 20\n}" },
+        "url": "{{baseUrl}}/api/v1/traitement/{{treatmentId}}/cloturer/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Traitement clôturé', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 - Mise en stock (SORTIE traitement + ENTREE stock)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id_lot\": {{lotId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"effectif_entrant\": 20,\n  \"justification_ecart\": \"\",\n  \"observation\": \"Essai Postman transfert\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/stocks/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Mise en stock créée', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('miseEnStockId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 - PATCH mise en stock : quantité immuable (attendu 400)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"effectif_entrant\": 19\n}" },
+        "url": "{{baseUrl}}/api/v1/stocks/{{miseEnStockId}}/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('La modification de l’effectif est refusée', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 - Vérifier solde traitement = 0",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/api/v1/effectifs/solde/?bassin={{treatmentBassinId}}&espece=CARPE&date={{today}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Solde traitement après transfert', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.json().effectif_vivant).to.eql(0);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 - Vérifier solde stock = 20",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/api/v1/effectifs/solde/?bassin={{stockBassinId}}&espece=CARPE&date={{today}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Solde stock après transfert', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.json().effectif_vivant).to.eql(20);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 - Consulter le journal",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/api/v1/effectifs/?espece=CARPE"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Journal consultable', () => pm.response.to.have.status(200));",
+              "const moves = pm.response.json();",
+              "pm.expect(moves).to.be.an('array');",
+              "const movement = moves.find(item => item.bassin === Number(pm.collectionVariables.get('reproductionBassinId')));",
+              "pm.expect(movement, 'Mouvement de reproduction présent').to.exist;",
+              "pm.collectionVariables.set('mouvementId', movement.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 - PATCH du registre : refusé (attendu 405)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"quantite\": 999\n}" },
+        "url": "{{baseUrl}}/api/v1/effectifs/{{mouvementId}}/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Le registre est immuable via API', () => pm.response.to.have.status(405));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
