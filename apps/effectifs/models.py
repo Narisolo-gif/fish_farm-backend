@@ -102,6 +102,7 @@ class MouvementEffectif(models.Model):
     class Meta:
         ordering = ["-date_evenement", "-saisi_le", "-id"]
         constraints = [
+            # Ces contraintes protègent aussi les écritures qui ne passent pas par le service.
             models.CheckConstraint(
                 check=models.Q(quantite__gt=0),
                 name="mouvement_effectif_quantite_positive",
@@ -150,6 +151,7 @@ class MouvementEffectif(models.Model):
         )
 
     def save(self, *args, **kwargs):
+        # Un mouvement existant se corrige uniquement par un contre-mouvement lié.
         if self.pk:
             raise ValidationError(
                 "Un mouvement d’effectif est immuable ; annulez-le via le service dédié."

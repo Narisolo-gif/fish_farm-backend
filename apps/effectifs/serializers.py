@@ -53,6 +53,7 @@ class MouvementEffectifSerializer(serializers.ModelSerializer):
             "saisi_par_username",
             "saisi_le",
         ]
+        # L'API expose les mouvements en lecture seule ; les créations passent par les opérations métier.
         read_only_fields = fields
 
 

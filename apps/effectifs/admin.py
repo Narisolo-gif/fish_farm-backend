@@ -31,6 +31,7 @@ class MouvementEffectifAdmin(admin.ModelAdmin):
         field.name for field in MouvementEffectif._meta.fields
     ]
 
+    # Les corrections passent par une annulation, jamais par l'édition ou la suppression admin.
     def has_add_permission(self, request):
         return False
 

@@ -54,6 +54,7 @@ class Command(BaseCommand):
 
         operations = []
 
+        # La reprise crée un solde d'ouverture au jour de bascule, pas un historique reconstitué.
         reproductions = Reproduction.objects.filter(
             statut=Reproduction.Statut.ACTIF,
         ).select_related("bassin")
@@ -100,6 +101,7 @@ class Command(BaseCommand):
                 stock_record.lot,
             ))
 
+        # Le contrôle par opération rend la reprise relançable sans dupliquer ses ouvertures.
         to_create = [
             operation_data
             for operation_data in operations
@@ -108,6 +110,7 @@ class Command(BaseCommand):
         skipped = len(operations) - len(to_create)
 
         if options["dry_run"]:
+            # Le mode prévisualisation doit rester strictement sans effet en base.
             self.stdout.write(
                 f"Date de bascule : {date_bascule}. "
                 f"Mouvements à créer : {len(to_create)} ; déjà repris : {skipped}."

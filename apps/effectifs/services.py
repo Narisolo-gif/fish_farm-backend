@@ -11,6 +11,7 @@ from .models import MouvementEffectif
 
 
 def _sens_pour_type(type_mouvement: str) -> int:
+    # Le signe est une règle métier : il ne doit jamais être choisi par l'appelant.
     if type_mouvement in {
         MouvementEffectif.TypeMouvement.ENTREE,
         MouvementEffectif.TypeMouvement.AJUSTEMENT_POSITIF,
@@ -39,6 +40,7 @@ def _verifier_disponibilite_cumulee(
     *,
     ignore_id: int | None = None,
 ):
+    # Insérer l'événement à sa date réelle oblige à revalider tout le cumul chronologique.
     candidat = {
         "date_evenement": date_evenement,
         "saisi_le": timezone.now(),
@@ -64,6 +66,7 @@ def _verifier_disponibilite_cumulee(
     events.append(candidat)
     events.sort(key=lambda e: (e["date_evenement"], e["saisi_le"], e["id"]))
 
+    # Une saisie rétroactive est refusée si elle rend négatif un solde ultérieur.
     cumul = 0
     for event in events:
         cumul += int(event["sens"]) * int(event["quantite"])
@@ -102,6 +105,7 @@ def enregistrer_mouvement(
             "date_evenement": "La date d’événement ne peut pas être dans le futur."
         })
 
+    # Le verrou du bassin sérialise les écritures concurrentes avant le contrôle du cumul.
     bassin = Bassin.objects.select_for_update().get(pk=bassin.pk)
     if bassin.statut != Bassin.Statut.ACTIF:
         raise ValidationError({
@@ -154,6 +158,7 @@ def enregistrer_mouvement_operation(
     **mouvement_data,
 ):
     """Enregistre un mouvement référencé par son opération métier."""
+    # Le lien générique conserve la traçabilité sans imposer un modèle d'opération unique.
     content_type = ContentType.objects.get_for_model(operation)
     return enregistrer_mouvement(
         **mouvement_data,
@@ -170,6 +175,7 @@ def annuler_mouvement(mouvement_id: int, *, motif_annulation: str, saisi_par, da
             "motif_annulation": "Le motif d’annulation est obligatoire."
         })
 
+    # Le verrou sur le mouvement empêche deux annulations concurrentes de passer ensemble.
     mouvement = (
         MouvementEffectif.objects
         .select_for_update()
@@ -200,6 +206,7 @@ def annuler_mouvement(mouvement_id: int, *, motif_annulation: str, saisi_par, da
             "date_annulation": "La date d’annulation ne peut pas être dans le futur."
         })
 
+    # Utilise le même verrou que les créations afin de protéger le solde du bassin.
     Bassin.objects.select_for_update().get(pk=mouvement.bassin_id)
 
     sens_annulation = -mouvement.sens
@@ -232,6 +239,7 @@ def annuler_mouvement(mouvement_id: int, *, motif_annulation: str, saisi_par, da
 
 def solde_bassin_espece_date(bassin_id: int, espece: str, date_reference):
     """Retourne le solde cumulé pour le bassin et l’espèce à une date donnée."""
+    # Les annulations sont déjà des mouvements inverses ; elles s'intègrent au cumul.
     mouvements = MouvementEffectif.objects.filter(
         bassin_id=bassin_id,
         espece=espece,

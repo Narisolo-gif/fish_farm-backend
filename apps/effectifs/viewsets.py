@@ -53,6 +53,7 @@ class MouvementEffectifViewSet(viewsets.ReadOnlyModelViewSet):
         "annule_mouvement",
     ).all()
     serializer_class = MouvementEffectifSerializer
+    # POST est conservé uniquement pour l'action explicite d'annulation, jamais pour créer une ligne.
     http_method_names = ["get", "post", "head", "options"]
 
     def get_permissions(self):
@@ -107,6 +108,7 @@ class MouvementEffectifViewSet(viewsets.ReadOnlyModelViewSet):
         except (Bassin.DoesNotExist, ValueError, TypeError) as exc:
             raise NotFound("Bassin introuvable.") from exc
 
+        # La date par défaut est la date locale de la ferme, pas l'heure de saisie.
         return Response({
             "bassin": bassin.pk,
             "reference_bassin": bassin.reference,

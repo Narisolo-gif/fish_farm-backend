@@ -40,6 +40,7 @@ class Command(BaseCommand):
         attendu = defaultdict(int)
         references = {}
 
+        # Les reproductions inactives sont exclues : leur désactivation ne prouve pas une sortie physique.
         reproductions = Reproduction.objects.filter(
             statut=Reproduction.Statut.ACTIF,
             date_ajout__lte=date_reference,
@@ -101,6 +102,7 @@ class Command(BaseCommand):
             references[key] = row["bassin__reference"]
 
         enregistrer = {}
+        # Le registre inclut les contre-mouvements, qui compensent leur mouvement d'origine.
         totals = (
             MouvementEffectif.objects
             .filter(date_evenement__lte=date_reference)
