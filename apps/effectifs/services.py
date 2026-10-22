@@ -7,7 +7,12 @@ from rest_framework.exceptions import ValidationError
 
 from apps.bassins.models import Bassin
 
-from .models import MouvementEffectif
+from .models import (
+    CategoriePerte,
+    CauseMortalite,
+    EvenementMortalitePerte,
+    MouvementEffectif,
+)
 
 
 def _sens_pour_type(type_mouvement: str) -> int:
@@ -178,7 +183,8 @@ def annuler_mouvement(mouvement_id: int, *, motif_annulation: str, saisi_par, da
     # Le verrou sur le mouvement empêche deux annulations concurrentes de passer ensemble.
     mouvement = (
         MouvementEffectif.objects
-        .select_for_update()
+        # Les relations facultatives jointes plus bas ne doivent pas être verrouillées.
+        .select_for_update(of=("self",))
         .select_related("bassin", "lot_origine", "hapa", "lot_grossissement", "saisi_par")
         .get(pk=mouvement_id)
     )
@@ -250,3 +256,143 @@ def solde_bassin_espece_date(bassin_id: int, espece: str, date_reference):
     for mouvement in mouvements:
         cumul += int(mouvement.sens) * int(mouvement.quantite)
     return cumul
+
+
+@transaction.atomic
+def enregistrer_evenement_mortalite_perte(
+    *,
+    bassin,
+    espece: str,
+    type_evenement: str,
+    quantite: int,
+    date_evenement,
+    saisi_par,
+    cause_mortalite=None,
+    categorie_perte=None,
+    justification: str = "",
+):
+    if type_evenement not in EvenementMortalitePerte.TypeEvenement.values:
+        raise ValidationError({"type_evenement": "Type d’événement invalide."})
+    if quantite <= 0:
+        raise ValidationError({"quantite": "La quantité doit être positive."})
+    if date_evenement > timezone.localdate():
+        raise ValidationError({
+            "date_evenement": "La date d’événement ne peut pas être dans le futur."
+        })
+
+    # Le verrou partagé avec les mouvements garantit la disponibilité lors de saisies concurrentes.
+    bassin = Bassin.objects.select_for_update().get(pk=bassin.pk)
+    if bassin.statut != Bassin.Statut.ACTIF:
+        raise ValidationError({"bassin": "Le bassin sélectionné est inactif."})
+
+    if type_evenement == EvenementMortalitePerte.TypeEvenement.MORTALITE:
+        cause_is_active = (
+            cause_mortalite is not None
+            and CauseMortalite.objects.filter(
+                pk=cause_mortalite.pk,
+                actif=True,
+            ).exists()
+        )
+        if not cause_is_active:
+            raise ValidationError({
+                "cause_mortalite": "Une cause de mortalité active est obligatoire."
+            })
+        if categorie_perte is not None:
+            raise ValidationError({
+                "categorie_perte": "Une mortalité ne peut pas avoir de catégorie de perte."
+            })
+    else:
+        category_is_active = (
+            categorie_perte is not None
+            and CategoriePerte.objects.filter(
+                pk=categorie_perte.pk,
+                actif=True,
+            ).exists()
+        )
+        if not category_is_active:
+            raise ValidationError({
+                "categorie_perte": "Une catégorie de perte active est obligatoire."
+            })
+        if cause_mortalite is not None:
+            raise ValidationError({
+                "cause_mortalite": "Une perte ne peut pas avoir de cause de mortalité."
+            })
+        if not justification or not justification.strip():
+            raise ValidationError({
+                "justification": "La justification est obligatoire pour une perte."
+            })
+
+    effectif_disponible = solde_bassin_espece_date(
+        bassin.pk,
+        espece,
+        date_evenement,
+    )
+    if quantite > effectif_disponible:
+        raise ValidationError({
+            "quantite": (
+                f"La quantité ({quantite}) dépasse l’effectif disponible "
+                f"({effectif_disponible}) à cette date."
+            )
+        })
+
+    evenement = EvenementMortalitePerte.objects.create(
+        bassin=bassin,
+        espece=espece,
+        type_evenement=type_evenement,
+        quantite=quantite,
+        date_evenement=date_evenement,
+        cause_mortalite=cause_mortalite,
+        categorie_perte=categorie_perte,
+        justification=justification.strip() if justification else "",
+        saisi_par=saisi_par,
+    )
+    mouvement = enregistrer_mouvement_operation(
+        operation=evenement,
+        bassin=bassin,
+        espece=espece,
+        type_mouvement=(
+            MouvementEffectif.TypeMouvement.MORTALITE
+            if type_evenement == EvenementMortalitePerte.TypeEvenement.MORTALITE
+            else MouvementEffectif.TypeMouvement.PERTE
+        ),
+        quantite=quantite,
+        date_evenement=date_evenement,
+        saisi_par=saisi_par,
+    )
+    EvenementMortalitePerte.objects.filter(pk=evenement.pk).update(
+        mouvement=mouvement,
+    )
+    evenement.mouvement = mouvement
+    return evenement
+
+
+@transaction.atomic
+def annuler_evenement_mortalite_perte(
+    evenement_id: int,
+    *,
+    motif_annulation: str,
+    saisi_par,
+):
+    evenement = (
+        EvenementMortalitePerte.objects
+        .select_for_update()
+        .get(pk=evenement_id)
+    )
+    if evenement.statut == EvenementMortalitePerte.Statut.ANNULE:
+        raise ValidationError({"detail": "Cet événement a déjà été annulé."})
+    if evenement.mouvement_id is None:
+        raise ValidationError({
+            "detail": "Aucun mouvement n’est associé à cet événement."
+        })
+
+    # L'annulation conserve l'événement et compense son mouvement dans la même transaction.
+    mouvement_annulation = annuler_mouvement(
+        evenement.mouvement_id,
+        motif_annulation=motif_annulation,
+        saisi_par=saisi_par,
+    )
+    EvenementMortalitePerte.objects.filter(pk=evenement.pk).update(
+        statut=EvenementMortalitePerte.Statut.ANNULE,
+    )
+    evenement.statut = EvenementMortalitePerte.Statut.ANNULE
+    return evenement, mouvement_annulation

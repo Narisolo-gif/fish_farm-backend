@@ -83,9 +83,9 @@ backend/
 │   │   └── urls.py
 │   │
 │   ├── effectifs/                               # ── transverse (registre) ──
-│   │   ├── models.py                            # MouvementEffectif immuable
-│   │   ├── services.py                          # écritures, annulations, soldes par bassin/espèce
-│   │   ├── viewsets.py                          # consultation et annulation contrôlée
+│   │   ├── models.py                            # registre, causes/catégories et événements immuables
+│   │   ├── services.py                          # écritures atomiques, annulations, soldes par bassin/espèce
+│   │   ├── viewsets.py                          # registre en lecture seule, saisie et consultation des pertes
 │   │   └── management/commands/                 # reprise et réconciliation
 │   │
 │   ├── reproduction/                            # ── domaine ──
@@ -203,7 +203,7 @@ Chaque app expose son propre `urls.py` avec un `DefaultRouter` DRF, monté dans 
 /api/v1/environnement/mesures/  → environnement
 /api/v1/provende/...            → provende (catalogue, mouvements de stock)
 /api/v1/lots/...                → lots
-/api/v1/effectifs/...           → journal en lecture seule, solde et annulation contrôlée
+/api/v1/effectifs/...           → registre, soldes et journal de mortalité/perte
 /api/v1/reproduction/...        → reproduction (reproductions, pontes)
 /api/v1/ecloserie/...           → ecloserie
 /api/v1/traitement/...          → traitement (+ /mortalites, /consommations imbriqués)
@@ -211,6 +211,10 @@ Chaque app expose son propre `urls.py` avec un `DefaultRouter` DRF, monté dans 
 /api/v1/grossissement/...       → grossissement (+ /pesees, /mortalites, /consommations imbriqués)
 /api/v1/monitoring/...          → monitoring (alertes, analyses, rapports)
 ```
+
+Dans `effectifs`, les événements sont disponibles sous `/evenements/`, leur annulation sous
+`/evenements/{id}/annuler/`, et les référentiels en lecture sous `/causes-mortalite/` et
+`/categories-perte/`. Les mouvements restent non créables directement par l'API.
 
 Cette structure suit directement le mapping du tableau D : **un préfixe d'URL par app**, lui-même aligné sur un sous-module frontend — un développeur qui sait où trouver `features/production/traitement` sait aussi où trouver `/api/v1/traitement/`.
 

@@ -8,9 +8,25 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
 from apps.bassins.models import Bassin
-from .models import MouvementEffectif
-from .serializers import AnnulationMouvementSerializer, MouvementEffectifSerializer
-from .services import annuler_mouvement, solde_bassin_espece_date
+from .models import (
+    CategoriePerte,
+    CauseMortalite,
+    EvenementMortalitePerte,
+    MouvementEffectif,
+)
+from .serializers import (
+    AnnulationEvenementSerializer,
+    AnnulationMouvementSerializer,
+    CategoriePerteSerializer,
+    CauseMortaliteSerializer,
+    EvenementMortalitePerteSerializer,
+    MouvementEffectifSerializer,
+)
+from .services import (
+    annuler_evenement_mortalite_perte,
+    annuler_mouvement,
+    solde_bassin_espece_date,
+)
 
 
 class IsRoleEffectifAutorise(BasePermission):
@@ -140,5 +156,121 @@ class MouvementEffectifViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response(
             MouvementEffectifSerializer(annulation).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class CauseMortaliteViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CauseMortalite.objects.all()
+    serializer_class = CauseMortaliteSerializer
+    permission_classes = [IsAuthenticated, IsRoleEffectifAutorise]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        actif = self.request.query_params.get("actif")
+        if actif is not None:
+            if actif.lower() not in {"true", "false"}:
+                raise ValidationError({"actif": "Utilisez true ou false."})
+            queryset = queryset.filter(actif=actif.lower() == "true")
+        return queryset
+
+
+class CategoriePerteViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CategoriePerte.objects.all()
+    serializer_class = CategoriePerteSerializer
+    permission_classes = [IsAuthenticated, IsRoleEffectifAutorise]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        actif = self.request.query_params.get("actif")
+        if actif is not None:
+            if actif.lower() not in {"true", "false"}:
+                raise ValidationError({"actif": "Utilisez true ou false."})
+            queryset = queryset.filter(actif=actif.lower() == "true")
+        return queryset
+
+
+class EvenementMortalitePerteViewSet(viewsets.ModelViewSet):
+    queryset = EvenementMortalitePerte.objects.select_related(
+        "bassin",
+        "cause_mortalite",
+        "categorie_perte",
+        "mouvement",
+        "saisi_par",
+    ).all()
+    serializer_class = EvenementMortalitePerteSerializer
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [IsAuthenticated(), IsRoleEffectifAutorise()]
+        return [IsAuthenticated(), IsAdministrateurOuGestionnaireEffectif()]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        params = self.request.query_params
+
+        if params.get("bassin"):
+            if not params["bassin"].isdigit():
+                raise ValidationError({"bassin": "Identifiant de bassin invalide."})
+            queryset = queryset.filter(bassin_id=params["bassin"])
+        if params.get("espece"):
+            queryset = queryset.filter(espece__iexact=params["espece"])
+        if params.get("type_evenement"):
+            queryset = queryset.filter(type_evenement=params["type_evenement"])
+
+        for query_param, field in (
+            ("date_debut", "date_evenement__gte"),
+            ("date_fin", "date_evenement__lte"),
+        ):
+            value = params.get(query_param)
+            if value:
+                parsed = parse_date(value)
+                if parsed is None:
+                    raise ValidationError({
+                        query_param: "Format invalide. Utilisez YYYY-MM-DD."
+                    })
+                queryset = queryset.filter(**{field: parsed})
+
+        if params.get("cause"):
+            if not params["cause"].isdigit():
+                raise ValidationError({"cause": "Identifiant de cause invalide."})
+            queryset = queryset.filter(cause_mortalite_id=params["cause"])
+        if params.get("categorie"):
+            if not params["categorie"].isdigit():
+                raise ValidationError({
+                    "categorie": "Identifiant de catégorie invalide."
+                })
+            queryset = queryset.filter(categorie_perte_id=params["categorie"])
+
+        date_debut = params.get("date_debut")
+        date_fin = params.get("date_fin")
+        if date_debut and date_fin and date_debut > date_fin:
+            raise ValidationError({
+                "date_fin": "La date de fin doit être égale ou postérieure à la date de début."
+            })
+        return queryset
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="annuler",
+    )
+    def annuler(self, request, pk=None):
+        evenement = self.get_object()
+        serializer = AnnulationEvenementSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        evenement, mouvement_annulation = annuler_evenement_mortalite_perte(
+            evenement.pk,
+            motif_annulation=serializer.validated_data["motif_annulation"],
+            saisi_par=request.user,
+        )
+        return Response(
+            {
+                "evenement": EvenementMortalitePerteSerializer(evenement).data,
+                "mouvement_annulation": MouvementEffectifSerializer(
+                    mouvement_annulation
+                ).data,
+            },
             status=status.HTTP_201_CREATED,
         )

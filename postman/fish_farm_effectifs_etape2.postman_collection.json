@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "d36ecce0-4959-4d5b-ad78-762e1a6150c3",
-    "name": "Fish Farm - Registre d'effectif - Etape 2",
-    "description": "Flux API de reproduction, traitement et mise en stock avec vérification du registre. Pré-requis : serveur démarré, migrations appliquées, compte administrateur existant.",
+    "name": "Fish Farm - Registre d'effectif - Etapes 2 et 3",
+    "description": "Flux API de reproduction, traitement, mise en stock, mortalité et perte avec vérification du registre. Pré-requis : serveur démarré, migrations appliquées, compte administrateur existant.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -21,7 +21,11 @@
     { "key": "provendeId", "value": "" },
     { "key": "treatmentId", "value": "" },
     { "key": "miseEnStockId", "value": "" },
-    { "key": "mouvementId", "value": "" }
+    { "key": "mouvementId", "value": "" },
+    { "key": "mortalityCauseId", "value": "" },
+    { "key": "lossCategoryId", "value": "" },
+    { "key": "mortalityEventId", "value": "" },
+    { "key": "lossEventId", "value": "" }
   ],
   "event": [
     {
@@ -551,6 +555,282 @@
             "type": "text/javascript",
             "exec": [
               "pm.test('Le registre est immuable via API', () => pm.response.to.have.status(405));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 - Charger les causes de mortalité",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "******" }],
+        "url": "{{baseUrl}}/api/v1/effectifs/causes-mortalite/?actif=true"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Référentiel des causes consultable', () => pm.response.to.have.status(200));",
+              "const cause = pm.response.json().find(item => item.libelle.toLowerCase() === 'inconnue');",
+              "pm.expect(cause, 'Cause Inconnue active').to.exist;",
+              "pm.collectionVariables.set('mortalityCauseId', cause.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "23 - Charger les catégories de perte",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "******" }],
+        "url": "{{baseUrl}}/api/v1/effectifs/categories-perte/?actif=true"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Référentiel des catégories consultable', () => pm.response.to.have.status(200));",
+              "const category = pm.response.json().find(item => item.libelle.toLowerCase() === 'autre');",
+              "pm.expect(category, 'Catégorie Autre active').to.exist;",
+              "pm.collectionVariables.set('lossCategoryId', category.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "24 - Enregistrer une mortalité (2 CARPES)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "******" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"MORTALITE\",\n  \"quantite\": 2,\n  \"date_evenement\": \"{{today}}\",\n  \"cause_mortalite\": {{mortalityCauseId}},\n  \"justification\": \"Test Postman - morts constatés et comptés\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/effectifs/evenements/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Mortalité enregistrée', () => pm.response.to.have.status(201));",
+              "const event = pm.response.json();",
+              "pm.expect(event.type_evenement).to.eql('MORTALITE');",
+              "pm.expect(event.mouvement).to.be.a('number');",
+              "pm.collectionVariables.set('mortalityEventId', event.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "25 - Solde après mortalité = 18",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "******" }],
+        "url": "{{baseUrl}}/api/v1/effectifs/solde/?bassin={{stockBassinId}}&espece=CARPE&date={{today}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Mortalité débitée du registre', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.json().effectif_vivant).to.eql(18);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "25a - Refuser une mortalité supérieure au solde (attendu 400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "******" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"MORTALITE\",\n  \"quantite\": 999,\n  \"date_evenement\": \"{{today}}\",\n  \"cause_mortalite\": {{mortalityCauseId}}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/effectifs/evenements/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Mortalité supérieure au vivant refusée', () => pm.response.to.have.status(400));",
+              "pm.expect(pm.response.json()).to.have.property('quantite');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "26 - Refuser une perte sans justification (attendu 400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "******" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"PERTE\",\n  \"quantite\": 1,\n  \"date_evenement\": \"{{today}}\",\n  \"categorie_perte\": {{lossCategoryId}},\n  \"justification\": \"   \"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/effectifs/evenements/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Perte sans justification refusée', () => pm.response.to.have.status(400));",
+              "pm.expect(pm.response.json()).to.have.property('justification');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "27 - Enregistrer une perte (3 CARPES)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "******" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"PERTE\",\n  \"quantite\": 3,\n  \"date_evenement\": \"{{today}}\",\n  \"categorie_perte\": {{lossCategoryId}},\n  \"justification\": \"Test Postman - écart constaté lors du comptage\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/effectifs/evenements/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Perte enregistrée', () => pm.response.to.have.status(201));",
+              "const event = pm.response.json();",
+              "pm.expect(event.type_evenement).to.eql('PERTE');",
+              "pm.expect(event.mouvement).to.be.a('number');",
+              "pm.collectionVariables.set('lossEventId', event.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "28 - Filtrer le journal par bassin, espèce, période et cause",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "******" }],
+        "url": "{{baseUrl}}/api/v1/effectifs/evenements/?bassin={{stockBassinId}}&espece=CARPE&date_debut={{today}}&date_fin={{today}}&cause={{mortalityCauseId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Filtre événement par cause', () => pm.response.to.have.status(200));",
+              "const events = pm.response.json();",
+              "pm.expect(events.some(item => item.id === Number(pm.collectionVariables.get('mortalityEventId')))).to.eql(true);",
+              "pm.expect(events.some(item => item.id === Number(pm.collectionVariables.get('lossEventId')))).to.eql(false);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "29 - Annuler la mortalité",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "******" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"motif_annulation\": \"Test Postman - correction d'une saisie erronée\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/effectifs/evenements/{{mortalityEventId}}/annuler/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Annulation créée et événement conservé', () => pm.response.to.have.status(201));",
+              "const result = pm.response.json();",
+              "pm.expect(result.evenement.statut).to.eql('ANNULE');",
+              "pm.expect(result.mouvement_annulation.type_mouvement).to.eql('ANNULATION');",
+              "pm.expect(result.mouvement_annulation.annule_mouvement).to.eql(result.evenement.mouvement);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "30 - Solde après annulation = 17",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "******" }],
+        "url": "{{baseUrl}}/api/v1/effectifs/solde/?bassin={{stockBassinId}}&espece=CARPE&date={{today}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Le contre-mouvement rétablit la mortalité annulée', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.json().effectif_vivant).to.eql(17);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "31 - Refuser une seconde annulation (attendu 400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "******" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"motif_annulation\": \"Seconde tentative de correction\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/effectifs/evenements/{{mortalityEventId}}/annuler/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Double annulation refusée', () => pm.response.to.have.status(400));"
             ]
           }
         }

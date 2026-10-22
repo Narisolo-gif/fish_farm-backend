@@ -6,7 +6,7 @@ from threading import Barrier
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
-from django.db import close_old_connections
+from django.db import IntegrityError, close_old_connections, transaction
 from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -21,10 +21,16 @@ from apps.reproduction.models import Ponte, Reproduction
 from apps.stocks.models import MiseEnStock
 from apps.traitement.models import Traitement
 
-from .models import MouvementEffectif
+from .models import (
+    CategoriePerte,
+    CauseMortalite,
+    EvenementMortalitePerte,
+    MouvementEffectif,
+)
 from .services import (
     annuler_mouvement,
     enregistrer_mouvement,
+    enregistrer_evenement_mortalite_perte,
     solde_bassin_espece_date,
 )
 
@@ -136,6 +142,289 @@ class EffectifServiceTests(TestCase):
                 saisi_par=self.user,
                 date_annulation=date(2024, 3, 1),
             )
+
+
+class EvenementMortalitePerteTests(TestCase):
+    def setUp(self):
+        role, _ = Role.objects.get_or_create(
+            libelle="Administrateur",
+            defaults={"description": "Tests du journal des pertes"},
+        )
+        self.user = User.objects.create_user(
+            username="mortality-admin",
+            password="TestPassword123!",
+            role=role,
+            statut="ACTIF",
+        )
+        self.bassin = Bassin.objects.create(
+            reference="MORT-001",
+            categorie=Bassin.Categorie.STOCKS,
+            capacity=100,
+            statut=Bassin.Statut.ACTIF,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.today = timezone.localdate()
+        self.cause = CauseMortalite.objects.get(libelle="Inconnue")
+        self.categorie = CategoriePerte.objects.get(libelle="Autre")
+
+    def _add_stock(self, quantity=12):
+        return enregistrer_mouvement(
+            bassin=self.bassin,
+            espece="CARPE",
+            type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
+            quantite=quantity,
+            date_evenement=self.today,
+            saisi_par=self.user,
+        )
+
+    def test_mortality_and_loss_create_linked_debit_movements(self):
+        self._add_stock()
+
+        mortality = enregistrer_evenement_mortalite_perte(
+            bassin=self.bassin,
+            espece="CARPE",
+            type_evenement=EvenementMortalitePerte.TypeEvenement.MORTALITE,
+            quantite=2,
+            date_evenement=self.today,
+            saisi_par=self.user,
+            cause_mortalite=self.cause,
+        )
+        loss = enregistrer_evenement_mortalite_perte(
+            bassin=self.bassin,
+            espece="CARPE",
+            type_evenement=EvenementMortalitePerte.TypeEvenement.PERTE,
+            quantite=3,
+            date_evenement=self.today,
+            saisi_par=self.user,
+            categorie_perte=self.categorie,
+            justification="Comptage physique inférieur au registre",
+        )
+
+        self.assertEqual(mortality.mouvement.type_mouvement, "MORTALITE")
+        self.assertEqual(loss.mouvement.type_mouvement, "PERTE")
+        self.assertEqual(
+            solde_bassin_espece_date(self.bassin.pk, "CARPE", self.today),
+            7,
+        )
+
+    def test_loss_without_justification_is_rejected_without_partial_records(self):
+        self._add_stock()
+
+        response = self.client.post(
+            "/api/v1/effectifs/evenements/",
+            {
+                "bassin": self.bassin.pk,
+                "espece": "CARPE",
+                "type_evenement": "PERTE",
+                "quantite": 2,
+                "date_evenement": self.today.isoformat(),
+                "categorie_perte": self.categorie.pk,
+                "justification": "   ",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn("justification", response.data)
+        self.assertFalse(EvenementMortalitePerte.objects.exists())
+        self.assertEqual(MouvementEffectif.objects.count(), 1)
+
+    def test_database_constraints_reject_invalid_event_reference_combinations(self):
+        invalid_events = (
+            {
+                "type_evenement": EvenementMortalitePerte.TypeEvenement.MORTALITE,
+                "cause_mortalite": None,
+                "categorie_perte": None,
+                "justification": "",
+            },
+            {
+                "type_evenement": EvenementMortalitePerte.TypeEvenement.PERTE,
+                "cause_mortalite": None,
+                "categorie_perte": self.categorie,
+                "justification": "",
+            },
+        )
+        for event_fields in invalid_events:
+            with self.subTest(event_type=event_fields["type_evenement"]):
+                with self.assertRaises(IntegrityError):
+                    with transaction.atomic():
+                        EvenementMortalitePerte.objects.create(
+                            bassin=self.bassin,
+                            espece="CARPE",
+                            quantite=1,
+                            date_evenement=self.today,
+                            saisi_par=self.user,
+                            **event_fields,
+                        )
+
+    def test_mortality_requires_cause_and_rejects_excess_quantity(self):
+        self._add_stock(quantity=5)
+        missing_cause = self.client.post(
+            "/api/v1/effectifs/evenements/",
+            {
+                "bassin": self.bassin.pk,
+                "espece": "CARPE",
+                "type_evenement": "MORTALITE",
+                "quantite": 1,
+                "date_evenement": self.today.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(missing_cause.status_code, 400, missing_cause.data)
+
+        excessive = self.client.post(
+            "/api/v1/effectifs/evenements/",
+            {
+                "bassin": self.bassin.pk,
+                "espece": "CARPE",
+                "type_evenement": "MORTALITE",
+                "quantite": 6,
+                "date_evenement": self.today.isoformat(),
+                "cause_mortalite": self.cause.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(excessive.status_code, 400, excessive.data)
+        self.assertFalse(EvenementMortalitePerte.objects.exists())
+        self.assertEqual(MouvementEffectif.objects.count(), 1)
+
+    def test_journal_accepts_each_basin_category(self):
+        for category in Bassin.Categorie:
+            with self.subTest(category=category):
+                basin = Bassin.objects.create(
+                    reference=f"MORT-{category.value}",
+                    categorie=category,
+                    capacity=100,
+                    statut=Bassin.Statut.ACTIF,
+                )
+                enregistrer_mouvement(
+                    bassin=basin,
+                    espece="CARPE",
+                    type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
+                    quantite=2,
+                    date_evenement=self.today,
+                    saisi_par=self.user,
+                )
+
+                event = enregistrer_evenement_mortalite_perte(
+                    bassin=basin,
+                    espece="CARPE",
+                    type_evenement=EvenementMortalitePerte.TypeEvenement.MORTALITE,
+                    quantite=1,
+                    date_evenement=self.today,
+                    saisi_par=self.user,
+                    cause_mortalite=self.cause,
+                )
+
+                self.assertEqual(event.bassin.categorie, category)
+
+    def test_inactive_references_basin_and_future_date_are_rejected(self):
+        self._add_stock()
+        payload = {
+            "bassin": self.bassin.pk,
+            "espece": "CARPE",
+            "type_evenement": "MORTALITE",
+            "quantite": 1,
+            "date_evenement": self.today.isoformat(),
+            "cause_mortalite": self.cause.pk,
+        }
+
+        self.cause.actif = False
+        self.cause.save(update_fields=["actif"])
+        inactive_cause = self.client.post(
+            "/api/v1/effectifs/evenements/",
+            payload,
+            format="json",
+        )
+        self.assertEqual(inactive_cause.status_code, 400, inactive_cause.data)
+
+        self.cause.actif = True
+        self.cause.save(update_fields=["actif"])
+        self.bassin.statut = Bassin.Statut.INACTIF
+        self.bassin.save(update_fields=["statut"])
+        inactive_basin = self.client.post(
+            "/api/v1/effectifs/evenements/",
+            payload,
+            format="json",
+        )
+        self.assertEqual(inactive_basin.status_code, 400, inactive_basin.data)
+
+        self.bassin.statut = Bassin.Statut.ACTIF
+        self.bassin.save(update_fields=["statut"])
+        payload["date_evenement"] = (self.today + timedelta(days=1)).isoformat()
+        future_date = self.client.post(
+            "/api/v1/effectifs/evenements/",
+            payload,
+            format="json",
+        )
+        self.assertEqual(future_date.status_code, 400, future_date.data)
+        self.assertFalse(EvenementMortalitePerte.objects.exists())
+        self.assertEqual(MouvementEffectif.objects.count(), 1)
+
+    def test_cancellation_marks_event_and_compensates_movement(self):
+        self._add_stock()
+        event = enregistrer_evenement_mortalite_perte(
+            bassin=self.bassin,
+            espece="CARPE",
+            type_evenement=EvenementMortalitePerte.TypeEvenement.MORTALITE,
+            quantite=2,
+            date_evenement=self.today,
+            saisi_par=self.user,
+            cause_mortalite=self.cause,
+        )
+
+        response = self.client.post(
+            f"/api/v1/effectifs/evenements/{event.pk}/annuler/",
+            {"motif_annulation": "Événement saisi par erreur"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        event.refresh_from_db()
+        self.assertEqual(event.statut, EvenementMortalitePerte.Statut.ANNULE)
+        self.assertEqual(
+            response.data["mouvement_annulation"]["annule_mouvement"],
+            event.mouvement_id,
+        )
+        self.assertEqual(
+            solde_bassin_espece_date(self.bassin.pk, "CARPE", self.today),
+            12,
+        )
+
+        repeated = self.client.post(
+            f"/api/v1/effectifs/evenements/{event.pk}/annuler/",
+            {"motif_annulation": "Deuxième tentative"},
+            format="json",
+        )
+        self.assertEqual(repeated.status_code, 400, repeated.data)
+        self.assertEqual(MouvementEffectif.objects.count(), 3)
+
+    def test_event_api_filters_by_basin_species_period_and_cause(self):
+        self._add_stock()
+        event = enregistrer_evenement_mortalite_perte(
+            bassin=self.bassin,
+            espece="CARPE",
+            type_evenement=EvenementMortalitePerte.TypeEvenement.MORTALITE,
+            quantite=1,
+            date_evenement=self.today,
+            saisi_par=self.user,
+            cause_mortalite=self.cause,
+        )
+
+        response = self.client.get(
+            "/api/v1/effectifs/evenements/",
+            {
+                "bassin": self.bassin.pk,
+                "espece": "CARPE",
+                "date_debut": self.today.isoformat(),
+                "date_fin": self.today.isoformat(),
+                "cause": self.cause.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual([row["id"] for row in response.data], [event.pk])
 
 
 @skipUnlessDBFeature("has_select_for_update")
