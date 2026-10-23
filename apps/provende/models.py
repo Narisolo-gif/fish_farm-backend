@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -53,3 +54,70 @@ class Provende(models.Model):
 
     def __str__(self):
         return self.reference
+
+
+class ConsommationProvende(models.Model):
+    class Statut(models.TextChoices):
+        VALIDE = "VALIDE", "Valide"
+        ANNULEE = "ANNULEE", "Annulée"
+
+    bassin = models.ForeignKey(
+        "bassins.Bassin",
+        on_delete=models.PROTECT,
+        related_name="consommations_provende",
+    )
+    provende = models.ForeignKey(
+        Provende,
+        on_delete=models.PROTECT,
+        related_name="consommations",
+    )
+    date_distribution = models.DateTimeField()
+    quantite_kg = models.DecimalField(max_digits=8, decimal_places=2)
+    observation = models.TextField(blank=True)
+    statut = models.CharField(
+        max_length=10,
+        choices=Statut.choices,
+        default=Statut.VALIDE,
+    )
+    motif_annulation = models.TextField(blank=True)
+    annulee_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="consommations_provende_annulees",
+        null=True,
+        blank=True,
+    )
+    annulee_le = models.DateTimeField(null=True, blank=True)
+    utilisateur = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="consommations_provende_saisies",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date_distribution", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(quantite_kg__gte=0),
+                name="consommation_provende_quantite_nonnegative",
+            ),
+            models.UniqueConstraint(
+                fields=["bassin", "provende", "date_distribution"],
+                condition=models.Q(statut="VALIDE"),
+                name="consommation_provende_unique_valide",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(statut="ANNULEE")
+                    | models.Q(motif_annulation__gt="")
+                ),
+                name="consommation_provende_annulation_motivee",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.provende.reference} / {self.bassin.reference} / "
+            f"{self.date_distribution:%Y-%m-%d %H:%M}"
+        )

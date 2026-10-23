@@ -25,7 +25,11 @@
     { "key": "mortalityCauseId", "value": "" },
     { "key": "lossCategoryId", "value": "" },
     { "key": "mortalityEventId", "value": "" },
-    { "key": "lossEventId", "value": "" }
+    { "key": "lossEventId", "value": "" },
+    { "key": "distributionDateTime", "value": "" },
+    { "key": "futureDistributionDateTime", "value": "" },
+    { "key": "consommationId", "value": "" },
+    { "key": "consommationSuffix", "value": "" }
   ],
   "event": [
     {
@@ -835,6 +839,227 @@
           }
         }
       ]
-    }
+    },
+{
+          "name": "Consommations provende",
+          "description": "À lancer après le parcours principal : utilise le bassin de stock et la provende créés par la collection.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                  "exec": [
+                  "if (pm.collectionVariables.get('consommationSuffix') !== pm.collectionVariables.get('suffix')) { const now = new Date(); now.setSeconds(0, 0); const future = new Date(now.getTime() + 5 * 60 * 1000); pm.collectionVariables.set('distributionDateTime', now.toISOString()); pm.collectionVariables.set('futureDistributionDateTime', future.toISOString()); pm.collectionVariables.set('consommationSuffix', pm.collectionVariables.get('suffix')); }"
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "name": "01 - Création valide",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id_bassin\": {{stockBassinId}},\n  \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{distributionDateTime}}\",\n  \"quantite_kg\": \"0.50\",\n  \"observation\": \"Test Postman consommation\"\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/provende/consommations-provende/"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Distribution créée', () => pm.response.to.have.status(201));",
+                      "const distribution = pm.response.json();",
+                      "pm.expect(distribution.statut).to.eql('VALIDE');",
+                      "pm.expect(distribution.id_user).to.exist;",
+                      "pm.collectionVariables.set('consommationId', distribution.id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "02 - Création en doublon (attendu 400)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id_bassin\": {{stockBassinId}},\n  \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{distributionDateTime}}\",\n  \"quantite_kg\": \"0.50\"\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/provende/consommations-provende/"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Doublon à la même minute refusé', () => pm.response.to.have.status(400));",
+                      "pm.expect(pm.response.json()).to.have.property('date_distribution');"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "03 - Création avec date future (attendu 400)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id_bassin\": {{stockBassinId}},\n  \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{futureDistributionDateTime}}\",\n  \"quantite_kg\": \"0.50\"\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/provende/consommations-provende/"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Date future refusée', () => pm.response.to.have.status(400));",
+                      "pm.expect(pm.response.json()).to.have.property('date_distribution');"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "04 - Annuler la distribution",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"motif\": \"Test Postman - annulation de distribution\"\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/provende/consommations-provende/{{consommationId}}/annuler/"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Distribution annulée', () => pm.response.to.have.status(200));",
+                      "pm.expect(pm.response.json().statut).to.eql('ANNULEE');",
+                      "pm.expect(pm.response.json().motif_annulation).to.eql('Test Postman - annulation de distribution');"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "05 - Ressaisie après annulation",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id_bassin\": {{stockBassinId}},\n  \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{distributionDateTime}}\",\n  \"quantite_kg\": \"0.50\",\n  \"observation\": \"Ressaisie après correction\"\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/provende/consommations-provende/"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Ressaisie après annulation acceptée', () => pm.response.to.have.status(201));",
+                      "pm.expect(pm.response.json().statut).to.eql('VALIDE');",
+                      "pm.collectionVariables.set('consommationId', pm.response.json().id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "06 - Liste filtrée",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                "url": "{{baseUrl}}/api/v1/provende/consommations-provende/?bassin={{stockBassinId}}&provende={{provendeId}}&type_provende=Traitement&date_min={{today}}&date_max={{today}}&statut=VALIDE"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Liste filtrée consultable', () => pm.response.to.have.status(200));",
+                      "pm.expect(pm.response.json().some(item => item.id === Number(pm.collectionVariables.get('consommationId')))).to.eql(true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "07 - Totaux journaliers",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                "url": "{{baseUrl}}/api/v1/provende/consommations-provende/totaux-journaliers/?bassin={{stockBassinId}}&date_min={{today}}&date_max={{today}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Totaux journaliers consultables', () => pm.response.to.have.status(200));",
+                      "const today = pm.response.json().find(item => item.date === pm.collectionVariables.get('today'));",
+                      "pm.expect(today, 'Total du jour présent').to.exist;",
+                      "pm.expect(Number(today.total_kg)).to.eql(0.5);",
+                      "pm.expect(today.nombre_distributions).to.eql(1);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "08 - Jours manquants",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                "url": "{{baseUrl}}/api/v1/provende/consommations-provende/jours-manquants/?bassin={{stockBassinId}}&date_min={{today}}&date_max={{today}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Jours manquants consultables', () => pm.response.to.have.status(200));",
+                      "pm.expect(pm.response.json()).to.be.an('array');",
+                      "pm.expect(pm.response.json()).not.to.include(pm.collectionVariables.get('today'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
   ]
 }
