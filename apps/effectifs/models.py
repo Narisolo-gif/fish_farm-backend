@@ -296,3 +296,106 @@ class EvenementMortalitePerte(models.Model):
         raise ValidationError(
             "La suppression d’un événement de mortalité/perte est interdite."
         )
+
+
+class SortieStock(models.Model):
+    class TypeSortie(models.TextChoices):
+        GROSSISSEMENT = "GROSSISSEMENT", "Grossissement"
+        VENTE = "VENTE", "Vente"
+
+    class Statut(models.TextChoices):
+        BROUILLON = "BROUILLON", "Brouillon"
+        VALIDEE = "VALIDEE", "Validée"
+        ANNULEE = "ANNULEE", "Annulée"
+
+    type_sortie = models.CharField(
+        max_length=20,
+        choices=TypeSortie.choices,
+    )
+    bassin_source = models.ForeignKey(
+        Bassin,
+        on_delete=models.PROTECT,
+        related_name="sorties_stock",
+    )
+    bassin_destination = models.ForeignKey(
+        Bassin,
+        on_delete=models.PROTECT,
+        related_name="entrees_sortie_stock",
+        null=True,
+        blank=True,
+    )
+    espece = models.CharField(max_length=20, choices=Lot.Espece.choices)
+    quantite = models.PositiveIntegerField()
+    date_sortie = models.DateTimeField()
+    statut = models.CharField(
+        max_length=10,
+        choices=Statut.choices,
+        default=Statut.BROUILLON,
+    )
+    observation = models.TextField(blank=True)
+    utilisateur = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="sorties_stock_creees",
+    )
+    validee_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="sorties_stock_validees",
+        null=True,
+        blank=True,
+    )
+    validee_le = models.DateTimeField(null=True, blank=True)
+    annulee_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="sorties_stock_annulees",
+        null=True,
+        blank=True,
+    )
+    annulee_le = models.DateTimeField(null=True, blank=True)
+    motif_annulation = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date_sortie", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(quantite__gt=0),
+                name="sortie_stock_quantite_positive",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        type_sortie="GROSSISSEMENT",
+                        bassin_destination__isnull=False,
+                    )
+                    | models.Q(
+                        type_sortie="VENTE",
+                        bassin_destination__isnull=True,
+                    )
+                ),
+                name="sortie_stock_destination_type_valide",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(bassin_destination__isnull=True)
+                    | ~models.Q(bassin_destination=models.F("bassin_source"))
+                ),
+                name="sortie_stock_bassins_distincts",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(statut="ANNULEE")
+                    | models.Q(
+                        motif_annulation__isnull=False,
+                        motif_annulation__gt="",
+                    )
+                ),
+                name="sortie_stock_annulation_motivee",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.get_type_sortie_display()} / {self.bassin_source.reference} / {self.quantite}"

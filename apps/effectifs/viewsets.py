@@ -13,19 +13,24 @@ from .models import (
     CauseMortalite,
     EvenementMortalitePerte,
     MouvementEffectif,
+    SortieStock,
 )
 from .serializers import (
     AnnulationEvenementSerializer,
     AnnulationMouvementSerializer,
+    AnnulationSortieStockSerializer,
     CategoriePerteSerializer,
     CauseMortaliteSerializer,
     EvenementMortalitePerteSerializer,
     MouvementEffectifSerializer,
+    SortieStockSerializer,
 )
 from .services import (
+    annuler_sortie_stock,
     annuler_evenement_mortalite_perte,
     annuler_mouvement,
     solde_bassin_espece_date,
+    valider_sortie_stock,
 )
 
 
@@ -274,3 +279,90 @@ class EvenementMortalitePerteViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class SortieStockViewSet(viewsets.ModelViewSet):
+    queryset = SortieStock.objects.select_related(
+        "bassin_source",
+        "bassin_destination",
+        "utilisateur",
+        "validee_par",
+        "annulee_par",
+    ).all()
+    serializer_class = SortieStockSerializer
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in {"list", "retrieve", "create"}:
+            return [IsAuthenticated(), IsRoleEffectifAutorise()]
+        return [IsAuthenticated(), IsAdministrateurOuGestionnaireEffectif()]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        params = self.request.query_params
+        type_sortie = params.get("type_sortie")
+        if type_sortie:
+            if type_sortie not in SortieStock.TypeSortie.values:
+                raise ValidationError({"type_sortie": "Type de sortie inconnu."})
+            queryset = queryset.filter(type_sortie=type_sortie)
+
+        statut = params.get("statut")
+        if statut:
+            if statut not in SortieStock.Statut.values:
+                raise ValidationError({"statut": "Statut inconnu."})
+            queryset = queryset.filter(statut=statut)
+
+        bassin_source = params.get("bassin_source")
+        if bassin_source:
+            if not bassin_source.isdigit():
+                raise ValidationError({
+                    "bassin_source": "Identifiant de bassin invalide."
+                })
+            queryset = queryset.filter(bassin_source_id=bassin_source)
+
+        espece = params.get("espece")
+        if espece:
+            if espece not in dict(MouvementEffectif._meta.get_field("espece").choices):
+                raise ValidationError({"espece": "Espèce inconnue."})
+            queryset = queryset.filter(espece=espece)
+
+        date_min_value = params.get("date_min")
+        date_max_value = params.get("date_max")
+        date_min = parse_date(date_min_value) if date_min_value else None
+        date_max = parse_date(date_max_value) if date_max_value else None
+        if date_min_value and date_min is None:
+            raise ValidationError({
+                "date_min": "Format invalide. Utilisez YYYY-MM-DD."
+            })
+        if date_max_value and date_max is None:
+            raise ValidationError({
+                "date_max": "Format invalide. Utilisez YYYY-MM-DD."
+            })
+        if date_min and date_max and date_max < date_min:
+            raise ValidationError({
+                "date_max": "La date de fin doit être égale ou postérieure au début."
+            })
+        if date_min:
+            queryset = queryset.filter(date_sortie__date__gte=date_min)
+        if date_max:
+            queryset = queryset.filter(date_sortie__date__lte=date_max)
+        return queryset
+
+    @action(detail=True, methods=["post"], url_path="valider")
+    def valider(self, request, pk=None):
+        sortie = valider_sortie_stock(
+            self.get_object().pk,
+            utilisateur=request.user,
+        )
+        return Response(self.get_serializer(sortie).data)
+
+    @action(detail=True, methods=["post"], url_path="annuler")
+    def annuler(self, request, pk=None):
+        serializer = AnnulationSortieStockSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        sortie = annuler_sortie_stock(
+            self.get_object().pk,
+            motif=serializer.validated_data["motif"],
+            utilisateur=request.user,
+        )
+        return Response(self.get_serializer(sortie).data)

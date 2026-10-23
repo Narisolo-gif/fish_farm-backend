@@ -29,7 +29,14 @@
     { "key": "distributionDateTime", "value": "" },
     { "key": "futureDistributionDateTime", "value": "" },
     { "key": "consommationId", "value": "" },
-    { "key": "consommationSuffix", "value": "" }
+    { "key": "consommationSuffix", "value": "" },
+    { "key": "sortieGrossBassinId", "value": "" },
+    { "key": "sortieSuffix", "value": "" },
+    { "key": "sortieStockId", "value": "" },
+    { "key": "sortieExcessiveId", "value": "" },
+    { "key": "sortieVenteId", "value": "" },
+    { "key": "effectifSourceAvant", "value": "" },
+    { "key": "effectifDestinationAvant", "value": "" }
   ],
   "event": [
     {
@@ -1060,6 +1067,529 @@
               ]
             }
           ]
-        }
+        },
+    {
+                      "name": "Sorties de stock",
+                      "description": "Le parcours utilise le bassin stock et les effectifs créés par les étapes précédentes de la collection.",
+                      "event": [
+                        {
+                          "listen": "prerequest",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.collectionVariables.set('sortieSuffix', Date.now().toString());"
+                            ]
+                          }
+                        }
+                      ],
+                      "item": [
+                    {
+                      "name": "00 - Créer bassin destination grossissement",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                          { "key": "Content-Type", "value": "application/json" }
+                        ],
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"reference\": \"PM-SORTIE-GROSS-{{sortieSuffix}}\",\n  \"categorie\": \"GROSSISSEMENT\",\n  \"capacity\": 100,\n  \"statut\": \"ACTIF\"\n}"
+                        },
+                        "url": "{{baseUrl}}/api/v1/bassins/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Bassin grossissement créé', () => pm.response.to.have.status(201));",
+                              "const basin = pm.response.json();",
+                              "pm.expect(basin.categorie).to.eql('GROSSISSEMENT');",
+                              "pm.collectionVariables.set('sortieGrossBassinId', basin.id);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "01 - Créer brouillon GROSSISSEMENT",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                          { "key": "Content-Type", "value": "application/json" }
+                        ],
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_bassin_destination\": {{sortieGrossBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 3,\n  \"observation\": \"Test Postman - transfert en grossissement\"\n}"
+                        },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Brouillon créé', () => pm.response.to.have.status(201));",
+                              "const sortie = pm.response.json();",
+                              "pm.expect(sortie.statut).to.eql('BROUILLON');",
+                              "pm.expect(sortie.type_sortie).to.eql('GROSSISSEMENT');",
+                              "pm.expect(sortie.quantite).to.eql(3);",
+                              "pm.collectionVariables.set('sortieStockId', sortie.id);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "02 - Refuser quantité zéro",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                          { "key": "Content-Type", "value": "application/json" }
+                        ],
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_bassin_destination\": {{sortieGrossBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 0\n}"
+                        },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Quantité zéro refusée', () => pm.response.to.have.status(400));",
+                              "pm.expect(pm.response.json()).to.have.property('quantite');"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "03 - Refuser destination absente",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                          { "key": "Content-Type", "value": "application/json" }
+                        ],
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 1\n}"
+                        },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Destination obligatoire', () => pm.response.to.have.status(400));",
+                              "pm.expect(pm.response.json()).to.have.property('id_bassin_destination');"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "04 - Refuser source égale à destination",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                          { "key": "Content-Type", "value": "application/json" }
+                        ],
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_bassin_destination\": {{stockBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 1\n}"
+                        },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Bassins identiques refusés', () => pm.response.to.have.status(400));",
+                              "pm.expect(pm.response.json()).to.have.property('id_bassin_destination');"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "05 - Modifier le brouillon",
+                      "request": {
+                        "method": "PATCH",
+                        "header": [
+                          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                          { "key": "Content-Type", "value": "application/json" }
+                        ],
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"quantite\": 3,\n  \"observation\": \"Brouillon modifié avant validation\"\n}"
+                        },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieStockId}}/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Brouillon modifié', () => pm.response.to.have.status(200));",
+                              "pm.expect(pm.response.json().statut).to.eql('BROUILLON');",
+                              "pm.expect(pm.response.json().quantite).to.eql(3);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "06 - Effectif source avant validation",
+                      "request": {
+                        "method": "GET",
+                        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                        "url": "{{baseUrl}}/api/v1/effectifs/solde/?bassin={{stockBassinId}}&espece=CARPE&date={{today}}"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Effectif source lu avant transfert', () => pm.response.to.have.status(200));",
+                              "pm.collectionVariables.set('effectifSourceAvant', pm.response.json().effectif_vivant);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "07 - Effectif destination avant validation",
+                      "request": {
+                        "method": "GET",
+                        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                        "url": "{{baseUrl}}/api/v1/effectifs/solde/?bassin={{sortieGrossBassinId}}&espece=CARPE&date={{today}}"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Effectif destination lu avant transfert', () => pm.response.to.have.status(200));",
+                              "pm.collectionVariables.set('effectifDestinationAvant', pm.response.json().effectif_vivant);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "08 - Valider le grossissement",
+                      "request": {
+                        "method": "POST",
+                        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                        "body": { "mode": "raw", "raw": "{}" },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieStockId}}/valider/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Sortie validée', () => pm.response.to.have.status(200));",
+                              "pm.expect(pm.response.json().statut).to.eql('VALIDEE');",
+                              "pm.expect(pm.response.json().validee_le).to.exist;"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "09 - Effectif source après validation",
+                      "request": {
+                        "method": "GET",
+                        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                        "url": "{{baseUrl}}/api/v1/effectifs/solde/?bassin={{stockBassinId}}&espece=CARPE&date={{today}}"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Effectif source diminué de 3', () => pm.response.to.have.status(200));",
+                              "pm.expect(pm.response.json().effectif_vivant).to.eql(Number(pm.collectionVariables.get('effectifSourceAvant')) - 3);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "10 - Effectif destination après validation",
+                      "request": {
+                        "method": "GET",
+                        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                        "url": "{{baseUrl}}/api/v1/effectifs/solde/?bassin={{sortieGrossBassinId}}&espece=CARPE&date={{today}}"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Effectif destination augmenté de 3', () => pm.response.to.have.status(200));",
+                              "pm.expect(pm.response.json().effectif_vivant).to.eql(Number(pm.collectionVariables.get('effectifDestinationAvant')) + 3);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "11 - Refuser une deuxième validation",
+                      "request": {
+                        "method": "POST",
+                        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                        "body": { "mode": "raw", "raw": "{}" },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieStockId}}/valider/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Double validation refusée', () => pm.response.to.have.status(400));",
+                              "pm.expect(pm.response.json()).to.have.property('statut');"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "12 - Créer brouillon supérieur au solde",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                          { "key": "Content-Type", "value": "application/json" }
+                        ],
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_bassin_destination\": {{sortieGrossBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 999\n}"
+                        },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Brouillon excessif créé sans mouvement', () => pm.response.to.have.status(201));",
+                              "pm.expect(pm.response.json().statut).to.eql('BROUILLON');",
+                              "pm.collectionVariables.set('sortieExcessiveId', pm.response.json().id);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "13 - Refuser validation si effectif insuffisant",
+                      "request": {
+                        "method": "POST",
+                        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                        "body": { "mode": "raw", "raw": "{}" },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieExcessiveId}}/valider/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Validation excessive refusée', () => pm.response.to.have.status(400));",
+                              "pm.expect(pm.response.json()).to.have.property('quantite');"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "14 - Vérifier que le brouillon excessif est inchangé",
+                      "request": {
+                        "method": "GET",
+                        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieExcessiveId}}/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Sortie reste BROUILLON', () => pm.response.to.have.status(200));",
+                              "pm.expect(pm.response.json().statut).to.eql('BROUILLON');",
+                              "pm.expect(pm.response.json().quantite).to.eql(999);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "15 - Refuser annulation sans motif",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                          { "key": "Content-Type", "value": "application/json" }
+                        ],
+                        "body": { "mode": "raw", "raw": "{\n  \"motif\": \"   \"\n}" },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieStockId}}/annuler/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Annulation sans motif refusée', () => pm.response.to.have.status(400));",
+                              "pm.expect(pm.response.json()).to.have.property('motif');"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "16 - Annuler la sortie validée",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                          { "key": "Content-Type", "value": "application/json" }
+                        ],
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"motif\": \"Test Postman - annulation du transfert\"\n}"
+                        },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieStockId}}/annuler/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Sortie annulée', () => pm.response.to.have.status(200));",
+                              "pm.expect(pm.response.json().statut).to.eql('ANNULEE');",
+                              "pm.expect(pm.response.json().motif_annulation).to.eql('Test Postman - annulation du transfert');"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "17 - Créer brouillon VENTE",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+                          { "key": "Content-Type", "value": "application/json" }
+                        ],
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"type_sortie\": \"VENTE\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 2,\n  \"observation\": \"Test Postman - vente\"\n}"
+                        },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Brouillon de vente créé', () => pm.response.to.have.status(201));",
+                              "pm.expect(pm.response.json().statut).to.eql('BROUILLON');",
+                              "pm.expect(pm.response.json().id_bassin_destination).to.eql(null);",
+                              "pm.collectionVariables.set('sortieVenteId', pm.response.json().id);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "18 - Valider la VENTE",
+                      "request": {
+                        "method": "POST",
+                        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                        "body": { "mode": "raw", "raw": "{}" },
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieVenteId}}/valider/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Vente validée', () => pm.response.to.have.status(200));",
+                              "pm.expect(pm.response.json().statut).to.eql('VALIDEE');",
+                              "pm.expect(pm.response.json().type_sortie).to.eql('VENTE');"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "19 - Lister les sorties filtrées",
+                      "request": {
+                        "method": "GET",
+                        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/?type_sortie=VENTE&statut=VALIDEE&bassin_source={{stockBassinId}}&espece=CARPE&date_min={{today}}&date_max={{today}}"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Liste filtrée consultable', () => pm.response.to.have.status(200));",
+                              "pm.expect(pm.response.json().some(item => item.id === Number(pm.collectionVariables.get('sortieVenteId')))).to.eql(true);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "20 - Détail de la VENTE",
+                      "request": {
+                        "method": "GET",
+                        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieVenteId}}/"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Détail de sortie consultable', () => pm.response.to.have.status(200));",
+                              "pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('sortieVenteId')));",
+                              "pm.expect(pm.response.json().statut).to.eql('VALIDEE');"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                      ]
+                    }
   ]
 }

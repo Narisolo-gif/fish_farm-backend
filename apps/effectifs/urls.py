@@ -5,6 +5,7 @@ from .viewsets import (
     CauseMortaliteViewSet,
     EvenementMortalitePerteViewSet,
     MouvementEffectifViewSet,
+    SortieStockViewSet,
 )
 
 router = DefaultRouter()
@@ -22,6 +23,11 @@ router.register(
     "categories-perte",
     CategoriePerteViewSet,
     basename="categorie-perte",
+)
+router.register(
+    "sorties-stock",
+    SortieStockViewSet,
+    basename="sortie-stock",
 )
 # Keep the empty movement prefix last so its detail route cannot capture these endpoints.
 router.register("", MouvementEffectifViewSet, basename="mouvement-effectif")
