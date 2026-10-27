@@ -1,7 +1,7 @@
 
 from rest_framework import serializers
 
-from apps.bassins.models import Bassin
+from apps.bassins.models import Bassin, Hapa
 from apps.lots.models import Lot
 
 from .models import MiseEnStock
@@ -23,6 +23,13 @@ class MiseEnStockSerializer(serializers.ModelSerializer):
         source="bassin",
         queryset=Bassin.objects.all(),
     )
+    id_hapa = serializers.PrimaryKeyRelatedField(
+        source="hapa",
+        queryset=Hapa.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    nom_hapa = serializers.CharField(source="hapa.nom", read_only=True, allow_null=True)
 
     reference_lot = serializers.CharField(
         source="lot.reference",
@@ -50,6 +57,8 @@ class MiseEnStockSerializer(serializers.ModelSerializer):
             "reference_lot",
             "id_bassin",
             "reference_bassin",
+            "id_hapa",
+            "nom_hapa",
             "effectif_entrant",
             "ecart_effectif",
             "date_mise_en_stock",

@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.bassins.models import Bassin
+from apps.bassins.models import Bassin, Hapa
 
 from .models import ConsommationProvende, Provende, TypeProvende
 from .services import (
@@ -78,6 +78,13 @@ class ConsommationProvendeSerializer(serializers.ModelSerializer):
         source="bassin.reference",
         read_only=True,
     )
+    id_hapa = serializers.PrimaryKeyRelatedField(
+        source="hapa",
+        queryset=Hapa.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    nom_hapa = serializers.CharField(source="hapa.nom", read_only=True, allow_null=True)
     id_provende = serializers.PrimaryKeyRelatedField(
         source="provende",
         queryset=Provende.objects.select_related("type_provende").all(),
@@ -110,6 +117,8 @@ class ConsommationProvendeSerializer(serializers.ModelSerializer):
             "id",
             "id_bassin",
             "reference_bassin",
+            "id_hapa",
+            "nom_hapa",
             "id_provende",
             "reference_provende",
             "type_provende",

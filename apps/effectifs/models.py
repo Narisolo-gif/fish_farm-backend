@@ -204,6 +204,13 @@ class EvenementMortalitePerte(models.Model):
         on_delete=models.PROTECT,
         related_name="evenements_mortalite_perte",
     )
+    hapa = models.ForeignKey(
+        Hapa,
+        on_delete=models.PROTECT,
+        related_name="evenements_mortalite_perte",
+        null=True,
+        blank=True,
+    )
     espece = models.CharField(max_length=20, choices=Lot.Espece.choices)
     type_evenement = models.CharField(
         max_length=20,
@@ -324,6 +331,13 @@ class SortieStock(models.Model):
         null=True,
         blank=True,
     )
+    hapa = models.ForeignKey(
+        Hapa,
+        on_delete=models.PROTECT,
+        related_name="sorties_stock",
+        null=True,
+        blank=True,
+    )
     espece = models.CharField(max_length=20, choices=Lot.Espece.choices)
     quantite = models.PositiveIntegerField()
     date_sortie = models.DateTimeField()
@@ -399,3 +413,35 @@ class SortieStock(models.Model):
 
     def __str__(self):
         return f"{self.get_type_sortie_display()} / {self.bassin_source.reference} / {self.quantite}"
+
+
+class SortieStockComposition(models.Model):
+    class Certitude(models.TextChoices):
+        EXACTE = "EXACTE", "Exacte"
+        ESTIMEE = "ESTIMEE", "Estimée"
+
+    sortie = models.ForeignKey(
+        SortieStock,
+        on_delete=models.CASCADE,
+        related_name="composition",
+    )
+    lot_origine = models.ForeignKey(
+        Lot,
+        on_delete=models.PROTECT,
+        related_name="compositions_sortie_stock",
+        null=True,
+        blank=True,
+    )
+    quantite = models.PositiveIntegerField()
+    certitude = models.CharField(
+        max_length=10,
+        choices=Certitude.choices,
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(quantite__gt=0),
+                name="sortie_stock_composition_quantite_positive",
+            ),
+        ]

@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
-from apps.bassins.models import Bassin
+from apps.bassins.models import Bassin, Hapa
 from apps.core.models import Role
 from apps.effectifs.models import MouvementEffectif
 
@@ -362,3 +362,58 @@ class ConsommationProvendeTests(TestCase):
         self.assertEqual(filtered.status_code, 200, filtered.data)
         self.assertEqual(len(filtered.data), 1)
         self.assertEqual(filtered.data[0]["id"], response.data["id"])
+
+    def test_same_minute_distribution_is_scoped_to_hapa(self):
+        hapa1 = Hapa.objects.create(
+            bassin=self.bassin,
+            nom="CONS-HAPA-1",
+            actif=True,
+            statut=Hapa.Statut.ACTIF,
+        )
+        hapa2 = Hapa.objects.create(
+            bassin=self.bassin,
+            nom="CONS-HAPA-2",
+            actif=True,
+            statut=Hapa.Statut.ACTIF,
+        )
+        for hapa in (hapa1, hapa2):
+            MouvementEffectif.objects.create(
+                bassin=self.bassin,
+                espece="CARPE",
+                type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
+                sens=MouvementEffectif.Sens.POSITIF,
+                quantite=5,
+                date_evenement=self.today,
+                hapa=hapa,
+                saisi_par=self.user,
+            )
+        date_distribution = self._datetime_local(self.today, time(11, 22))
+        data = {
+            "bassin": self.bassin,
+            "provende": self.provende,
+            "date_distribution": date_distribution,
+            "quantite_kg": Decimal("0.50"),
+        }
+        first = enregistrer_distribution(
+            {**data, "hapa": hapa1},
+            utilisateur=self.user,
+        )
+        with self.assertRaises(ValidationError):
+            enregistrer_distribution(
+                {**data, "hapa": hapa1},
+                utilisateur=self.user,
+            )
+        second = enregistrer_distribution(
+            {**data, "hapa": hapa2},
+            utilisateur=self.user,
+        )
+        self.assertEqual(first.statut, ConsommationProvende.Statut.VALIDE)
+        self.assertEqual(second.statut, ConsommationProvende.Statut.VALIDE)
+        self.assertEqual(
+            ConsommationProvende.objects.filter(
+                bassin=self.bassin,
+                date_distribution=date_distribution,
+                statut=ConsommationProvende.Statut.VALIDE,
+            ).count(),
+            2,
+        )

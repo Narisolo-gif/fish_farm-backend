@@ -9,6 +9,7 @@ from .models import (
     EvenementMortalitePerte,
     MouvementEffectif,
     SortieStock,
+    SortieStockComposition,
 )
 from .services import (
     creer_sortie_stock,
@@ -25,7 +26,10 @@ class MouvementEffectifSerializer(serializers.ModelSerializer):
     reference_hapa = serializers.CharField(
         source="hapa.reference",
         read_only=True,
+        allow_null=True,
     )
+    id_hapa = serializers.IntegerField(source="hapa_id", read_only=True, allow_null=True)
+    nom_hapa = serializers.CharField(source="hapa.nom", read_only=True, allow_null=True)
     reference_lot_origine = serializers.CharField(
         source="lot_origine.reference",
         read_only=True,
@@ -53,6 +57,8 @@ class MouvementEffectifSerializer(serializers.ModelSerializer):
             "lot_origine",
             "reference_lot_origine",
             "hapa",
+            "id_hapa",
+            "nom_hapa",
             "reference_hapa",
             "lot_grossissement",
             "reference_lot_grossissement",
@@ -103,6 +109,34 @@ class CategoriePerteSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class CompositionSortieSerializer(serializers.ModelSerializer):
+    id_lot_origine = serializers.PrimaryKeyRelatedField(
+        source="lot_origine",
+        queryset=Lot.objects.all(),
+        allow_null=True,
+    )
+    reference_lot_origine = serializers.CharField(
+        source="lot_origine.reference",
+        read_only=True,
+        allow_null=True,
+    )
+
+    class Meta:
+        model = SortieStockComposition
+        fields = [
+            "id_lot_origine",
+            "reference_lot_origine",
+            "quantite",
+            "certitude",
+        ]
+        read_only_fields = ["reference_lot_origine", "certitude"]
+
+    def validate_quantite(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("La quantité doit être strictement positive.")
+        return value
+
+
 class SortieStockSerializer(serializers.ModelSerializer):
     id_bassin_source = serializers.PrimaryKeyRelatedField(
         source="bassin_source",
@@ -114,6 +148,14 @@ class SortieStockSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    id_hapa = serializers.PrimaryKeyRelatedField(
+        source="hapa",
+        queryset=Hapa.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    nom_hapa = serializers.CharField(source="hapa.nom", read_only=True, allow_null=True)
+    composition = CompositionSortieSerializer(many=True, required=False)
     reference_bassin_source = serializers.CharField(
         source="bassin_source.reference",
         read_only=True,
@@ -142,9 +184,12 @@ class SortieStockSerializer(serializers.ModelSerializer):
             "id_bassin_destination",
             "reference_bassin_source",
             "reference_bassin_destination",
+            "id_hapa",
+            "nom_hapa",
             "type_sortie",
             "espece",
             "quantite",
+            "composition",
             "date_sortie",
             "statut",
             "observation",
@@ -161,6 +206,7 @@ class SortieStockSerializer(serializers.ModelSerializer):
             "id",
             "reference_bassin_source",
             "reference_bassin_destination",
+            "nom_hapa",
             "statut",
             "id_user",
             "validee_par",
@@ -238,6 +284,13 @@ class AnnulationSortieStockSerializer(serializers.Serializer):
 
 class EvenementMortalitePerteSerializer(serializers.ModelSerializer):
     bassin = serializers.PrimaryKeyRelatedField(queryset=Bassin.objects.all())
+    id_hapa = serializers.PrimaryKeyRelatedField(
+        source="hapa",
+        queryset=Hapa.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    nom_hapa = serializers.CharField(source="hapa.nom", read_only=True, allow_null=True)
     cause_mortalite = serializers.PrimaryKeyRelatedField(
         queryset=CauseMortalite.objects.filter(actif=True),
         required=False,
@@ -258,6 +311,8 @@ class EvenementMortalitePerteSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "bassin",
+            "id_hapa",
+            "nom_hapa",
             "espece",
             "type_evenement",
             "quantite",

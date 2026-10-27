@@ -9,8 +9,10 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.bassins.models import Bassin
-from apps.effectifs.calculs import effectifs_du_bassin
+from apps.effectifs.calculs import effectif_vivant, effectifs_du_bassin
+from apps.effectifs.services import _verifier_hapa
 from apps.effectifs.models import MouvementEffectif
+from apps.lots.models import Lot
 
 from .models import ConsommationProvende, Provende, TypeProvende
 
@@ -33,6 +35,7 @@ def creer_provende(validated_data):
 def enregistrer_distribution(validated_data, utilisateur):
     bassin = validated_data["bassin"]
     provende = validated_data["provende"]
+    hapa = validated_data.get("hapa")
 
     # Le verrou du bassin sérialise les distributions et les autres mouvements d'effectif.
     bassin = Bassin.objects.select_for_update().get(pk=bassin.pk)
@@ -40,6 +43,7 @@ def enregistrer_distribution(validated_data, utilisateur):
         raise ValidationError({
             "id_bassin": "Le bassin sélectionné est inactif."
         })
+    _verifier_hapa(bassin, hapa, champ="id_hapa")
 
     date_distribution = validated_data.get("date_distribution") or timezone.now()
     date_distribution = date_distribution.replace(second=0, microsecond=0)
@@ -71,13 +75,28 @@ def enregistrer_distribution(validated_data, utilisateur):
                 "la date de distribution."
             )
         })
+    if hapa is not None:
+        if not any(
+            effectif_vivant(
+                bassin.pk,
+                espece,
+                a_la_date=date_locale,
+                hapa_id=hapa.pk,
+            ) > 0
+            for espece, _ in Lot.Espece.choices
+        ):
+            raise ValidationError({
+                "id_hapa": "Aucun poisson vivant n’est enregistré dans ce hapa à cette date."
+            })
 
-    if ConsommationProvende.objects.filter(
+    doublons = ConsommationProvende.objects.filter(
         bassin=bassin,
         provende=provende,
         date_distribution=date_distribution,
         statut=ConsommationProvende.Statut.VALIDE,
-    ).exists():
+    )
+    doublons = doublons.filter(hapa=hapa) if hapa else doublons.filter(hapa__isnull=True)
+    if doublons.exists():
         raise ValidationError({
             "date_distribution": (
                 "Une distribution valide existe déjà pour ce bassin, "
@@ -90,6 +109,7 @@ def enregistrer_distribution(validated_data, utilisateur):
         with transaction.atomic():
             return ConsommationProvende.objects.create(
                 bassin=bassin,
+                hapa=hapa,
                 provende=provende,
                 date_distribution=date_distribution,
                 quantite_kg=quantite_kg,
@@ -110,8 +130,12 @@ def enregistrer_distribution(validated_data, utilisateur):
             "provende_consommationprovende.date_distribution"
         )
         if (
-            constraint_name == "consommation_provende_unique_valide"
+            constraint_name in {
+                "consommation_provende_unique_valide_sans_hapa",
+                "consommation_provende_unique_valide_avec_hapa",
+            }
             or sqlite_unique_error in str(cause)
+            or "UNIQUE constraint failed: provende_consommationprovende." in str(cause)
         ):
             raise ValidationError({
                 "date_distribution": (

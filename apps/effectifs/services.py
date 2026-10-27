@@ -5,14 +5,23 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.bassins.models import Bassin
-from .calculs import effectifs_du_bassin
+from apps.bassins.models import Bassin, Hapa
+from apps.lots.models import Lot
+from .calculs import (
+    HAPA_OBLIGATOIRE,
+    bassin_a_des_hapas,
+    effectif_vivant,
+    effectifs_du_bassin,
+    effectifs_par_hapa,
+    lots_presents_dans_hapa,
+)
 from .models import (
     CategoriePerte,
     CauseMortalite,
     EvenementMortalitePerte,
     MouvementEffectif,
     SortieStock,
+    SortieStockComposition,
 )
 
 
@@ -45,6 +54,7 @@ def _verifier_disponibilite_cumulee(
     quantite: int,
     *,
     ignore_id: int | None = None,
+    hapa_id: int | None = None,
 ):
     # Insérer l'événement à sa date réelle oblige à revalider tout le cumul chronologique.
     candidat = {
@@ -55,11 +65,14 @@ def _verifier_disponibilite_cumulee(
         "quantite": quantite,
     }
 
-    events = list(
-        MouvementEffectif.objects.filter(
+    queryset = MouvementEffectif.objects.filter(
             bassin_id=bassin_id,
             espece=espece,
         )
+    if hapa_id is not None:
+        queryset = queryset.filter(hapa_id=hapa_id)
+    events = list(
+        queryset
         .exclude(id=ignore_id)
         .order_by("date_evenement", "saisi_le", "id")
         .values("date_evenement", "saisi_le", "id", "sens", "quantite")
@@ -83,6 +96,21 @@ def _verifier_disponibilite_cumulee(
                     "à la date donnée."
                 )
             })
+
+
+def _verifier_hapa(bassin, hapa, *, champ="id_hapa"):
+    if HAPA_OBLIGATOIRE and bassin_a_des_hapas(bassin.pk) and hapa is None:
+        raise ValidationError({champ: "Un hapa est obligatoire pour ce bassin."})
+    if hapa is None:
+        return
+    try:
+        hapa = Hapa.objects.select_for_update().get(pk=hapa.pk)
+    except Hapa.DoesNotExist as exc:
+        raise ValidationError({champ: "Hapa introuvable."}) from exc
+    if hapa.bassin_id != bassin.pk:
+        raise ValidationError({champ: "Le hapa doit appartenir au bassin indiqué."})
+    if not hapa.actif or hapa.statut != Hapa.Statut.ACTIF:
+        raise ValidationError({champ: "Le hapa sélectionné est inactif."})
 
 
 @transaction.atomic
@@ -124,6 +152,26 @@ def enregistrer_mouvement(
         })
 
     sens = _sens_pour_type(type_mouvement)
+    destination_grossissement = (
+        type_mouvement == MouvementEffectif.TypeMouvement.ENTREE
+        and bassin.categorie == Bassin.Categorie.GROSSISSEMENT
+        and hapa is None
+    )
+    if not destination_grossissement:
+        _verifier_hapa(bassin, hapa)
+    if hapa is not None and type_mouvement == MouvementEffectif.TypeMouvement.ENTREE:
+        effectifs_hapa = effectifs_par_hapa(
+            bassin.pk, a_la_date=date_evenement
+        )
+        autres_especes = [
+            espece_existante
+            for (hapa_id, espece_existante), effectif in effectifs_hapa.items()
+            if hapa_id == hapa.pk and espece_existante != espece and effectif > 0
+        ]
+        if autres_especes:
+            raise ValidationError({
+                "espece": "Un hapa ne peut contenir qu’une seule espèce."
+            })
 
     _verifier_disponibilite_cumulee(
         bassin.pk,
@@ -131,6 +179,7 @@ def enregistrer_mouvement(
         date_evenement,
         sens,
         quantite,
+        hapa_id=hapa.pk if hapa is not None else None,
     )
 
     mouvement = MouvementEffectif.objects.create(
@@ -223,6 +272,7 @@ def annuler_mouvement(mouvement_id: int, *, motif_annulation: str, saisi_par, da
         date_annulation,
         sens_annulation,
         mouvement.quantite,
+        hapa_id=mouvement.hapa_id,
     )
 
     annulation = MouvementEffectif.objects.create(
@@ -268,6 +318,7 @@ def enregistrer_evenement_mortalite_perte(
     quantite: int,
     date_evenement,
     saisi_par,
+    hapa=None,
     cause_mortalite=None,
     categorie_perte=None,
     justification: str = "",
@@ -285,6 +336,7 @@ def enregistrer_evenement_mortalite_perte(
     bassin = Bassin.objects.select_for_update().get(pk=bassin.pk)
     if bassin.statut != Bassin.Statut.ACTIF:
         raise ValidationError({"bassin": "Le bassin sélectionné est inactif."})
+    _verifier_hapa(bassin, hapa, champ="hapa")
 
     if type_evenement == EvenementMortalitePerte.TypeEvenement.MORTALITE:
         cause_is_active = (
@@ -338,6 +390,7 @@ def enregistrer_evenement_mortalite_perte(
 
     evenement = EvenementMortalitePerte.objects.create(
         bassin=bassin,
+        hapa=hapa,
         espece=espece,
         type_evenement=type_evenement,
         quantite=quantite,
@@ -359,6 +412,7 @@ def enregistrer_evenement_mortalite_perte(
         quantite=quantite,
         date_evenement=date_evenement,
         saisi_par=saisi_par,
+        hapa=hapa,
     )
     EvenementMortalitePerte.objects.filter(pk=evenement.pk).update(
         mouvement=mouvement,
@@ -437,6 +491,7 @@ def _valider_donnees_sortie(
     espece,
     quantite,
     date_sortie,
+    hapa=None,
 ):
     if type_sortie not in SortieStock.TypeSortie.values:
         raise ValidationError({"type_sortie": "Type de sortie inconnu."})
@@ -466,6 +521,7 @@ def _valider_donnees_sortie(
         raise ValidationError({
             "id_bassin_source": "Le bassin source doit être de catégorie STOCKS."
         })
+    _verifier_hapa(bassin_source, hapa, champ="id_hapa")
     if (
         bassin_destination is not None
         and bassin_destination.pk == bassin_source.pk
@@ -498,6 +554,8 @@ def _valider_donnees_sortie(
 
 @transaction.atomic
 def creer_sortie_stock(validated_data, utilisateur):
+    validated_data = dict(validated_data)
+    composition = validated_data.pop("composition", None)
     date_sortie, bassin_source, bassin_destination = _valider_donnees_sortie(
         type_sortie=validated_data["type_sortie"],
         bassin_source=validated_data["bassin_source"],
@@ -505,6 +563,7 @@ def creer_sortie_stock(validated_data, utilisateur):
         espece=validated_data["espece"],
         quantite=validated_data["quantite"],
         date_sortie=validated_data.get("date_sortie"),
+        hapa=validated_data.get("hapa"),
     )
     donnees = dict(validated_data)
     donnees.update({
@@ -513,11 +572,34 @@ def creer_sortie_stock(validated_data, utilisateur):
         "date_sortie": date_sortie,
         "utilisateur": utilisateur,
     })
-    return SortieStock.objects.create(**donnees)
+    sortie = SortieStock.objects.create(**donnees)
+    if composition is not None:
+        _remplacer_composition(sortie, composition)
+    return sortie
+
+
+def _remplacer_composition(sortie, composition):
+    SortieStockComposition.objects.filter(sortie=sortie).delete()
+    certitude = (
+        SortieStockComposition.Certitude.EXACTE
+        if len(composition) == 1
+        else SortieStockComposition.Certitude.ESTIMEE
+    )
+    SortieStockComposition.objects.bulk_create([
+        SortieStockComposition(
+            sortie=sortie,
+            lot_origine=ligne["lot_origine"],
+            quantite=ligne["quantite"],
+            certitude=certitude,
+        )
+        for ligne in composition
+    ])
 
 
 @transaction.atomic
 def modifier_sortie_stock(sortie_id, validated_data):
+    validated_data = dict(validated_data)
+    composition = validated_data.pop("composition", None)
     sortie = SortieStock.objects.select_for_update().get(pk=sortie_id)
     if sortie.statut != SortieStock.Statut.BROUILLON:
         raise ValidationError({
@@ -534,6 +616,7 @@ def modifier_sortie_stock(sortie_id, validated_data):
         "espece": validated_data.get("espece", sortie.espece),
         "quantite": validated_data.get("quantite", sortie.quantite),
         "date_sortie": validated_data.get("date_sortie", sortie.date_sortie),
+        "hapa": validated_data.get("hapa", sortie.hapa),
     }
     date_sortie, bassin_source, bassin_destination = _valider_donnees_sortie(
         **donnees,
@@ -546,6 +629,8 @@ def modifier_sortie_stock(sortie_id, validated_data):
     if "observation" in validated_data:
         sortie.observation = validated_data["observation"]
     sortie.save()
+    if composition is not None:
+        _remplacer_composition(sortie, composition)
     return sortie
 
 
@@ -567,6 +652,7 @@ def valider_sortie_stock(sortie_id, utilisateur):
         espece=sortie.espece,
         quantite=sortie.quantite,
         date_sortie=sortie.date_sortie,
+        hapa=sortie.hapa,
     )
     date_locale = timezone.localtime(date_sortie).date()
     effectif_disponible = effectifs_du_bassin(
@@ -581,42 +667,140 @@ def valider_sortie_stock(sortie_id, utilisateur):
             )
         })
 
+    if sortie.hapa_id:
+        effectif_hapa = effectif_vivant(
+            bassin_source.pk,
+            sortie.espece,
+            a_la_date=date_locale,
+            hapa_id=sortie.hapa_id,
+        )
+        if effectif_hapa < sortie.quantite:
+            raise ValidationError({
+                "quantite": (
+                    f"Effectif disponible dans le hapa : {effectif_hapa}; "
+                    f"quantité demandée : {sortie.quantite}."
+                )
+            })
+
+    lignes = list(sortie.composition.select_related("lot_origine").all())
+    if not lignes:
+        if sortie.hapa_id:
+            lots = lots_presents_dans_hapa(sortie.hapa_id, a_la_date=date_locale)
+            if len(lots) > 1:
+                raise ValidationError({
+                    "composition": "Plusieurs lots sont présents dans le hapa : précisez la composition."
+                })
+            lot_id = next(iter(lots), None)
+            if lot_id is not None and lots[lot_id] < sortie.quantite:
+                raise ValidationError({
+                    "quantite": "Le lot présent dans le hapa ne contient pas la quantité demandée."
+                })
+            ligne_data = [{
+                "lot_origine_id": lot_id,
+                "quantite": sortie.quantite,
+                "certitude": (
+                    SortieStockComposition.Certitude.EXACTE
+                    if lot_id is not None
+                    else SortieStockComposition.Certitude.ESTIMEE
+                ),
+            }]
+        else:
+            ligne_data = [{
+                "lot_origine_id": None,
+                "quantite": sortie.quantite,
+                "certitude": SortieStockComposition.Certitude.ESTIMEE,
+            }]
+    else:
+        if sum(ligne.quantite for ligne in lignes) != sortie.quantite:
+            raise ValidationError({
+                "composition": "La somme des quantités doit correspondre à la sortie."
+            })
+        lots = (
+            lots_presents_dans_hapa(sortie.hapa_id, a_la_date=date_locale)
+            if sortie.hapa_id
+            else {}
+        )
+        cumuls = {}
+        for ligne in lignes:
+            if ligne.lot_origine_id is None or not sortie.hapa_id:
+                raise ValidationError({
+                    "composition": "Chaque lot doit être présent dans le hapa source."
+                })
+            cumuls[ligne.lot_origine_id] = (
+                cumuls.get(ligne.lot_origine_id, 0) + ligne.quantite
+            )
+        for lot_id, quantite_ligne in cumuls.items():
+            if lots.get(lot_id, 0) < quantite_ligne:
+                raise ValidationError({
+                    "composition": "Le lot indiqué n’est pas présent en quantité suffisante dans le hapa."
+                })
+        certainty = (
+            SortieStockComposition.Certitude.EXACTE
+            if len(lignes) == 1
+            else SortieStockComposition.Certitude.ESTIMEE
+        )
+        for ligne in lignes:
+            ligne.certitude = certainty
+        SortieStockComposition.objects.bulk_update(lignes, ["certitude"])
+        ligne_data = [{
+            "lot_origine_id": ligne.lot_origine_id,
+            "quantite": ligne.quantite,
+            "certitude": certainty,
+        } for ligne in lignes]
+
     type_sortie = sortie.type_sortie
     date_evenement = date_locale
     content_type = ContentType.objects.get_for_model(sortie)
-    if type_sortie == SortieStock.TypeSortie.GROSSISSEMENT:
-        # La transaction englobe les deux mouvements et le changement de statut.
+    if not lignes:
+        lots_lookup = {
+            lot.pk: lot
+            for lot in Lot.objects.filter(
+                pk__in=[
+                    ligne["lot_origine_id"]
+                    for ligne in ligne_data
+                    if ligne["lot_origine_id"] is not None
+                ]
+            )
+        }
+        SortieStockComposition.objects.bulk_create([
+            SortieStockComposition(
+                sortie=sortie,
+                lot_origine=lots_lookup.get(ligne["lot_origine_id"]),
+                quantite=ligne["quantite"],
+                certitude=ligne["certitude"],
+            )
+            for ligne in ligne_data
+        ])
+    for ligne in ligne_data:
+        lot_origine = Lot.objects.get(pk=ligne["lot_origine_id"]) if ligne["lot_origine_id"] else None
         enregistrer_mouvement(
             bassin=bassin_source,
             espece=sortie.espece,
-            type_mouvement=MouvementEffectif.TypeMouvement.SORTIE,
-            quantite=sortie.quantite,
+            type_mouvement=(
+                MouvementEffectif.TypeMouvement.SORTIE
+                if type_sortie == SortieStock.TypeSortie.GROSSISSEMENT
+                else MouvementEffectif.TypeMouvement.VENTE
+            ),
+            quantite=ligne["quantite"],
             date_evenement=date_evenement,
             saisi_par=utilisateur,
+            lot_origine=lot_origine,
+            hapa=sortie.hapa,
             operation_source_content_type=content_type,
             operation_source_object_id=sortie.pk,
         )
-        enregistrer_mouvement(
-            bassin=bassin_destination,
-            espece=sortie.espece,
-            type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
-            quantite=sortie.quantite,
-            date_evenement=date_evenement,
-            saisi_par=utilisateur,
-            operation_source_content_type=content_type,
-            operation_source_object_id=sortie.pk,
-        )
-    else:
-        enregistrer_mouvement(
-            bassin=bassin_source,
-            espece=sortie.espece,
-            type_mouvement=MouvementEffectif.TypeMouvement.VENTE,
-            quantite=sortie.quantite,
-            date_evenement=date_evenement,
-            saisi_par=utilisateur,
-            operation_source_content_type=content_type,
-            operation_source_object_id=sortie.pk,
-        )
+        if type_sortie == SortieStock.TypeSortie.GROSSISSEMENT:
+            enregistrer_mouvement(
+                bassin=bassin_destination,
+                espece=sortie.espece,
+                type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
+                quantite=ligne["quantite"],
+                date_evenement=date_evenement,
+                saisi_par=utilisateur,
+                lot_origine=lot_origine,
+                operation_source_content_type=content_type,
+                operation_source_object_id=sortie.pk,
+            )
 
     sortie.date_sortie = date_sortie
     sortie.statut = SortieStock.Statut.VALIDEE
@@ -653,40 +837,40 @@ def annuler_sortie_stock(sortie_id, motif, utilisateur):
         )
         if sortie.type_sortie == SortieStock.TypeSortie.GROSSISSEMENT:
             # Annuler d'abord l'entrée permet de refuser si les poissons ont quitté la destination.
-            try:
-                mouvement_destination = mouvements.get(
-                    bassin_id=sortie.bassin_destination_id,
-                    type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
-                )
-            except MouvementEffectif.DoesNotExist as exc:
+            mouvements_destination = mouvements.filter(
+                bassin_id=sortie.bassin_destination_id,
+                type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
+            )
+            if not mouvements_destination.exists():
                 raise ValidationError({
                     "detail": "Mouvement d’entrée de destination introuvable."
-                }) from exc
-            annuler_mouvement(
-                mouvement_destination.pk,
-                motif_annulation=motif,
-                saisi_par=utilisateur,
-            )
+                })
+            for mouvement_destination in mouvements_destination.order_by("-id"):
+                annuler_mouvement(
+                    mouvement_destination.pk,
+                    motif_annulation=motif,
+                    saisi_par=utilisateur,
+                )
 
         type_mouvement_source = (
             MouvementEffectif.TypeMouvement.VENTE
             if sortie.type_sortie == SortieStock.TypeSortie.VENTE
             else MouvementEffectif.TypeMouvement.SORTIE
         )
-        try:
-            mouvement_source = mouvements.get(
-                bassin_id=sortie.bassin_source_id,
-                type_mouvement=type_mouvement_source,
-            )
-        except MouvementEffectif.DoesNotExist as exc:
+        mouvements_source = mouvements.filter(
+            bassin_id=sortie.bassin_source_id,
+            type_mouvement=type_mouvement_source,
+        )
+        if not mouvements_source.exists():
             raise ValidationError({
                 "detail": "Mouvement de sortie source introuvable."
-            }) from exc
-        annuler_mouvement(
-            mouvement_source.pk,
-            motif_annulation=motif,
-            saisi_par=utilisateur,
-        )
+            })
+        for mouvement_source in mouvements_source.order_by("-id"):
+            annuler_mouvement(
+                mouvement_source.pk,
+                motif_annulation=motif,
+                saisi_par=utilisateur,
+            )
 
     sortie.statut = SortieStock.Statut.ANNULEE
     sortie.motif_annulation = motif.strip()

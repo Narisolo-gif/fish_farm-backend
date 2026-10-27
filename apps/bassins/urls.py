@@ -1,7 +1,7 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .viewsets import BassinViewSet, HapaViewSet
+from .viewsets import BassinViewSet, HapaGestionViewSet, HapaViewSet
 
 
 router = DefaultRouter()
@@ -22,6 +22,19 @@ router.register(
 
 
 urlpatterns = [
+    path(
+        "hapas/",
+        HapaGestionViewSet.as_view({"get": "list", "post": "create"}),
+        name="hapa-list-create",
+    ),
+    path(
+        "hapas/<int:pk>/",
+        HapaGestionViewSet.as_view({
+            "get": "retrieve",
+            "patch": "partial_update",
+        }),
+        name="hapa-detail",
+    ),
     # Routes générées automatiquement pour les bassins.
     *router.urls,
 

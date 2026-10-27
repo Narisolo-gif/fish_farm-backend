@@ -8,6 +8,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 from apps.bassins.models import Bassin
 from apps.effectifs.models import MouvementEffectif
 from apps.effectifs.services import (
+    _verifier_hapa,
     enregistrer_mouvement_operation,
     operation_a_mouvements,
 )
@@ -133,6 +134,8 @@ def creer_mise_en_stock(validated_data, utilisateur):
 
     bassin = validated_data["bassin"]
     _verifier_bassin_stock(bassin)
+    hapa = validated_data.get("hapa")
+    _verifier_hapa(bassin, hapa, champ="id_hapa")
 
     effectif = validated_data["effectif_entrant"]
     justification = validated_data.get("justification_ecart", "")
@@ -182,6 +185,7 @@ def creer_mise_en_stock(validated_data, utilisateur):
         date_evenement=date_evenement,
         saisi_par=utilisateur,
         lot_origine=lot,
+        hapa=hapa,
     )
 
     # Le changement de stade et la création sont dans la même transaction.
@@ -219,6 +223,7 @@ def modifier_mise_en_stock(mise_en_stock_id, validated_data):
         })
 
     bassin = validated_data.get("bassin", mise.bassin)
+    hapa = validated_data.get("hapa", mise.hapa)
     effectif = validated_data.get(
         "effectif_entrant",
         mise.effectif_entrant,
@@ -229,10 +234,11 @@ def modifier_mise_en_stock(mise_en_stock_id, validated_data):
     )
 
     _verifier_bassin_stock(bassin)
+    _verifier_hapa(bassin, hapa, champ="id_hapa")
     _verifier_justification(lot, effectif, justification)
 
     # Seuls les champs modifiables sont appliqués.
-    for champ in ("bassin", "effectif_entrant", "justification_ecart", "observation"):
+    for champ in ("bassin", "hapa", "effectif_entrant", "justification_ecart", "observation"):
         if champ in validated_data:
             setattr(mise, champ, validated_data[champ])
 

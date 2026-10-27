@@ -36,7 +36,79 @@
     { "key": "sortieExcessiveId", "value": "" },
     { "key": "sortieVenteId", "value": "" },
     { "key": "effectifSourceAvant", "value": "" },
-    { "key": "effectifDestinationAvant", "value": "" }
+    { "key": "effectifDestinationAvant", "value": "" },
+    {
+      "key": "hapaId",
+      "value": ""
+    },
+    {
+      "key": "hapaSecondId",
+      "value": ""
+    },
+    {
+      "key": "hapaPonteSecondId",
+      "value": ""
+    },
+    {
+      "key": "hapaPonteThirdId",
+      "value": ""
+    },
+    {
+      "key": "hapaLotSecondId",
+      "value": ""
+    },
+    {
+      "key": "hapaLotThirdId",
+      "value": ""
+    },
+    {
+      "key": "hapaLotSecondEclosionId",
+      "value": ""
+    },
+    {
+      "key": "hapaLotThirdEclosionId",
+      "value": ""
+    },
+    {
+      "key": "hapaDistributionDateTime",
+      "value": ""
+    },
+    {
+      "key": "sortieExacteId",
+      "value": ""
+    },
+    {
+      "key": "sortieCompositionInvalideId",
+      "value": ""
+    },
+    {
+      "key": "sortieCompositionId",
+      "value": ""
+    },
+    {
+      "key": "effectifHapaAvant",
+      "value": ""
+    },
+    {
+      "key": "effectifHapaApres",
+      "value": ""
+    },
+    {
+      "key": "hapaDistributionSuffix",
+      "value": ""
+    },
+    {
+      "key": "consommationAutreHapaId",
+      "value": ""
+    },
+    {
+      "key": "miseEnStockHapaSecondId",
+      "value": ""
+    },
+    {
+      "key": "miseEnStockHapaThirdId",
+      "value": ""
+    }
   ],
   "event": [
     {
@@ -293,6 +365,439 @@
       ]
     },
     {
+      "name": "Hapas",
+      "description": "Gestion des hapas et préparation des lots de test de sortie.",
+      "item": [
+        {
+          "name": "01 - Créer un hapa (201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"nom\": \"HAPA-A-{{suffix}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/bassins/hapas/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Hapa créé', () => pm.response.to.have.status(201));",
+                  "const hapa = pm.response.json();",
+                  "pm.expect(hapa.nom).to.eql('HAPA-A-' + pm.collectionVariables.get('suffix'));",
+                  "pm.expect(hapa.actif).to.eql(true);",
+                  "pm.collectionVariables.set('hapaId', hapa.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 - Refuser un nom en doublon (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"nom\": \"HAPA-A-{{suffix}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/bassins/hapas/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Nom hapa déjà utilisé refusé', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 - Refuser un hapa sur bassin non STOCKS (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": {{treatmentBassinId}},\n  \"nom\": \"HAPA-INVALIDE-{{suffix}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/bassins/hapas/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Hapa hors bassin STOCKS refusé', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 - Désactiver le hapa (200)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actif\": false\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/bassins/hapas/{{hapaId}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Désactivation acceptée', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().actif).to.eql(false);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 - Réactiver le hapa (200)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actif\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/bassins/hapas/{{hapaId}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Réactivation acceptée', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().actif).to.eql(true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 - Lister les hapas actifs du bassin (200)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/bassins/hapas/?bassin={{stockBassinId}}&actif=true"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Liste filtrée consultable', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().some(item => item.id === Number(pm.collectionVariables.get('hapaId')))).to.eql(true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 - Créer un second hapa pour la provende",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"nom\": \"HAPA-B-{{suffix}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/bassins/hapas/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Second hapa créé', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().nom).to.eql('HAPA-B-' + pm.collectionVariables.get('suffix'));",
+                  "pm.collectionVariables.set('hapaSecondId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 - Créer une ponte pour le second lot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-PONTE-HAPA-2-{{suffix}}\",\n  \"bassin\": {{reproductionBassinId}},\n  \"date_ponte\": \"{{today}}\",\n  \"quantite_oeuf_obtenu\": \"10.00\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/reproduction/pontes/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Ponte du lot 2 créée', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().id).to.exist;",
+                  "pm.collectionVariables.set('hapaPonteSecondId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09 - Créer l’éclosion du second lot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-ECLOSION-HAPA-2-{{suffix}}\",\n  \"reference_ponte\": \"PM-PONTE-HAPA-2-{{suffix}}\",\n  \"date_eclosion\": \"{{today}}\",\n  \"quantite_oeufs_eclos\": \"5.00\",\n  \"quantite_alevins_obtenu\": 5\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/ecloserie/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Éclosion du lot 2 créée', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('hapaLotSecondEclosionId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 - Créer le second lot d’origine",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-LOT-HAPA-2-{{suffix}}\",\n  \"id_eclosion\": {{hapaLotSecondEclosionId}},\n  \"date_creation\": \"{{today}}T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/lots/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Second lot créé', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().quantite_initiale).to.eql(5);",
+                  "pm.collectionVariables.set('hapaLotSecondId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 - Créer une ponte pour le troisième lot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-PONTE-HAPA-3-{{suffix}}\",\n  \"bassin\": {{reproductionBassinId}},\n  \"date_ponte\": \"{{today}}\",\n  \"quantite_oeuf_obtenu\": \"10.00\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/reproduction/pontes/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Ponte du lot 3 créée', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().id).to.exist;",
+                  "pm.collectionVariables.set('hapaPonteThirdId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12 - Créer l’éclosion du troisième lot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-ECLOSION-HAPA-3-{{suffix}}\",\n  \"reference_ponte\": \"PM-PONTE-HAPA-3-{{suffix}}\",\n  \"date_eclosion\": \"{{today}}\",\n  \"quantite_oeufs_eclos\": \"5.00\",\n  \"quantite_alevins_obtenu\": 5\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/ecloserie/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Éclosion du lot 3 créée', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('hapaLotThirdEclosionId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "13 - Créer le troisième lot d’origine",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-LOT-HAPA-3-{{suffix}}\",\n  \"id_eclosion\": {{hapaLotThirdEclosionId}},\n  \"date_creation\": \"{{today}}T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/lots/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Troisième lot créé', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().quantite_initiale).to.eql(5);",
+                  "pm.collectionVariables.set('hapaLotThirdId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "10 - Trouver le type de provende TRAITEMENT",
       "request": {
         "method": "GET",
@@ -444,7 +949,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"id_lot\": {{lotId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"effectif_entrant\": 20,\n  \"justification_ecart\": \"\",\n  \"observation\": \"Essai Postman transfert\"\n}"
+          "raw": "{\n  \"id_lot\": {{lotId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"effectif_entrant\": 20,\n  \"justification_ecart\": \"\",\n  \"observation\": \"Essai Postman transfert\"\n}"
         },
         "url": "{{baseUrl}}/api/v1/stocks/"
       },
@@ -625,7 +1130,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"MORTALITE\",\n  \"quantite\": 2,\n  \"date_evenement\": \"{{today}}\",\n  \"cause_mortalite\": {{mortalityCauseId}},\n  \"justification\": \"Test Postman - morts constatés et comptés\"\n}"
+          "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"MORTALITE\",\n  \"quantite\": 2,\n  \"date_evenement\": \"{{today}}\",\n  \"cause_mortalite\": {{mortalityCauseId}},\n  \"justification\": \"Test Postman - morts constatés et comptés\"\n}"
         },
         "url": "{{baseUrl}}/api/v1/effectifs/evenements/"
       },
@@ -675,7 +1180,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"MORTALITE\",\n  \"quantite\": 999,\n  \"date_evenement\": \"{{today}}\",\n  \"cause_mortalite\": {{mortalityCauseId}}\n}"
+          "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"MORTALITE\",\n  \"quantite\": 999,\n  \"date_evenement\": \"{{today}}\",\n  \"cause_mortalite\": {{mortalityCauseId}}\n}"
         },
         "url": "{{baseUrl}}/api/v1/effectifs/evenements/"
       },
@@ -702,7 +1207,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"PERTE\",\n  \"quantite\": 1,\n  \"date_evenement\": \"{{today}}\",\n  \"categorie_perte\": {{lossCategoryId}},\n  \"justification\": \"   \"\n}"
+          "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"PERTE\",\n  \"quantite\": 1,\n  \"date_evenement\": \"{{today}}\",\n  \"categorie_perte\": {{lossCategoryId}},\n  \"justification\": \"   \"\n}"
         },
         "url": "{{baseUrl}}/api/v1/effectifs/evenements/"
       },
@@ -729,7 +1234,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"PERTE\",\n  \"quantite\": 3,\n  \"date_evenement\": \"{{today}}\",\n  \"categorie_perte\": {{lossCategoryId}},\n  \"justification\": \"Test Postman - écart constaté lors du comptage\"\n}"
+          "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"PERTE\",\n  \"quantite\": 3,\n  \"date_evenement\": \"{{today}}\",\n  \"categorie_perte\": {{lossCategoryId}},\n  \"justification\": \"Test Postman - écart constaté lors du comptage\"\n}"
         },
         "url": "{{baseUrl}}/api/v1/effectifs/evenements/"
       },
@@ -848,6 +1353,41 @@
       ]
     },
 {
+  "name": "32 - Stocker le troisi?me lot dans le hapa B",
+  "request": {
+    "method": "POST",
+    "header": [
+      {
+        "key": "Authorization",
+        "value": "Bearer {{accessToken}}"
+      },
+      {
+        "key": "Content-Type",
+        "value": "application/json"
+      }
+    ],
+    "url": "{{baseUrl}}/api/v1/stocks/",
+    "body": {
+      "mode": "raw",
+      "raw": "{\n  \"id_lot\": {{hapaLotThirdId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"id_hapa\": {{hapaSecondId}},\n  \"effectif_entrant\": 5,\n  \"justification_ecart\": \"\"\n}"
+    }
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Mise en stock du troisi?me lot', () => pm.response.to.have.status(201));",
+          "const row = pm.response.json();",
+          "pm.expect(row.id_hapa).to.eql(Number(pm.collectionVariables.get('hapaSecondId')));",
+          "pm.collectionVariables.set('miseEnStockHapaThirdId', row.id);"
+        ]
+      }
+    }
+  ]
+},
+{
           "name": "Consommations provende",
           "description": "À lancer après le parcours principal : utilise le bassin de stock et la provende créés par la collection.",
           "event": [
@@ -856,7 +1396,8 @@
               "script": {
                 "type": "text/javascript",
                   "exec": [
-                  "if (pm.collectionVariables.get('consommationSuffix') !== pm.collectionVariables.get('suffix')) { const now = new Date(); now.setSeconds(0, 0); const future = new Date(now.getTime() + 5 * 60 * 1000); pm.collectionVariables.set('distributionDateTime', now.toISOString()); pm.collectionVariables.set('futureDistributionDateTime', future.toISOString()); pm.collectionVariables.set('consommationSuffix', pm.collectionVariables.get('suffix')); }"
+                  "if (pm.collectionVariables.get('consommationSuffix') !== pm.collectionVariables.get('suffix')) { const now = new Date(); now.setSeconds(0, 0); const future = new Date(now.getTime() + 5 * 60 * 1000); pm.collectionVariables.set('distributionDateTime', now.toISOString()); pm.collectionVariables.set('futureDistributionDateTime', future.toISOString()); pm.collectionVariables.set('consommationSuffix', pm.collectionVariables.get('suffix')); }",
+                  "if (pm.collectionVariables.get('hapaDistributionSuffix') !== pm.collectionVariables.get('suffix')) { const at = new Date(Date.now() - 10 * 60 * 1000); at.setSeconds(0, 0); pm.collectionVariables.set('hapaDistributionDateTime', at.toISOString()); pm.collectionVariables.set('hapaDistributionSuffix', pm.collectionVariables.get('suffix')); }"
                 ]
               }
             }
@@ -872,7 +1413,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"id_bassin\": {{stockBassinId}},\n  \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{distributionDateTime}}\",\n  \"quantite_kg\": \"0.50\",\n  \"observation\": \"Test Postman consommation\"\n}"
+                  "raw": "{\n  \"id_bassin\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{distributionDateTime}}\",\n  \"quantite_kg\": \"0.50\",\n  \"observation\": \"Test Postman consommation\"\n}"
                 },
                 "url": "{{baseUrl}}/api/v1/provende/consommations-provende/"
               },
@@ -902,7 +1443,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"id_bassin\": {{stockBassinId}},\n  \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{distributionDateTime}}\",\n  \"quantite_kg\": \"0.50\"\n}"
+                  "raw": "{\n  \"id_bassin\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{distributionDateTime}}\",\n  \"quantite_kg\": \"0.50\"\n}"
                 },
                 "url": "{{baseUrl}}/api/v1/provende/consommations-provende/"
               },
@@ -929,7 +1470,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"id_bassin\": {{stockBassinId}},\n  \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{futureDistributionDateTime}}\",\n  \"quantite_kg\": \"0.50\"\n}"
+                  "raw": "{\n  \"id_bassin\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{futureDistributionDateTime}}\",\n  \"quantite_kg\": \"0.50\"\n}"
                 },
                 "url": "{{baseUrl}}/api/v1/provende/consommations-provende/"
               },
@@ -984,7 +1525,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"id_bassin\": {{stockBassinId}},\n  \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{distributionDateTime}}\",\n  \"quantite_kg\": \"0.50\",\n  \"observation\": \"Ressaisie après correction\"\n}"
+                  "raw": "{\n  \"id_bassin\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{distributionDateTime}}\",\n  \"quantite_kg\": \"0.50\",\n  \"observation\": \"Ressaisie après correction\"\n}"
                 },
                 "url": "{{baseUrl}}/api/v1/provende/consommations-provende/"
               },
@@ -1065,6 +1606,109 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "09 - Distribution dans le hapa A",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/provende/consommations-provende/",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id_bassin\": {{stockBassinId}}, \"id_hapa\": {{hapaId}}, \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{hapaDistributionDateTime}}\", \"quantite_kg\": \"0.50\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Distribution hapa A cr??e', () => pm.response.to.have.status(201));",
+                      "const row = pm.response.json();",
+                      "pm.expect(row.id_hapa).to.eql(Number(pm.collectionVariables.get('hapaId')));",
+                      "pm.collectionVariables.set('consommationId', row.id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "10 - M?me hapa m?me minute refus?s",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/provende/consommations-provende/",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id_bassin\": {{stockBassinId}}, \"id_hapa\": {{hapaId}}, \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{hapaDistributionDateTime}}\", \"quantite_kg\": \"0.50\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Doublon m?me hapa/minute refus?', () => pm.response.to.have.status(400));",
+                      "pm.expect(pm.response.json()).to.have.property('date_distribution');"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "11 - Autre hapa m?me minute accept?",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/provende/consommations-provende/",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id_bassin\": {{stockBassinId}}, \"id_hapa\": {{hapaSecondId}}, \"id_provende\": {{provendeId}},\n  \"date_distribution\": \"{{hapaDistributionDateTime}}\", \"quantite_kg\": \"0.50\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('M?me minute sur un autre hapa accept?e', () => pm.response.to.have.status(201));",
+                      "const row = pm.response.json();",
+                      "pm.expect(row.id_hapa).to.eql(Number(pm.collectionVariables.get('hapaSecondId')));",
+                      "pm.collectionVariables.set('consommationAutreHapaId', row.id);"
+                    ]
+                  }
+                }
+              ]
             }
           ]
         },
@@ -1122,7 +1766,7 @@
                         ],
                         "body": {
                           "mode": "raw",
-                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_bassin_destination\": {{sortieGrossBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 3,\n  \"observation\": \"Test Postman - transfert en grossissement\"\n}"
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"id_bassin_destination\": {{sortieGrossBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 3,\n  \"observation\": \"Test Postman - transfert en grossissement\"\n}"
                         },
                         "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/"
                       },
@@ -1153,7 +1797,7 @@
                         ],
                         "body": {
                           "mode": "raw",
-                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_bassin_destination\": {{sortieGrossBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 0\n}"
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"id_bassin_destination\": {{sortieGrossBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 0\n}"
                         },
                         "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/"
                       },
@@ -1180,7 +1824,7 @@
                         ],
                         "body": {
                           "mode": "raw",
-                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 1\n}"
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 1\n}"
                         },
                         "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/"
                       },
@@ -1207,7 +1851,7 @@
                         ],
                         "body": {
                           "mode": "raw",
-                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_bassin_destination\": {{stockBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 1\n}"
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"id_bassin_destination\": {{stockBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 1\n}"
                         },
                         "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/"
                       },
@@ -1385,7 +2029,7 @@
                         ],
                         "body": {
                           "mode": "raw",
-                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_bassin_destination\": {{sortieGrossBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 999\n}"
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"id_bassin_destination\": {{sortieGrossBassinId}},\n  \"type_sortie\": \"GROSSISSEMENT\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 999\n}"
                         },
                         "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/"
                       },
@@ -1507,7 +2151,7 @@
                         ],
                         "body": {
                           "mode": "raw",
-                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"type_sortie\": \"VENTE\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 2,\n  \"observation\": \"Test Postman - vente\"\n}"
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"type_sortie\": \"VENTE\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 2,\n  \"observation\": \"Test Postman - vente\"\n}"
                         },
                         "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/"
                       },
@@ -1584,6 +2228,399 @@
                               "pm.test('Détail de sortie consultable', () => pm.response.to.have.status(200));",
                               "pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('sortieVenteId')));",
                               "pm.expect(pm.response.json().statut).to.eql('VALIDEE');"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "21 - Stocker le second lot dans le hapa A",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          {
+                            "key": "Authorization",
+                            "value": "Bearer {{accessToken}}"
+                          },
+                          {
+                            "key": "Content-Type",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": "{{baseUrl}}/api/v1/stocks/",
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"id_lot\": {{hapaLotSecondId}}, \"id_bassin\": {{stockBassinId}}, \"id_hapa\": {{hapaId}},\n  \"effectif_entrant\": 5, \"justification_ecart\": \"\"\n}"
+                        }
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Second lot stock? dans le hapa A', () => pm.response.to.have.status(201));",
+                              "const row = pm.response.json();",
+                              "pm.expect(row.id_hapa).to.eql(Number(pm.collectionVariables.get('hapaId')));",
+                              "pm.collectionVariables.set('miseEnStockHapaSecondId', row.id);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "22 - Effectifs par hapa avant sorties",
+                      "request": {
+                        "method": "GET",
+                        "header": [
+                          {
+                            "key": "Authorization",
+                            "value": "Bearer {{accessToken}}"
+                          }
+                        ],
+                        "url": "{{baseUrl}}/api/v1/effectifs/par-hapa/?bassin={{stockBassinId}}&date={{today}}"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Effectifs avant sorties consultables', () => pm.response.to.have.status(200));",
+                              "const rows = pm.response.json().effectifs;",
+                              "pm.expect(rows.some(x => x.id_hapa === Number(pm.collectionVariables.get('hapaId')))).to.eql(true);",
+                              "pm.collectionVariables.set('effectifHapaAvant', JSON.stringify(rows));"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "23 - Brouillon sans composition, hapa ? un seul lot",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          {
+                            "key": "Authorization",
+                            "value": "Bearer {{accessToken}}"
+                          },
+                          {
+                            "key": "Content-Type",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/",
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}}, \"id_hapa\": {{hapaSecondId}},\n  \"type_sortie\": \"VENTE\", \"espece\": \"CARPE\", \"quantite\": 1\n}"
+                        }
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Brouillon ? lot unique cr??', () => pm.response.to.have.status(201));",
+                              "pm.expect(pm.response.json().id_hapa).to.eql(Number(pm.collectionVariables.get('hapaSecondId')));",
+                              "pm.collectionVariables.set('sortieExacteId', pm.response.json().id);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "24 - Valider la composition exacte ? une ligne",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          {
+                            "key": "Authorization",
+                            "value": "Bearer {{accessToken}}"
+                          },
+                          {
+                            "key": "Content-Type",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieExacteId}}/valider/",
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{}"
+                        }
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Sortie exacte valid?e', () => pm.response.to.have.status(200));",
+                              "const sortie = pm.response.json();",
+                              "pm.expect(sortie.composition).to.have.length(1);",
+                              "pm.expect(sortie.composition[0].certitude).to.eql('EXACTE');"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "25 - Brouillon multi-lots sans composition",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          {
+                            "key": "Authorization",
+                            "value": "Bearer {{accessToken}}"
+                          },
+                          {
+                            "key": "Content-Type",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/",
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}}, \"id_hapa\": {{hapaId}}, \"type_sortie\": \"VENTE\",\n  \"espece\": \"CARPE\", \"quantite\": 1\n}"
+                        }
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Brouillon multi-lots cr??', () => pm.response.to.have.status(201));",
+                              "pm.collectionVariables.set('sortieCompositionInvalideId', pm.response.json().id);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "26 - Refuser la validation multi-lots sans composition",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          {
+                            "key": "Authorization",
+                            "value": "Bearer {{accessToken}}"
+                          },
+                          {
+                            "key": "Content-Type",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieCompositionInvalideId}}/valider/",
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{}"
+                        }
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Composition pr?cis?e obligatoirement', () => pm.response.to.have.status(400));",
+                              "pm.expect(pm.response.json()).to.have.property('composition');"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "27 - Brouillon avec somme de composition incorrecte",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          {
+                            "key": "Authorization",
+                            "value": "Bearer {{accessToken}}"
+                          },
+                          {
+                            "key": "Content-Type",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/",
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}}, \"id_hapa\": {{hapaId}}, \"type_sortie\": \"GROSSISSEMENT\",\n  \"id_bassin_destination\": {{sortieGrossBassinId}}, \"espece\": \"CARPE\", \"quantite\": 2,\n  \"composition\": [{\"id_lot_origine\": {{lotId}}, \"quantite\": 1}]\n}"
+                        }
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Brouillon ? somme invalide cr??', () => pm.response.to.have.status(201));",
+                              "pm.collectionVariables.set('sortieCompositionInvalideId', pm.response.json().id);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "28 - Refuser la somme incorrecte",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          {
+                            "key": "Authorization",
+                            "value": "Bearer {{accessToken}}"
+                          },
+                          {
+                            "key": "Content-Type",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieCompositionInvalideId}}/valider/",
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{}"
+                        }
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Somme incorrecte refus?e', () => pm.response.to.have.status(400));",
+                              "pm.expect(pm.response.json()).to.have.property('composition');"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "29 - Brouillon avec composition de deux lots",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          {
+                            "key": "Authorization",
+                            "value": "Bearer {{accessToken}}"
+                          },
+                          {
+                            "key": "Content-Type",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/",
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"id_bassin_source\": {{stockBassinId}}, \"id_hapa\": {{hapaId}}, \"type_sortie\": \"GROSSISSEMENT\",\n  \"id_bassin_destination\": {{sortieGrossBassinId}}, \"espece\": \"CARPE\", \"quantite\": 2,\n  \"composition\": [{\"id_lot_origine\": {{lotId}}, \"quantite\": 1}, {\"id_lot_origine\": {{hapaLotSecondId}}, \"quantite\": 1}]\n}"
+                        }
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Brouillon deux lots cr??', () => pm.response.to.have.status(201));",
+                              "pm.expect(pm.response.json().composition).to.have.length(2);",
+                              "pm.collectionVariables.set('sortieCompositionId', pm.response.json().id);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "30 - Valider la composition estim?e",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          {
+                            "key": "Authorization",
+                            "value": "Bearer {{accessToken}}"
+                          },
+                          {
+                            "key": "Content-Type",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieCompositionId}}/valider/",
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{}"
+                        }
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Sortie deux lots valid?e', () => pm.response.to.have.status(200));",
+                              "const rows = pm.response.json().composition;",
+                              "pm.expect(rows).to.have.length(2);",
+                              "pm.expect(rows.every(x => x.certitude === 'ESTIMEE')).to.eql(true);"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "31 - Effectifs par hapa apr?s sorties",
+                      "request": {
+                        "method": "GET",
+                        "header": [
+                          {
+                            "key": "Authorization",
+                            "value": "Bearer {{accessToken}}"
+                          }
+                        ],
+                        "url": "{{baseUrl}}/api/v1/effectifs/par-hapa/?bassin={{stockBassinId}}&date={{today}}"
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Effectifs apr?s sorties consultables', () => pm.response.to.have.status(200));",
+                              "const rows = pm.response.json().effectifs;",
+                              "pm.expect(rows.some(x => x.id_hapa === Number(pm.collectionVariables.get('hapaId')))).to.eql(true);",
+                              "pm.collectionVariables.set('effectifHapaApres', JSON.stringify(rows));"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "32 - Annuler la sortie valid?e avec motif",
+                      "request": {
+                        "method": "POST",
+                        "header": [
+                          {
+                            "key": "Authorization",
+                            "value": "Bearer {{accessToken}}"
+                          },
+                          {
+                            "key": "Content-Type",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": "{{baseUrl}}/api/v1/effectifs/sorties-stock/{{sortieCompositionId}}/annuler/",
+                        "body": {
+                          "mode": "raw",
+                          "raw": "{\n  \"motif\": \"Correction du test de composition hapa\"\n}"
+                        }
+                      },
+                      "event": [
+                        {
+                          "listen": "test",
+                          "script": {
+                            "type": "text/javascript",
+                            "exec": [
+                              "pm.test('Sortie deux lots annul?e', () => pm.response.to.have.status(200));",
+                              "pm.expect(pm.response.json().statut).to.eql('ANNULEE');",
+                              "pm.expect(pm.response.json().motif_annulation).to.eql('Correction du test de composition hapa');"
                             ]
                           }
                         }

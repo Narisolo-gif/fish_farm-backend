@@ -2,6 +2,8 @@
 from django.conf import settings
 from django.db import models
 
+from apps.bassins.models import Hapa
+
 
 class MiseEnStock(models.Model):
     """Enregistrement de l'entrée physique d'un lot dans un bassin de stock."""
@@ -16,6 +18,14 @@ class MiseEnStock(models.Model):
         "bassins.Bassin",
         on_delete=models.PROTECT,
         related_name="mises_en_stock",
+    )
+
+    hapa = models.ForeignKey(
+        Hapa,
+        on_delete=models.PROTECT,
+        related_name="mises_en_stock",
+        null=True,
+        blank=True,
     )
 
     # Quantité réellement présente dans le bassin après le transfert.

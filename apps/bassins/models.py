@@ -1,3 +1,4 @@
+from django import utils
 from django.db import models
 
 
@@ -30,9 +31,9 @@ class Bassin(models.Model):
         choices=Statut.choices,
         default=Statut.ACTIF,
     )
-
+    created_at = models.DateTimeField(auto_now_add=True)
     class Meta:
-        ordering = ["reference"]
+        ordering = ["-created_at"]
 
     def __str__(self):
         return self.reference
@@ -46,15 +47,21 @@ class Hapa(models.Model):
     reference = models.CharField(
         max_length=100,
         unique=True,
+        null=True,
+        blank=True,
     )
 
     bassin = models.ForeignKey(
         Bassin,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="hapas",
     )
 
-    capacity = models.PositiveIntegerField()
+    capacity = models.PositiveIntegerField(null=True, blank=True)
+
+    nom = models.CharField(max_length=100)
+    actif = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     statut = models.CharField(
         max_length=20,
@@ -63,7 +70,13 @@ class Hapa(models.Model):
     )
 
     class Meta:
-        ordering = ["reference"]
+        ordering = ["nom"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bassin", "nom"],
+                name="hapa_bassin_nom_unique",
+            ),
+        ]
 
     def __str__(self):
-        return self.reference
+        return self.reference or self.nom

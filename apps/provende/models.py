@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from apps.bassins.models import Hapa
+
 
 class TypeProvende(models.Model):
     """Type de provende utilisable dans l'exploitation."""
@@ -66,6 +68,13 @@ class ConsommationProvende(models.Model):
         on_delete=models.PROTECT,
         related_name="consommations_provende",
     )
+    hapa = models.ForeignKey(
+        Hapa,
+        on_delete=models.PROTECT,
+        related_name="consommations_provende",
+        null=True,
+        blank=True,
+    )
     provende = models.ForeignKey(
         Provende,
         on_delete=models.PROTECT,
@@ -104,8 +113,13 @@ class ConsommationProvende(models.Model):
             ),
             models.UniqueConstraint(
                 fields=["bassin", "provende", "date_distribution"],
-                condition=models.Q(statut="VALIDE"),
-                name="consommation_provende_unique_valide",
+                condition=models.Q(statut="VALIDE", hapa__isnull=True),
+                name="consommation_provende_unique_valide_sans_hapa",
+            ),
+            models.UniqueConstraint(
+                fields=["bassin", "hapa", "provende", "date_distribution"],
+                condition=models.Q(statut="VALIDE", hapa__isnull=False),
+                name="consommation_provende_unique_valide_avec_hapa",
             ),
             models.CheckConstraint(
                 condition=(

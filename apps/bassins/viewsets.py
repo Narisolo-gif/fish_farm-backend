@@ -1,5 +1,7 @@
 from django.db import transaction
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
+from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import BasePermission, SAFE_METHODS
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -9,7 +11,7 @@ from apps.core.permissions import (
 )
 
 from .models import Bassin, Hapa
-from .serializers import BassinSerializer, HapaSerializer
+from .serializers import BassinSerializer, HapaGestionSerializer, HapaSerializer
 
 
 class BassinViewSet(viewsets.ModelViewSet):
@@ -251,11 +253,64 @@ class HapaViewSet(viewsets.ModelViewSet):
         hapa = self.get_object()
 
         hapa.statut = Hapa.Statut.INACTIF
+        hapa.actif = False
 
         hapa.save(
-            update_fields=["statut"]
+            update_fields=["statut", "actif"]
         )
 
         serializer = self.get_serializer(hapa)
 
         return Response(serializer.data)
+
+
+class HapaPermission(BasePermission):
+    ROLES_AUTORISES = {"Administrateur", "Gestionnaire", "Employé"}
+    ROLES_GESTION = {"Administrateur", "Gestionnaire"}
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not (
+            user
+            and user.is_authenticated
+            and user.is_active
+            and getattr(user, "statut", None) == "ACTIF"
+            and getattr(user, "role", None)
+        ):
+            return False
+        role = user.role.libelle
+        if request.method in SAFE_METHODS:
+            return role in self.ROLES_AUTORISES
+        return role in self.ROLES_GESTION and request.method in {"POST", "PATCH"}
+
+
+class HapaGestionViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = Hapa.objects.select_related("bassin").all()
+    serializer_class = HapaGestionSerializer
+    permission_classes = [HapaPermission]
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action != "list":
+            return queryset
+        bassin = self.request.query_params.get("bassin")
+        actif = self.request.query_params.get("actif")
+        if bassin:
+            if not bassin.isdigit():
+                raise ValidationError({"bassin": "Identifiant de bassin invalide."})
+            queryset = queryset.filter(bassin_id=bassin)
+        if actif is not None:
+            if actif.lower() not in {"true", "false"}:
+                raise ValidationError({"actif": "Utilisez true ou false."})
+            active = actif.lower() == "true"
+            queryset = queryset.filter(actif=active, statut=(
+                Hapa.Statut.ACTIF if active else Hapa.Statut.INACTIF
+            ))
+        return queryset

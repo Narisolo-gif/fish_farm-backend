@@ -7,7 +7,8 @@ from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
-from apps.bassins.models import Bassin
+from apps.bassins.models import Bassin, Hapa
+from .calculs import effectifs_par_hapa
 from .models import (
     CategoriePerte,
     CauseMortalite,
@@ -78,7 +79,7 @@ class MouvementEffectifViewSet(viewsets.ReadOnlyModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def get_permissions(self):
-        if self.action in ["list", "retrieve", "solde"]:
+        if self.action in ["list", "retrieve", "solde", "par_hapa"]:
             return [IsAuthenticated(), IsRoleEffectifAutorise()]
         return [IsAuthenticated(), IsAdministrateurOuGestionnaireEffectif()]
 
@@ -140,6 +141,39 @@ class MouvementEffectifViewSet(viewsets.ReadOnlyModelViewSet):
                 espece,
                 date_reference,
             ),
+        })
+
+    @action(detail=False, methods=["get"], url_path="par-hapa")
+    def par_hapa(self, request):
+        bassin_id = request.query_params.get("bassin")
+        if not bassin_id:
+            raise ValidationError({"bassin": "Ce paramètre est obligatoire."})
+        date_value = request.query_params.get("date")
+        date_reference = parse_date(date_value) if date_value else timezone.localdate()
+        if date_reference is None:
+            raise ValidationError({"date": "Format invalide. Utilisez YYYY-MM-DD."})
+        try:
+            bassin = Bassin.objects.get(pk=bassin_id)
+        except (Bassin.DoesNotExist, ValueError, TypeError) as exc:
+            raise NotFound("Bassin introuvable.") from exc
+
+        balances = effectifs_par_hapa(bassin.pk, a_la_date=date_reference)
+        hapas = Hapa.objects.filter(bassin=bassin).order_by("nom", "id")
+        rows = [
+            {
+                "id_hapa": hapa.pk,
+                "nom_hapa": hapa.nom,
+                "espece": espece,
+                "effectif": effectif,
+            }
+            for (hapa_id, espece), effectif in balances.items()
+            for hapa in hapas
+            if hapa.pk == hapa_id
+        ]
+        return Response({
+            "bassin": bassin.pk,
+            "date": date_reference,
+            "effectifs": rows,
         })
 
     @action(
