@@ -10,6 +10,11 @@ class ParametreEnvironnementalSerializer(
     Sérialiseur des paramètres environnementaux.
     """
 
+    id_user = serializers.IntegerField(
+        source="utilisateur_id",
+        read_only=True,
+    )
+
     class Meta:
         model = ParametreEnvironnemental
 
@@ -24,10 +29,16 @@ class ParametreEnvironnementalSerializer(
             "nitrite",
             "nitrate",
             "ammoniac",
+            "id_user",
+            "created_at",
+            "updated_at",
         ]
 
         read_only_fields = [
             "id",
+            "id_user",
+            "created_at",
+            "updated_at",
         ]
 
     def validate_bassin(self, bassin):

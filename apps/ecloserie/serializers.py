@@ -7,6 +7,11 @@ from .models import Eclosion
 
 
 class EclosionSerializer(serializers.ModelSerializer):
+    id_user = serializers.IntegerField(
+        source="utilisateur_id",
+        read_only=True,
+    )
+
     reference_ponte = serializers.SlugRelatedField(
         source="ponte",
         slug_field="reference",
@@ -24,8 +29,17 @@ class EclosionSerializer(serializers.ModelSerializer):
             "quantite_alevins_obtenu",
             "observation",
             "statut",
+            "id_user",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ["id", "statut"]
+        read_only_fields = [
+            "id",
+            "statut",
+            "id_user",
+            "created_at",
+            "updated_at",
+        ]
 
     def validate_date_eclosion(self, value):
         if value > timezone.localdate():

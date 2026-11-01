@@ -33,7 +33,7 @@ class ParametreEnvironnementalViewSet(
 
     queryset = (
         ParametreEnvironnemental.objects
-        .select_related("bassin")
+        .select_related("bassin", "utilisateur")
         .all()
     )
 
@@ -77,6 +77,9 @@ class ParametreEnvironnementalViewSet(
             )
 
         return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(utilisateur=self.request.user)
 
     @action(
         detail=False,

@@ -62,6 +62,7 @@ class EclosionViewSet(viewsets.ModelViewSet):
         "ponte",
         "ponte__reproduction",
         "ponte__reproduction__bassin",
+        "utilisateur",
     ).all()
 
     def get_permissions(self):
@@ -111,7 +112,7 @@ class EclosionViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def perform_create(self, serializer):
-        serializer.save()
+        serializer.save(utilisateur=self.request.user)
 
     @transaction.atomic
     def perform_update(self, serializer):
@@ -135,7 +136,7 @@ class EclosionViewSet(viewsets.ModelViewSet):
             )
 
         eclosion.statut = Eclosion.Statut.INACTIF
-        eclosion.save(update_fields=["statut"])
+        eclosion.save(update_fields=["statut", "updated_at"])
 
         return Response(
             {

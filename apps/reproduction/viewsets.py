@@ -26,7 +26,7 @@ from .serializers import (
 class ReproductionViewSet(viewsets.ModelViewSet):
     queryset = (
         Reproduction.objects
-        .select_related("bassin")
+        .select_related("bassin", "utilisateur")
         .prefetch_related("pontes")
         .all()
     )
@@ -88,7 +88,9 @@ class ReproductionViewSet(viewsets.ModelViewSet):
             id=bassin_id
         )
 
-        reproduction = serializer.save()
+        reproduction = serializer.save(
+            utilisateur=self.request.user,
+        )
         enregistrer_mouvement_operation(
             operation=reproduction,
             bassin=reproduction.bassin,
@@ -163,7 +165,7 @@ class ReproductionViewSet(viewsets.ModelViewSet):
 
         reproduction.statut = Reproduction.Statut.INACTIF
         reproduction.save(
-            update_fields=["statut"]
+            update_fields=["statut", "updated_at"]
         )
 
         return Response(
@@ -181,6 +183,7 @@ class PonteViewSet(viewsets.ModelViewSet):
         .select_related(
             "reproduction",
             "reproduction__bassin",
+            "utilisateur",
         )
         .all()
     )
@@ -242,4 +245,4 @@ class PonteViewSet(viewsets.ModelViewSet):
             id=bassin_id
         )
 
-        serializer.save()
+        serializer.save(utilisateur=self.request.user)

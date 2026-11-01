@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 from apps.bassins.models import Bassin
@@ -51,6 +52,17 @@ class ParametreEnvironnemental(models.Model):
         max_digits=6,
         decimal_places=2,
     )
+
+    utilisateur = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="parametres_environnementaux_crees",
+        null=True,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-date_heure_prelevement"]

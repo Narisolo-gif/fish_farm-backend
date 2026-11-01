@@ -8,6 +8,11 @@ from .models import Ponte, Reproduction
 
 
 class ReproductionSerializer(serializers.ModelSerializer):
+    id_user = serializers.IntegerField(
+        source="utilisateur_id",
+        read_only=True,
+    )
+
     class Meta:
         model = Reproduction
         fields = [
@@ -20,10 +25,16 @@ class ReproductionSerializer(serializers.ModelSerializer):
             "quantite_femelle",
             "observation",
             "statut",
+            "id_user",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = [
             "id",
             "statut",
+            "id_user",
+            "created_at",
+            "updated_at",
         ]
 
     def validate(self, attrs):
@@ -138,6 +149,11 @@ class ReproductionSerializer(serializers.ModelSerializer):
 
 
 class PonteSerializer(serializers.ModelSerializer):
+    id_user = serializers.IntegerField(
+        source="utilisateur_id",
+        read_only=True,
+    )
+
     bassin = serializers.PrimaryKeyRelatedField(
         queryset=Bassin.objects.all(),
         write_only=True,
@@ -157,10 +173,16 @@ class PonteSerializer(serializers.ModelSerializer):
             "date_ponte",
             "quantite_oeuf_obtenu",
             "observation",
+            "id_user",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = [
             "id",
             "reproduction",
+            "id_user",
+            "created_at",
+            "updated_at",
         ]
 
     def validate(self, attrs):
