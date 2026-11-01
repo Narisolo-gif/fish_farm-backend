@@ -8,11 +8,12 @@ from apps.core.permissions import (
 )
 
 from .models import Traitement
-from .serializers import (
-    ClotureTraitementSerializer,
-    TraitementSerializer,
+from .serializers import TraitementSerializer
+from .services import (
+    cloturer_traitement,
+    effectifs_traitement,
+    supprimer_traitement,
 )
-from .services import cloturer_traitement, supprimer_traitement
 
 
 class TraitementViewSet(viewsets.ModelViewSet):
@@ -24,7 +25,7 @@ class TraitementViewSet(viewsets.ModelViewSet):
         "used_provende",
         "utilisateur",
         "used_provende__type_provende",
-    ).all()
+    ).prefetch_related("lignes_hapas__hapa").all().order_by("-created_at", "-id")
 
     serializer_class = TraitementSerializer
 
@@ -35,11 +36,17 @@ class TraitementViewSet(viewsets.ModelViewSet):
             "retrieve",
             "create",
             "cloturer",
+            "effectifs",
         ]:
             return [IsTousRolesActifs()]
 
         # Seuls Admin et Gestionnaire peuvent modifier ou supprimer.
         return [IsAdministrateurOuGestionnaire()]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["include_hapa_effectifs"] = self.action == "retrieve"
+        return context
 
     @action(
         detail=True,
@@ -48,24 +55,21 @@ class TraitementViewSet(viewsets.ModelViewSet):
     )
     def cloturer(self, request, pk=None):
         """Endpoint dédié à la clôture du traitement."""
-
-        traitement = self.get_object()
-
-        serializer = ClotureTraitementSerializer(
-            data=request.data,
-            context={"traitement": traitement},
-        )
-        serializer.is_valid(raise_exception=True)
-
-        traitement = cloturer_traitement(
-            traitement_id=traitement.pk,
-            effectif_final=serializer.validated_data["effectif_final"],
-        )
+        self.get_object()
+        cloturer_traitement(traitement_id=pk)
 
         return Response(
-            self.get_serializer(traitement).data,
+            self.get_serializer(self.get_object()).data,
             status=status.HTTP_200_OK,
         )
+
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="effectifs",
+    )
+    def effectifs(self, request, pk=None):
+        return Response(effectifs_traitement(self.get_object()))
 
     def perform_destroy(self, instance):
         # Le service supprime le traitement et réinitialise le stade du lot.

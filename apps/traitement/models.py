@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models
 
-from apps.bassins.models import Bassin
+from apps.bassins.models import Bassin, Hapa
 from apps.lots.models import Lot
 from apps.provende.models import Provende
 
@@ -23,7 +23,7 @@ class Traitement(models.Model):
     # L'effectif initial doit être strictement positif.
     effectif_initial = models.PositiveIntegerField()
 
-    # Saisi exclusivement lors de la clôture ; zéro reste autorisé.
+    # Calculé à la clôture ; zéro reste autorisé.
     effectif_final = models.PositiveIntegerField(
         null=True,
         blank=True,
@@ -92,3 +92,43 @@ class Traitement(models.Model):
 
     def __str__(self):
         return f"Traitement du lot {self.lot.reference}"
+
+
+class TraitementHapa(models.Model):
+    traitement = models.ForeignKey(
+        Traitement,
+        on_delete=models.PROTECT,
+        related_name="lignes_hapas",
+    )
+    hapa = models.ForeignKey(
+        Hapa,
+        on_delete=models.PROTECT,
+        related_name="lignes_traitement",
+    )
+    effectif_initial = models.PositiveIntegerField()
+    effectif_final = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["traitement", "hapa"],
+                name="unique_traitement_hapa",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(effectif_initial__gt=0),
+                name="traitement_hapa_effectif_initial_positif",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(effectif_final__isnull=True)
+                    | models.Q(
+                        effectif_final__lte=models.F("effectif_initial")
+                    )
+                ),
+                name="traitement_hapa_effectif_final_max_initial",
+            ),
+        ]

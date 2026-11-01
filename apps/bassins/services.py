@@ -8,9 +8,12 @@ from .models import Bassin, Hapa
 def creer_hapa(validated_data):
     donnees = dict(validated_data)
     bassin = Bassin.objects.select_for_update().get(pk=donnees["bassin"].pk)
-    if bassin.categorie != Bassin.Categorie.STOCKS:
+    if bassin.categorie not in {
+        Bassin.Categorie.STOCKS,
+        Bassin.Categorie.TRAITEMENT,
+    }:
         raise ValidationError({
-            "bassin": "Le bassin du hapa doit être de catégorie STOCKS."
+            "bassin": "Le bassin du hapa doit être de catégorie STOCKS ou TRAITEMENT."
         })
     donnees["bassin"] = bassin
     if "actif" in donnees:

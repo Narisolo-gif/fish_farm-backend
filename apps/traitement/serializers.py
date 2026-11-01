@@ -6,7 +6,12 @@ from apps.lots.models import Lot
 from apps.provende.models import Provende
 
 from .models import Traitement
-from .services import creer_traitement
+from .services import creer_traitement, effectifs_traitement
+
+
+class TraitementHapaInputSerializer(serializers.Serializer):
+    id_hapa = serializers.IntegerField(min_value=1)
+    effectif_initial = serializers.IntegerField(min_value=1)
 
 
 class TraitementSerializer(serializers.ModelSerializer):
@@ -44,6 +49,11 @@ class TraitementSerializer(serializers.ModelSerializer):
         source="utilisateur_id",
         read_only=True,
     )
+    hapas = TraitementHapaInputSerializer(
+        many=True,
+        required=False,
+        write_only=True,
+    )
 
     class Meta:
         model = Traitement
@@ -62,6 +72,7 @@ class TraitementSerializer(serializers.ModelSerializer):
             "id_user",
             "statut",
             "observation", #Nouvel ajout pour l'observation
+            "hapas",
             "created_at",
             "updated_at",
         ]
@@ -138,6 +149,11 @@ class TraitementSerializer(serializers.ModelSerializer):
                 })
 
         if self.instance:
+            if "hapas" in attrs:
+                raise serializers.ValidationError({
+                    "hapas": "Les hapas d’un traitement existant ne peuvent pas être modifiés."
+                })
+
             # Un traitement clôturé devient non modifiable.
             if self.instance.statut == Traitement.Statut.CLOTUREE:
                 raise serializers.ValidationError(
@@ -184,18 +200,31 @@ class TraitementSerializer(serializers.ModelSerializer):
             utilisateur=utilisateur,
         )
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        lignes = sorted(
+            instance.lignes_hapas.all(),
+            key=lambda ligne: ligne.hapa_id,
+        )
+        effectifs = {}
+        if self.context.get("include_hapa_effectifs"):
+            effectifs = {
+                ligne["id_hapa"]: ligne["effectif_actuel"]
+                for ligne in effectifs_traitement(instance)
+            }
 
-class ClotureTraitementSerializer(serializers.Serializer):
-    """Entrée dédiée à l'action de clôture."""
-
-    effectif_final = serializers.IntegerField(min_value=0)
-
-    def validate_effectif_final(self, value):
-        traitement = self.context["traitement"]
-
-        if value > traitement.effectif_initial:
-            raise serializers.ValidationError(
-                "L'effectif final ne peut pas dépasser l'effectif initial."
-            )
-
-        return value
+        representation["hapas"] = [
+            {
+                "id_hapa": ligne.hapa_id,
+                "nom_hapa": ligne.hapa.nom,
+                "effectif_initial": ligne.effectif_initial,
+                "effectif_final": ligne.effectif_final,
+                **(
+                    {"effectif_actuel": effectifs.get(ligne.hapa_id, 0)}
+                    if self.context.get("include_hapa_effectifs")
+                    else {}
+                ),
+            }
+            for ligne in lignes
+        ]
+        return representation
