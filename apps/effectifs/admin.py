@@ -71,7 +71,7 @@ class EvenementMortalitePerteAdmin(admin.ModelAdmin):
         "quantite",
         "date_evenement",
         "statut",
-        "saisi_par",
+        "utilisateur",
     )
     list_filter = (
         "bassin",

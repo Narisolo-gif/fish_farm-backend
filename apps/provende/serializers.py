@@ -101,10 +101,6 @@ class ConsommationProvendeSerializer(serializers.ModelSerializer):
         source="utilisateur_id",
         read_only=True,
     )
-    annulee_par = serializers.IntegerField(
-        source="annulee_par_id",
-        read_only=True,
-    )
     # `None` passe au service, qui applique l'heure courante puis la normalise.
     date_distribution = serializers.DateTimeField(
         required=False,
@@ -127,7 +123,6 @@ class ConsommationProvendeSerializer(serializers.ModelSerializer):
             "observation",
             "statut",
             "motif_annulation",
-            "annulee_par",
             "annulee_le",
             "id_user",
             "created_at",
@@ -139,7 +134,6 @@ class ConsommationProvendeSerializer(serializers.ModelSerializer):
             "type_provende",
             "statut",
             "motif_annulation",
-            "annulee_par",
             "annulee_le",
             "id_user",
             "created_at",

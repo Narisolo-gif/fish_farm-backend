@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.bassins.models import Bassin, Hapa
@@ -9,12 +10,13 @@ from .models import (
     EvenementMortalitePerte,
     MouvementEffectif,
     SortieStock,
-    SortieStockComposition,
+    SortieStockLigne,
 )
 from .services import (
-    creer_sortie_stock,
-    enregistrer_evenement_mortalite_perte,
-    modifier_sortie_stock,
+    calculer_lignes_sortie,
+    creer_sortie,
+    enregistrer_evenement,
+    modifier_sortie,
 )
 
 
@@ -99,179 +101,140 @@ class CauseMortaliteSerializer(serializers.ModelSerializer):
     class Meta:
         model = CauseMortalite
         fields = ["id", "libelle", "actif"]
-        read_only_fields = fields
 
 
 class CategoriePerteSerializer(serializers.ModelSerializer):
     class Meta:
         model = CategoriePerte
         fields = ["id", "libelle", "actif"]
+
+
+class SortieStockLigneSerializer(serializers.ModelSerializer):
+    id_hapa = serializers.IntegerField(source="hapa_id", read_only=True)
+    nom_hapa = serializers.CharField(source="hapa.nom", read_only=True)
+
+    class Meta:
+        model = SortieStockLigne
+        fields = ["id_hapa", "nom_hapa", "quantite"]
         read_only_fields = fields
 
 
-class CompositionSortieSerializer(serializers.ModelSerializer):
-    id_lot_origine = serializers.PrimaryKeyRelatedField(
-        source="lot_origine",
-        queryset=Lot.objects.all(),
-        allow_null=True,
-    )
-    reference_lot_origine = serializers.CharField(
-        source="lot_origine.reference",
-        read_only=True,
-        allow_null=True,
-    )
-
-    class Meta:
-        model = SortieStockComposition
-        fields = [
-            "id_lot_origine",
-            "reference_lot_origine",
-            "quantite",
-            "certitude",
-        ]
-        read_only_fields = ["reference_lot_origine", "certitude"]
-
-    def validate_quantite(self, value):
-        if value <= 0:
-            raise serializers.ValidationError("La quantité doit être strictement positive.")
-        return value
-
-
 class SortieStockSerializer(serializers.ModelSerializer):
-    id_bassin_source = serializers.PrimaryKeyRelatedField(
-        source="bassin_source",
-        queryset=Bassin.objects.all(),
+    id_lot = serializers.PrimaryKeyRelatedField(
+        source="lot",
+        queryset=Lot.objects.all(),
     )
+    reference_lot = serializers.CharField(source="lot.reference", read_only=True)
     id_bassin_destination = serializers.PrimaryKeyRelatedField(
         source="bassin_destination",
         queryset=Bassin.objects.all(),
-        required=False,
-        allow_null=True,
     )
-    id_hapa = serializers.PrimaryKeyRelatedField(
-        source="hapa",
-        queryset=Hapa.objects.all(),
-        required=False,
-        allow_null=True,
-    )
-    nom_hapa = serializers.CharField(source="hapa.nom", read_only=True, allow_null=True)
-    composition = CompositionSortieSerializer(many=True, required=False)
-    reference_bassin_source = serializers.CharField(
-        source="bassin_source.reference",
-        read_only=True,
-    )
+    reference_bassin_source = serializers.SerializerMethodField()
+    id_bassin_source = serializers.SerializerMethodField()
     reference_bassin_destination = serializers.CharField(
         source="bassin_destination.reference",
         read_only=True,
-        allow_null=True,
     )
     id_user = serializers.IntegerField(source="utilisateur_id", read_only=True)
-    date_sortie = serializers.DateTimeField(required=False, default=None)
-    validee_par = serializers.IntegerField(
-        source="validee_par_id",
-        read_only=True,
-    )
-    annulee_par = serializers.IntegerField(
-        source="annulee_par_id",
-        read_only=True,
-    )
+    date_sortie = serializers.DateTimeField(required=False)
+    ecart_effectif = serializers.IntegerField(read_only=True, allow_null=True)
+    lignes = SortieStockLigneSerializer(many=True, read_only=True)
 
     class Meta:
         model = SortieStock
         fields = [
             "id",
+            "type_sortie",
+            "id_lot",
+            "reference_lot",
+            "espece",
             "id_bassin_source",
             "id_bassin_destination",
             "reference_bassin_source",
             "reference_bassin_destination",
-            "id_hapa",
-            "nom_hapa",
-            "type_sortie",
-            "espece",
-            "quantite",
-            "composition",
             "date_sortie",
             "statut",
             "observation",
+            "effectif_sortant",
+            "effectif_entrant",
+            "ecart_effectif",
+            "justification_ecart",
+            "lignes",
             "id_user",
-            "validee_par",
             "validee_le",
-            "annulee_par",
             "annulee_le",
             "motif_annulation",
             "created_at",
-            "updated_at",
         ]
         read_only_fields = [
             "id",
+            "type_sortie",
+            "reference_lot",
+            "espece",
+            "id_bassin_source",
             "reference_bassin_source",
             "reference_bassin_destination",
-            "nom_hapa",
             "statut",
+            "effectif_sortant",
+            "effectif_entrant",
+            "ecart_effectif",
+            "justification_ecart",
+            "lignes",
             "id_user",
-            "validee_par",
             "validee_le",
-            "annulee_par",
             "annulee_le",
             "motif_annulation",
             "created_at",
-            "updated_at",
         ]
         extra_kwargs = {
             "observation": {"required": False, "allow_blank": True},
         }
 
-    def validate(self, attrs):
-        instance = self.instance
-        type_sortie = attrs.get(
-            "type_sortie",
-            instance.type_sortie if instance else None,
+    def get_fields(self):
+        fields = super().get_fields()
+        if self.instance is not None:
+            fields["id_lot"].read_only = True
+        return fields
+
+    def _hapa_source(self, instance):
+        ligne = instance.lignes.select_related("hapa", "hapa__bassin").first()
+        if ligne is not None:
+            return ligne.hapa
+        lignes = calculer_lignes_sortie(
+            instance.lot,
+            timezone.localtime(instance.date_sortie).date(),
         )
-        bassin_source = attrs.get(
-            "bassin_source",
-            instance.bassin_source if instance else None,
-        )
-        bassin_destination = attrs.get(
-            "bassin_destination",
-            instance.bassin_destination if instance else None,
-        )
-        if (
-            type_sortie == SortieStock.TypeSortie.GROSSISSEMENT
-            and bassin_destination is None
-        ):
-            raise serializers.ValidationError({
-                "id_bassin_destination": "La destination est obligatoire pour un grossissement."
-            })
-        if (
-            type_sortie == SortieStock.TypeSortie.VENTE
-            and bassin_destination is not None
-        ):
-            raise serializers.ValidationError({
-                "id_bassin_destination": "Une vente ne peut pas avoir de destination."
-            })
-        if (
-            bassin_source is not None
-            and bassin_destination is not None
-            and bassin_source.pk == bassin_destination.pk
-        ):
-            raise serializers.ValidationError({
-                "id_bassin_destination": "La source et la destination doivent être distinctes."
-            })
-        quantite = attrs.get("quantite")
-        if quantite is not None and quantite <= 0:
-            raise serializers.ValidationError({
-                "quantite": "La quantité doit être strictement positive."
-            })
-        return attrs
+        return lignes[0]["hapa"] if lignes else None
+
+    def get_id_bassin_source(self, instance):
+        hapa = self._hapa_source(instance)
+        return hapa.bassin_id if hapa is not None else None
+
+    def get_reference_bassin_source(self, instance):
+        hapa = self._hapa_source(instance)
+        return hapa.bassin.reference if hapa is not None else None
 
     def create(self, validated_data):
-        return creer_sortie_stock(
+        return creer_sortie(
             validated_data,
             utilisateur=self.context["request"].user,
         )
 
     def update(self, instance, validated_data):
-        return modifier_sortie_stock(instance.pk, validated_data)
+        return modifier_sortie(instance.pk, validated_data)
+
+
+class ValidationSortieSerializer(serializers.Serializer):
+    effectif_entrant = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=1,
+    )
+    justification_ecart = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
 
 
 class AnnulationSortieStockSerializer(serializers.Serializer):
@@ -283,7 +246,14 @@ class AnnulationSortieStockSerializer(serializers.Serializer):
 
 
 class EvenementMortalitePerteSerializer(serializers.ModelSerializer):
-    bassin = serializers.PrimaryKeyRelatedField(queryset=Bassin.objects.all())
+    id_bassin = serializers.PrimaryKeyRelatedField(
+        source="bassin",
+        queryset=Bassin.objects.all(),
+    )
+    reference_bassin = serializers.CharField(
+        source="bassin.reference",
+        read_only=True,
+    )
     id_hapa = serializers.PrimaryKeyRelatedField(
         source="hapa",
         queryset=Hapa.objects.all(),
@@ -291,87 +261,81 @@ class EvenementMortalitePerteSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     nom_hapa = serializers.CharField(source="hapa.nom", read_only=True, allow_null=True)
-    cause_mortalite = serializers.PrimaryKeyRelatedField(
+    id_cause = serializers.PrimaryKeyRelatedField(
+        source="cause_mortalite",
         queryset=CauseMortalite.objects.filter(actif=True),
         required=False,
         allow_null=True,
     )
-    categorie_perte = serializers.PrimaryKeyRelatedField(
+    libelle_cause = serializers.CharField(
+        source="cause_mortalite.libelle",
+        read_only=True,
+        allow_null=True,
+    )
+    id_categorie = serializers.PrimaryKeyRelatedField(
+        source="categorie_perte",
         queryset=CategoriePerte.objects.filter(actif=True),
         required=False,
         allow_null=True,
     )
-    mouvement = serializers.PrimaryKeyRelatedField(read_only=True)
+    libelle_categorie = serializers.CharField(
+        source="categorie_perte.libelle",
+        read_only=True,
+        allow_null=True,
+    )
+    id_user = serializers.IntegerField(source="utilisateur_id", read_only=True)
     statut = serializers.CharField(read_only=True)
-    saisi_par = serializers.PrimaryKeyRelatedField(read_only=True)
-    saisi_le = serializers.DateTimeField(read_only=True)
+    motif_annulation = serializers.CharField(read_only=True)
+    annulee_le = serializers.DateTimeField(read_only=True, allow_null=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    date_evenement = serializers.DateTimeField(required=False)
 
     class Meta:
         model = EvenementMortalitePerte
         fields = [
             "id",
-            "bassin",
+            "type_evenement",
             "id_hapa",
+            "id_bassin",
+            "reference_bassin",
             "nom_hapa",
             "espece",
-            "type_evenement",
             "quantite",
             "date_evenement",
-            "cause_mortalite",
-            "categorie_perte",
+            "id_cause",
+            "libelle_cause",
+            "id_categorie",
+            "libelle_categorie",
             "justification",
-            "mouvement",
+            "observation",
             "statut",
-            "saisi_par",
-            "saisi_le",
+            "motif_annulation",
+            "annulee_le",
+            "id_user",
+            "created_at",
         ]
         read_only_fields = [
             "id",
-            "mouvement",
+            "reference_bassin",
+            "nom_hapa",
+            "libelle_cause",
+            "libelle_categorie",
             "statut",
-            "saisi_par",
-            "saisi_le",
+            "motif_annulation",
+            "annulee_le",
+            "id_user",
+            "created_at",
         ]
 
-    def validate(self, attrs):
-        event_type = attrs.get("type_evenement")
-        cause = attrs.get("cause_mortalite")
-        category = attrs.get("categorie_perte")
-        justification = attrs.get("justification", "")
-
-        if event_type == EvenementMortalitePerte.TypeEvenement.MORTALITE:
-            if cause is None:
-                raise serializers.ValidationError({
-                    "cause_mortalite": "Une cause de mortalité est obligatoire."
-                })
-            if category is not None:
-                raise serializers.ValidationError({
-                    "categorie_perte": "Une mortalité ne peut pas avoir de catégorie de perte."
-                })
-        elif event_type == EvenementMortalitePerte.TypeEvenement.PERTE:
-            if category is None:
-                raise serializers.ValidationError({
-                    "categorie_perte": "Une catégorie de perte est obligatoire."
-                })
-            if cause is not None:
-                raise serializers.ValidationError({
-                    "cause_mortalite": "Une perte ne peut pas avoir de cause de mortalité."
-                })
-            if not justification.strip():
-                raise serializers.ValidationError({
-                    "justification": "La justification est obligatoire pour une perte."
-                })
-        return attrs
-
     def create(self, validated_data):
-        return enregistrer_evenement_mortalite_perte(
-            **validated_data,
-            saisi_par=self.context["request"].user,
+        return enregistrer_evenement(
+            validated_data=validated_data,
+            utilisateur=self.context["request"].user,
         )
 
 
 class AnnulationEvenementSerializer(serializers.Serializer):
-    motif_annulation = serializers.CharField(
+    motif = serializers.CharField(
         required=True,
         allow_blank=False,
         trim_whitespace=True,

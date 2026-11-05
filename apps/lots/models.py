@@ -14,6 +14,7 @@ class Lot(models.Model):
         CREEE = "CREEE", "Créée"
         EN_TRAITEMENT = "EN_TRAITEMENT", "En traitement"
         EN_STOCK = "EN_STOCK", "En stock"
+        EN_GROSSISSEMENT = "EN_GROSSISSEMENT", "En grossissement"
         CLOTUREE = "CLOTUREE", "Clôturée"
 
     # Définit le parcours de production choisi pour le lot.

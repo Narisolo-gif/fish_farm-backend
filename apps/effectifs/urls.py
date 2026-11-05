@@ -10,7 +10,7 @@ from .viewsets import (
 
 router = DefaultRouter()
 router.register(
-    "evenements",
+    "evenements-mortalite-perte",
     EvenementMortalitePerteViewSet,
     basename="evenement-mortalite-perte",
 )

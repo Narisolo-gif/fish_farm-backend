@@ -5,7 +5,7 @@ from django.db.models.deletion import ProtectedError
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.bassins.models import Bassin
@@ -83,24 +83,10 @@ class TypeProvendeViewSet(viewsets.ModelViewSet):
             }) from exc
 
 
-class IsGestionnaireOuAdministrateurStatutActif(BasePermission):
-    ROLES_AUTORISES = {"Administrateur", "Gestionnaire"}
-
-    def has_permission(self, request, view):
-        user = request.user
-        return bool(
-            user
-            and user.is_authenticated
-            and user.is_active
-            and getattr(user, "statut", None) == "ACTIF"
-            and getattr(user, "role", None)
-            and user.role.libelle in self.ROLES_AUTORISES
-        )
-
-
 class ConsommationProvendeViewSet(viewsets.ModelViewSet):
     queryset = ConsommationProvende.objects.select_related(
         "bassin",
+        "hapa",
         "provende",
         "provende__type_provende",
         "utilisateur",
@@ -118,7 +104,7 @@ class ConsommationProvendeViewSet(viewsets.ModelViewSet):
         }:
             return [IsTousRolesActifs()]
         if self.action == "annuler":
-            return [IsGestionnaireOuAdministrateurStatutActif()]
+            return [IsAdministrateurOuGestionnaire()]
         return [IsAuthenticated(), IsTousRolesActifs()]
 
     @staticmethod
@@ -159,6 +145,12 @@ class ConsommationProvendeViewSet(viewsets.ModelViewSet):
             if not bassin_id.isdigit():
                 raise ValidationError({"bassin": "Identifiant de bassin invalide."})
             queryset = queryset.filter(bassin_id=bassin_id)
+
+        hapa_id = params.get("hapa")
+        if hapa_id:
+            if not hapa_id.isdigit():
+                raise ValidationError({"hapa": "Identifiant de hapa invalide."})
+            queryset = queryset.filter(hapa_id=hapa_id)
 
         provende_id = params.get("provende")
         if provende_id:
@@ -209,7 +201,7 @@ class ConsommationProvendeViewSet(viewsets.ModelViewSet):
             )
         if date_max:
             queryset = queryset.filter(date_distribution__date__lte=date_max)
-        return queryset
+        return queryset.order_by("-date_distribution", "-id")
 
     @action(detail=False, methods=["get"], url_path="totaux-journaliers")
     def totaux_journaliers(self, request):
@@ -218,8 +210,16 @@ class ConsommationProvendeViewSet(viewsets.ModelViewSet):
             raise ValidationError({"bassin": "Un identifiant de bassin valide est obligatoire."})
         if not Bassin.objects.filter(pk=bassin_id).exists():
             raise ValidationError({"bassin": "Bassin introuvable."})
+        hapa_id = request.query_params.get("hapa")
+        if hapa_id is not None and not hapa_id.isdigit():
+            raise ValidationError({"hapa": "Identifiant de hapa invalide."})
         date_min, date_max = self._dates_periode(request.query_params)
-        resultats = total_journalier(bassin_id, date_min, date_max)
+        resultats = total_journalier(
+            bassin_id,
+            date_min,
+            date_max,
+            hapa_id=int(hapa_id) if hapa_id else None,
+        )
         return Response(
             [
                 {
@@ -237,11 +237,30 @@ class ConsommationProvendeViewSet(viewsets.ModelViewSet):
             raise ValidationError({"bassin": "Un identifiant de bassin valide est obligatoire."})
         if not Bassin.objects.filter(pk=bassin_id).exists():
             raise ValidationError({"bassin": "Bassin introuvable."})
+        hapa_id = request.query_params.get("hapa")
+        if hapa_id is not None and not hapa_id.isdigit():
+            raise ValidationError({"hapa": "Identifiant de hapa invalide."})
         date_min, date_max = self._dates_periode(
             request.query_params,
             max_days=366,
         )
-        resultats = jours_manquants(bassin_id, date_min, date_max)
+        resultats = jours_manquants(
+            bassin_id,
+            date_min,
+            date_max,
+            hapa_id=int(hapa_id) if hapa_id else None,
+        )
+        if resultats and isinstance(resultats[0], dict):
+            return Response([
+                {
+                    **cible,
+                    "jours_manquants": [
+                        jour.isoformat()
+                        for jour in cible["jours_manquants"]
+                    ],
+                }
+                for cible in resultats
+            ])
         return Response([jour.isoformat() for jour in resultats])
 
     @action(detail=True, methods=["post"], url_path="annuler")

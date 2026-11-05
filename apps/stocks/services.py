@@ -1,21 +1,36 @@
 
+from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
+from django.db.models import ExpressionWrapper, F, IntegerField, Sum
 from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 
 from rest_framework.exceptions import NotFound, ValidationError
 
-from apps.bassins.models import Bassin
+from apps.bassins.models import Bassin, Hapa
+from apps.effectifs.calculs import effectif_vivant, effectifs_par_hapa
 from apps.effectifs.models import MouvementEffectif
 from apps.effectifs.services import (
     _verifier_hapa,
+    annuler_mouvement,
+    bloquer_hapa,
     enregistrer_mouvement_operation,
+    lever_blocages,
     operation_a_mouvements,
 )
 from apps.lots.models import Lot
-from apps.traitement.models import Traitement
+from apps.traitement.models import Traitement, TraitementHapa
 
-from .models import MiseEnStock
+from .models import MiseEnStock, MiseEnStockHapa
+
+
+def _verifier_date_mise_en_stock(date_mise_en_stock):
+    if timezone.localtime(date_mise_en_stock).date() > timezone.localdate():
+        raise ValidationError({
+            "date_mise_en_stock": (
+                "La date de mise en stock ne peut pas être dans le futur."
+            )
+        })
 
 
 def _verifier_bassin_stock(bassin):
@@ -60,7 +75,8 @@ def _verifier_justification(lot, effectif_entrant, justification):
                 "Une justification est obligatoire en cas d'écart d'effectif."
             )
         })
-        
+
+
 def _verifier_effectif_entrant(lot, effectif_entrant):
     """
     Vérifie que l'effectif entrant ne dépasse jamais
@@ -101,6 +117,20 @@ def _verifier_effectif_entrant(lot, effectif_entrant):
 @transaction.atomic
 def creer_mise_en_stock(validated_data, utilisateur):
     """Enregistre l'entrée en stock et fait passer le lot à EN_STOCK."""
+    validated_data = dict(validated_data)
+    validated_data.pop("hapa", None)
+    finalite = validated_data.get("finalite")
+    if finalite not in MiseEnStock.Finalite.values:
+        raise ValidationError({
+            "finalite": "La finalité est obligatoire et doit être valide."
+        })
+    lignes_hapas = validated_data.pop("lignes_hapas", None)
+    effectif_client = validated_data.pop("effectif_entrant", None)
+    date_mise_en_stock = (
+        validated_data.get("date_mise_en_stock") or timezone.now()
+    )
+    _verifier_date_mise_en_stock(date_mise_en_stock)
+    date_evenement = timezone.localtime(date_mise_en_stock).date()
 
     # Le verrou empêche deux opérations concurrentes sur le même lot.
     lot = Lot.objects.select_for_update().get(
@@ -131,62 +161,188 @@ def creer_mise_en_stock(validated_data, utilisateur):
         raise ValidationError({
             "id_lot": "Le traitement doit être clôturé avant la mise en stock."
         })
+    lignes_traitement = []
+    if traitement is not None:
+        lignes_traitement = list(
+            TraitementHapa.objects.select_for_update()
+            .filter(traitement=traitement)
+            .select_related("hapa")
+            .order_by("hapa_id")
+        )
+        if not lignes_traitement:
+            raise ValidationError({
+                "hapas": (
+                    "Traitement sans hapas : supprimez-le et recréez-le."
+                )
+            })
 
     bassin = validated_data["bassin"]
     _verifier_bassin_stock(bassin)
-    hapa = validated_data.get("hapa")
-    _verifier_hapa(bassin, hapa, champ="id_hapa")
+    hapas_actifs = Hapa.objects.filter(
+        bassin=bassin,
+        actif=True,
+        statut=Hapa.Statut.ACTIF,
+    ).exists()
+    if not hapas_actifs:
+        raise ValidationError({
+            "hapas": (
+                "Aucun hapa actif dans le bassin de stock : "
+                "créez d'abord des hapas."
+            )
+        })
+    if not lignes_hapas:
+        raise ValidationError({
+            "hapas": "Les hapas et leurs effectifs entrants sont obligatoires."
+        })
 
-    effectif = validated_data["effectif_entrant"]
+    hapa_ids = [ligne["hapa"].pk for ligne in lignes_hapas]
+    if len(hapa_ids) != len(set(hapa_ids)):
+        raise ValidationError({"hapas": "Un hapa ne peut être indiqué qu'une seule fois."})
+    hapas = list(
+        Hapa.objects.select_for_update()
+        .filter(pk__in=sorted(hapa_ids))
+        .order_by("pk")
+    )
+    hapas_by_id = {hapa.pk: hapa for hapa in hapas}
+    if len(hapas_by_id) != len(hapa_ids):
+        raise ValidationError({"hapas": "Un ou plusieurs hapas sont introuvables."})
+    effectifs_existants = effectifs_par_hapa(bassin.pk)
+    for ligne in lignes_hapas:
+        hapa = hapas_by_id[ligne["hapa"].pk]
+        ligne["hapa"] = hapa
+        _verifier_hapa(bassin, hapa, champ="hapas")
+        if ligne["effectif_entrant"] <= 0:
+            raise ValidationError({
+                "hapas": "L'effectif entrant de chaque hapa doit être positif."
+            })
+        if hapa.bassin_id != bassin.pk:
+            raise ValidationError({
+                "hapas": "Chaque hapa doit appartenir au bassin de stock."
+            })
+        if any(
+            espece_existante != lot.espece and effectif > 0
+            for (hapa_id, espece_existante), effectif
+            in effectifs_existants.items()
+            if hapa_id == hapa.pk
+        ):
+            raise ValidationError({
+                "hapas": "Un hapa ne peut contenir qu'une seule espèce."
+            })
+
+    mouvements_lots = (
+        MouvementEffectif.objects
+        .filter(
+            hapa_id__in=hapa_ids,
+            lot_origine__isnull=False,
+            date_evenement__lte=date_evenement,
+            type_mouvement__in=[
+                MouvementEffectif.TypeMouvement.ENTREE,
+                MouvementEffectif.TypeMouvement.SORTIE,
+                MouvementEffectif.TypeMouvement.VENTE,
+                MouvementEffectif.TypeMouvement.ANNULATION,
+            ],
+        )
+        .values(
+            "hapa_id",
+            "lot_origine_id",
+            "lot_origine__mise_en_stock__finalite",
+        )
+        .annotate(
+            restant=Sum(
+                ExpressionWrapper(
+                    F("sens") * F("quantite"),
+                    output_field=IntegerField(),
+                )
+            )
+        )
+    )
+    for mouvement in mouvements_lots:
+        restant = mouvement["restant"] or 0
+        if restant <= 0:
+            continue
+        hapa = hapas_by_id[mouvement["hapa_id"]]
+        finalite_existante = mouvement["lot_origine__mise_en_stock__finalite"]
+        if finalite_existante is None:
+            raise ValidationError({
+                "hapas": (
+                    f"Le hapa {hapa.nom} contient déjà un lot sans finalité."
+                )
+            })
+        if finalite_existante != finalite:
+            libelle_finalite = MiseEnStock.Finalite(finalite_existante).label
+            raise ValidationError({
+                "hapas": (
+                    f"Le hapa {hapa.nom} contient déjà un lot de finalité "
+                    f"{libelle_finalite}."
+                )
+            })
+
+    effectif = sum(ligne["effectif_entrant"] for ligne in lignes_hapas)
+    if effectif_client is not None and effectif_client != effectif:
+        raise ValidationError({
+            "effectif_entrant": "L'effectif entrant doit égaler la somme des lignes hapas."
+        })
+
     justification = validated_data.get("justification_ecart", "")
 
     _verifier_effectif_entrant(lot, effectif)
     _verifier_justification(lot, effectif, justification)
-    if (
-        traitement is not None
-        and effectif != traitement.effectif_final
-    ):
-        raise ValidationError({
-            "effectif_entrant": (
-                "La mise en stock doit correspondre à l’effectif final du "
-                "traitement. Les écarts nécessitent un événement de perte "
-                "ou de mortalité."
-            )
-        })
 
-    # Les champs d'identité sont contrôlés côté serveur.
+    # Les champs d'identité et le total sont contrôlés côté serveur.
     validated_data["lot"] = lot
     validated_data["utilisateur"] = utilisateur
+    validated_data["effectif_entrant"] = effectif
 
     mise_en_stock = MiseEnStock.objects.create(**validated_data)
-
-    date_evenement = timezone.localtime(
-        mise_en_stock.date_mise_en_stock
-    ).date()
+    MiseEnStockHapa.objects.bulk_create([
+        MiseEnStockHapa(
+            mise_en_stock=mise_en_stock,
+            hapa=ligne["hapa"],
+            effectif_entrant=ligne["effectif_entrant"],
+        )
+        for ligne in lignes_hapas
+    ])
 
     if traitement is not None:
+        for ligne in lignes_traitement:
+            courant = effectif_vivant(
+                traitement.bassin_id,
+                lot.espece,
+                a_la_date=date_evenement,
+                hapa_id=ligne.hapa_id,
+            )
+            if courant != ligne.effectif_final:
+                raise ValidationError({
+                    "hapas": (
+                        "L'effectif du hapa de traitement a été modifié "
+                        "après la clôture."
+                    )
+                })
+            enregistrer_mouvement_operation(
+                operation=mise_en_stock,
+                bassin=traitement.bassin,
+                hapa=ligne.hapa,
+                espece=lot.espece,
+                type_mouvement=MouvementEffectif.TypeMouvement.SORTIE,
+                quantite=ligne.effectif_final,
+                date_evenement=date_evenement,
+                saisi_par=utilisateur,
+                lot_origine=lot,
+            )
+        lever_blocages(traitement)
+
+    for ligne in lignes_hapas:
         enregistrer_mouvement_operation(
             operation=mise_en_stock,
-            bassin=traitement.bassin,
+            bassin=bassin,
+            hapa=ligne["hapa"],
             espece=lot.espece,
-            type_mouvement=MouvementEffectif.TypeMouvement.SORTIE,
-            quantite=traitement.effectif_final,
+            type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
+            quantite=ligne["effectif_entrant"],
             date_evenement=date_evenement,
             saisi_par=utilisateur,
             lot_origine=lot,
         )
-
-    enregistrer_mouvement_operation(
-        operation=mise_en_stock,
-        bassin=bassin,
-        espece=lot.espece,
-        type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
-        quantite=effectif,
-        date_evenement=date_evenement,
-        saisi_par=utilisateur,
-        lot_origine=lot,
-        hapa=hapa,
-    )
 
     # Le changement de stade et la création sont dans la même transaction.
     lot.stade = Lot.Stade.EN_STOCK
@@ -223,7 +379,6 @@ def modifier_mise_en_stock(mise_en_stock_id, validated_data):
         })
 
     bassin = validated_data.get("bassin", mise.bassin)
-    hapa = validated_data.get("hapa", mise.hapa)
     effectif = validated_data.get(
         "effectif_entrant",
         mise.effectif_entrant,
@@ -232,13 +387,22 @@ def modifier_mise_en_stock(mise_en_stock_id, validated_data):
         "justification_ecart",
         mise.justification_ecart,
     )
-
+    date_mise_en_stock = validated_data.get(
+        "date_mise_en_stock",
+        mise.date_mise_en_stock,
+    )
+    _verifier_date_mise_en_stock(date_mise_en_stock)
     _verifier_bassin_stock(bassin)
-    _verifier_hapa(bassin, hapa, champ="id_hapa")
     _verifier_justification(lot, effectif, justification)
 
     # Seuls les champs modifiables sont appliqués.
-    for champ in ("bassin", "hapa", "effectif_entrant", "justification_ecart", "observation"):
+    for champ in (
+        "bassin",
+        "effectif_entrant",
+        "date_mise_en_stock",
+        "justification_ecart",
+        "observation",
+    ):
         if champ in validated_data:
             setattr(mise, champ, validated_data[champ])
 
@@ -259,14 +423,6 @@ def supprimer_mise_en_stock(mise_en_stock_id):
 
     lot = Lot.objects.select_for_update().get(pk=mise.lot_id)
 
-    if operation_a_mouvements(mise):
-        raise ValidationError({
-            "detail": (
-                "Une mise en stock référencée par le registre ne peut pas "
-                "être supprimée."
-            )
-        })
-
     # Ne pas réinitialiser un lot qui a déjà progressé au-delà du stock.
     if lot.stade != Lot.Stade.EN_STOCK:
         raise ValidationError({
@@ -276,7 +432,68 @@ def supprimer_mise_en_stock(mise_en_stock_id):
             )
         })
 
+    mouvements = MouvementEffectif.objects.filter(
+        operation_source_content_type=ContentType.objects.get_for_model(mise),
+        operation_source_object_id=mise.pk,
+        type_mouvement__in=[
+            MouvementEffectif.TypeMouvement.ENTREE,
+            MouvementEffectif.TypeMouvement.SORTIE,
+        ],
+    )
+    lignes_hapas = list(mise.lignes_hapas.all())
+    if lignes_hapas:
+        mouvement_stock = MouvementEffectif.objects.filter(
+            bassin_id=mise.bassin_id,
+            hapa_id__in=[ligne.hapa_id for ligne in lignes_hapas],
+            annule_mouvement__isnull=True,
+            annulations_associees__isnull=True,
+        ).exclude(type_mouvement=MouvementEffectif.TypeMouvement.ANNULATION)
+    else:
+        mouvement_stock = MouvementEffectif.objects.filter(
+            bassin_id=mise.bassin_id,
+            hapa__isnull=True,
+            annule_mouvement__isnull=True,
+            annulations_associees__isnull=True,
+        ).exclude(type_mouvement=MouvementEffectif.TypeMouvement.ANNULATION)
+    mouvement_stock = mouvement_stock.exclude(
+        operation_source_content_type=ContentType.objects.get_for_model(mise),
+        operation_source_object_id=mise.pk,
+        type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
+    )
+    if mouvement_stock.exists():
+        raise ValidationError({
+            "detail": (
+                "La mise en stock ne peut pas être supprimée après un autre "
+                "mouvement sur les hapas concernés."
+            )
+        })
+
+    # TODO: refuser aussi s'il existe des distributions de provende (étape provende)
+    # NB: outil de nettoyage de test
+    for mouvement in mouvements.filter(
+        annule_mouvement__isnull=True,
+        annulations_associees__isnull=True,
+    ).order_by("id"):
+        annuler_mouvement(
+            mouvement.pk,
+            motif_annulation="Suppression de la mise en stock",
+            saisi_par=mise.utilisateur,
+        )
+
+    traitement = getattr(lot, "traitement", None)
+    if (
+        traitement is not None
+        and traitement.statut == Traitement.Statut.CLOTUREE
+    ):
+        for ligne in traitement.lignes_hapas.select_related("hapa").all():
+            bloquer_hapa(
+                ligne.hapa,
+                traitement,
+                "Traitement clôturé : transfert en attente",
+            )
+
     try:
+        mise.lignes_hapas.all().delete()
         mise.delete()
     except ProtectedError as exc:
         raise ValidationError({
@@ -287,7 +504,6 @@ def supprimer_mise_en_stock(mise_en_stock_id):
         }) from exc
 
     # Le lot revient à l'étape qu'il occupait avant la mise en stock.
-    traitement = getattr(lot, "traitement", None)
     lot.stade = (
         Lot.Stade.EN_TRAITEMENT
         if traitement is not None

@@ -129,6 +129,12 @@ class ConsommationProvende(models.Model):
                 name="consommation_provende_annulation_motivee",
             ),
         ]
+        indexes = [
+            models.Index(
+                fields=["bassin", "hapa", "date_distribution"],
+                name="provende_cons_cible_date_idx",
+            ),
+        ]
 
     def __str__(self):
         return (

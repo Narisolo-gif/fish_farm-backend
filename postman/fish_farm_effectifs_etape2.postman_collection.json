@@ -108,6 +108,18 @@
     {
       "key": "miseEnStockHapaThirdId",
       "value": ""
+    },
+    {
+      "key": "stockHapaAId",
+      "value": ""
+    },
+    {
+      "key": "stockHapaBId",
+      "value": ""
+    },
+    {
+      "key": "miseEnStockHapaId",
+      "value": ""
     }
   ],
   "event": [
@@ -893,7 +905,7 @@
         }
       ]
     },
-        {
+    {
       "name": "14 - Cloturer avec effectif final calcule",
       "request": {
         "method": "POST",
@@ -918,7 +930,7 @@
         }
       ]
     },
-        {
+    {
       "name": "15 - Refuser une seconde cloture",
       "request": {
         "method": "POST",
@@ -952,7 +964,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"id_lot\": {{lotId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"id_hapa\": {{hapaId}},\n  \"effectif_entrant\": 20,\n  \"justification_ecart\": \"\",\n  \"observation\": \"Essai Postman transfert\"\n}"
+          "raw": "{\n  \"id_lot\": {{lotId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"hapas\": [{ \"id_hapa\": {{hapaId}}, \"effectif_entrant\": 20 }],\n  \"effectif_entrant\": 20,\n  \"justification_ecart\": \"\",\n  \"observation\": \"Essai Postman transfert\"\n}"
         },
         "url": "{{baseUrl}}/api/v1/stocks/"
       },
@@ -962,9 +974,12 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test('Mise en stock créée', () => pm.response.to.have.status(201));",
-              "pm.collectionVariables.set('miseEnStockId', pm.response.json().id);"
-            ]
+                      "pm.test('Mise en stock creee', () => pm.response.to.have.status(201));",
+                      "const mise = pm.response.json();",
+                      "pm.expect(mise.hapas).to.have.length(1);",
+                      "pm.expect(mise.hapas.reduce((sum, row) => sum + row.effectif_entrant, 0)).to.eql(mise.effectif_entrant);",
+                      "pm.collectionVariables.set('miseEnStockId', mise.id);"
+                    ]
           }
         }
       ]
@@ -1355,7 +1370,7 @@
         }
       ]
     },
-{
+    {
   "name": "32 - Stocker le troisi?me lot dans le hapa B",
   "request": {
     "method": "POST",
@@ -1372,7 +1387,7 @@
     "url": "{{baseUrl}}/api/v1/stocks/",
     "body": {
       "mode": "raw",
-      "raw": "{\n  \"id_lot\": {{hapaLotThirdId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"id_hapa\": {{hapaSecondId}},\n  \"effectif_entrant\": 5,\n  \"justification_ecart\": \"\"\n}"
+      "raw": "{\n  \"id_lot\": {{hapaLotThirdId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"hapas\": [{ \"id_hapa\": {{hapaSecondId}}, \"effectif_entrant\": 5 }],\n  \"effectif_entrant\": 5,\n  \"justification_ecart\": \"\"\n}"
     }
   },
   "event": [
@@ -1381,16 +1396,1221 @@
       "script": {
         "type": "text/javascript",
         "exec": [
-          "pm.test('Mise en stock du troisi?me lot', () => pm.response.to.have.status(201));",
-          "const row = pm.response.json();",
-          "pm.expect(row.id_hapa).to.eql(Number(pm.collectionVariables.get('hapaSecondId')));",
-          "pm.collectionVariables.set('miseEnStockHapaThirdId', row.id);"
-        ]
+                  "pm.test('Mise en stock du troisieme lot', () => pm.response.to.have.status(201));",
+                  "const mise = pm.response.json();",
+                  "pm.expect(mise.hapas).to.have.length(1);",
+                  "pm.expect(mise.hapas[0].id_hapa).to.eql(Number(pm.collectionVariables.get('hapaSecondId')));",
+                  "pm.expect(mise.hapas.reduce((sum, row) => sum + row.effectif_entrant, 0)).to.eql(mise.effectif_entrant);",
+                  "pm.collectionVariables.set('miseEnStockHapaThirdId', mise.id);"
+                ]
       }
     }
   ]
 },
-{
+    {
+      "name": "Traitements",
+      "description": "Scenarios de traitement par hapa et calcul des effectifs a la cloture.",
+      "item": [
+        {
+          "name": "01 - Creer hapa A du bassin traitement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": {{treatmentBassinId}},\n  \"nom\": \"HAPA-TRAIT-A-{{suffix}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/bassins/hapas/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Hapa A cree', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().actif).to.eql(true);",
+                  "pm.collectionVariables.set('treatmentHapaAId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 - Creer hapa B du bassin traitement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": {{treatmentBassinId}},\n  \"nom\": \"HAPA-TRAIT-B-{{suffix}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/bassins/hapas/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Hapa B cree', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().actif).to.eql(true);",
+                  "pm.collectionVariables.set('treatmentHapaBId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 - Creer un hapa libre pour validations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": {{treatmentBassinId}},\n  \"nom\": \"HAPA-TRAIT-C-{{suffix}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/bassins/hapas/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Hapa de validation cree', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().actif).to.eql(true);",
+                  "pm.collectionVariables.set('treatmentHapaValidationId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 - Creer eclosion du lot de traitement hapa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-ECLOSION-TRAIT-HAPA-{{suffix}}\",\n  \"reference_ponte\": \"PM-PONTE-{{suffix}}\",\n  \"date_eclosion\": \"{{today}}\",\n  \"quantite_oeufs_eclos\": \"20.00\",\n  \"quantite_alevins_obtenu\": 20\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/ecloserie/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Eclosion de traitement creee', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('treatmentHapaEclosionId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 - Creer lot de traitement hapa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-LOT-TRAIT-HAPA-{{suffix}}\",\n  \"id_eclosion\": {{treatmentHapaEclosionId}},\n  \"date_creation\": \"{{today}}T12:00:00Z\",\n  \"parcours_production\": \"TRAITEMENT_REQUIS\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/lots/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Lot de traitement cree', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().quantite_initiale).to.eql(20);",
+                  "pm.collectionVariables.set('treatmentHapaLotId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 - Creer un traitement avec deux hapas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": {{treatmentHapaLotId}},\n  \"effectif_initial\": 20,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentBassinId}},\n  \"id_used_provende\": {{provendeId}},\n  \"hapas\": [\n    { \"id_hapa\": {{treatmentHapaAId}}, \"effectif_initial\": 10 },\n    { \"id_hapa\": {{treatmentHapaBId}}, \"effectif_initial\": 10 }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/traitement/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Traitement deux hapas cree', () => pm.response.to.have.status(201));",
+                  "const created = pm.response.json();",
+                  "pm.expect(created.hapas).to.have.length(2);",
+                  "pm.expect(created.hapas.reduce((sum, row) => sum + row.effectif_initial, 0)).to.eql(20);",
+                  "pm.collectionVariables.set('treatmentHapaId', created.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 - Creer eclosion du lot de validation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-ECLOSION-TRAIT-VALID-{{suffix}}\",\n  \"reference_ponte\": \"PM-PONTE-{{suffix}}\",\n  \"date_eclosion\": \"{{today}}\",\n  \"quantite_oeufs_eclos\": \"20.00\",\n  \"quantite_alevins_obtenu\": 20\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/ecloserie/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Eclosion de validation creee', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('treatmentValidationEclosionId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 - Creer le lot de validation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-LOT-TRAIT-VALID-{{suffix}}\",\n  \"id_eclosion\": {{treatmentValidationEclosionId}},\n  \"date_creation\": \"{{today}}T12:00:00Z\",\n  \"parcours_production\": \"TRAITEMENT_REQUIS\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/lots/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Lot de validation cree', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().quantite_initiale).to.eql(20);",
+                  "pm.collectionVariables.set('treatmentValidationLotId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09 - Refuser somme hapa incorrecte",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": {{treatmentValidationLotId}},\n  \"effectif_initial\": 20,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentBassinId}},\n  \"id_used_provende\": {{provendeId}},\n  \"hapas\": [{ \"id_hapa\": {{treatmentHapaValidationId}}, \"effectif_initial\": 19 }]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/traitement/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Somme hapa incorrecte refusee', () => pm.response.to.have.status(400));",
+                  "pm.expect(pm.response.json()).to.have.property('hapas');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 - Refuser hapas absents",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": {{treatmentValidationLotId}},\n  \"effectif_initial\": 20,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentBassinId}},\n  \"id_used_provende\": {{provendeId}}\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/traitement/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Hapas obligatoires refuses', () => pm.response.to.have.status(400));",
+                  "pm.expect(pm.response.json()).to.have.property('hapas');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 - Refuser hapa d un autre bassin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": {{treatmentValidationLotId}},\n  \"effectif_initial\": 20,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentBassinId}},\n  \"id_used_provende\": {{provendeId}},\n  \"hapas\": [{ \"id_hapa\": {{hapaId}}, \"effectif_initial\": 20 }]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/traitement/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Hapa autre bassin refuse', () => pm.response.to.have.status(400));",
+                  "pm.expect(pm.response.json()).to.have.property('hapas');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12 - Refuser hapa en double",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": {{treatmentValidationLotId}},\n  \"effectif_initial\": 20,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentBassinId}},\n  \"id_used_provende\": {{provendeId}},\n  \"hapas\": [{ \"id_hapa\": {{treatmentHapaValidationId}}, \"effectif_initial\": 10 }, { \"id_hapa\": {{treatmentHapaValidationId}}, \"effectif_initial\": 10 }]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/traitement/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Hapa en double refuse', () => pm.response.to.have.status(400));",
+                  "pm.expect(pm.response.json()).to.have.property('hapas');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "13 - Consulter effectifs initiaux par hapa",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/traitement/{{treatmentHapaId}}/effectifs/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Effectifs initiaux consultables', () => pm.response.to.have.status(200));",
+                  "const rows = pm.response.json();",
+                  "pm.expect(rows).to.have.length(2);",
+                  "pm.expect(rows.reduce((sum, row) => sum + row.effectif_initial, 0)).to.eql(20);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14 - Enregistrer mortalite sur hapa A",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": {{treatmentBassinId}},\n  \"id_hapa\": {{treatmentHapaAId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"MORTALITE\",\n  \"quantite\": 2,\n  \"date_evenement\": \"{{today}}\",\n  \"cause_mortalite\": {{mortalityCauseId}},\n  \"justification\": \"Test Postman mortalite traitement hapa\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/effectifs/evenements/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Mortalite hapa enregistree', () => pm.response.to.have.status(201));",
+                  "const event = pm.response.json();",
+                  "pm.expect(event.type_evenement).to.eql('MORTALITE');",
+                  "pm.collectionVariables.set('treatmentHapaMortalityId', event.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "15 - Verifier effectif actuel diminue",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/traitement/{{treatmentHapaId}}/effectifs/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Effectif apres mortalite consultable', () => pm.response.to.have.status(200));",
+                  "const row = pm.response.json().find(item => item.id_hapa === Number(pm.collectionVariables.get('treatmentHapaAId')));",
+                  "pm.expect(row.effectif_actuel).to.eql(8);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "16 - Cloturer avec effectif calcule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/traitement/{{treatmentHapaId}}/cloturer/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Traitement hapa cloture', () => pm.response.to.have.status(200));",
+                  "const treatment = pm.response.json();",
+                  "pm.expect(treatment.effectif_final).to.eql(18);",
+                  "pm.expect(treatment.hapas.reduce((sum, row) => sum + row.effectif_final, 0)).to.eql(18);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "17 - Refuser seconde cloture",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/traitement/{{treatmentHapaId}}/cloturer/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Seconde cloture refusee', () => pm.response.to.have.status(400));",
+                  "pm.expect(pm.response.json()).to.have.property('detail');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "18 - Refuser suppression apres mortalite",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/traitement/{{treatmentHapaId}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Suppression apres mortalite refusee', () => pm.response.to.have.status(400));",
+                  "pm.expect(pm.response.json()).to.have.property('detail');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "19 - Creer bassin traitement sans hapa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-TRAIT-SANS-HAPA-{{suffix}}\",\n  \"categorie\": \"TRAITEMENT\",\n  \"capacity\": 100,\n  \"statut\": \"ACTIF\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/bassins/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Bassin sans hapa cree', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('treatmentNoHapaBassinId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "20 - Creer eclosion du lot sans evenement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-ECLOSION-TRAIT-SANS-EVT-{{suffix}}\",\n  \"reference_ponte\": \"PM-PONTE-{{suffix}}\",\n  \"date_eclosion\": \"{{today}}\",\n  \"quantite_oeufs_eclos\": \"5.00\",\n  \"quantite_alevins_obtenu\": 5\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/ecloserie/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Eclosion sans evenement creee', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('treatmentNoEventEclosionId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "21 - Creer lot sans evenement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PM-LOT-TRAIT-SANS-EVT-{{suffix}}\",\n  \"id_eclosion\": {{treatmentNoEventEclosionId}},\n  \"date_creation\": \"{{today}}T12:00:00Z\",\n  \"parcours_production\": \"TRAITEMENT_REQUIS\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/lots/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Lot sans evenement cree', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().quantite_initiale).to.eql(5);",
+                  "pm.collectionVariables.set('treatmentNoEventLotId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "22 - Creer traitement sans evenement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": {{treatmentNoEventLotId}},\n  \"effectif_initial\": 5,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentNoHapaBassinId}},\n  \"id_used_provende\": {{provendeId}}\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/traitement/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Traitement sans evenement cree', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().hapas).to.eql([]);",
+                  "pm.collectionVariables.set('treatmentNoEventId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "23 - Supprimer traitement sans evenement",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "******"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/traitement/{{treatmentNoEventId}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Traitement sans evenement supprime', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Mise en stock par hapa",
+      "item": [
+      {
+        "name": "14 - Creer hapa stock dedie A",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "******"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"nom\": \"HAPA-MISE-A-{{suffix}}\"\n}"
+          },
+          "url": "{{baseUrl}}/api/v1/bassins/hapas/"
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HAPA-MISE-A cree', () => pm.response.to.have.status(201));",
+                "const hapa = pm.response.json();",
+                "pm.expect(hapa.nom).to.eql('HAPA-MISE-A-' + pm.collectionVariables.get('suffix'));",
+                "pm.collectionVariables.set('stockHapaAId', hapa.id);"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "15 - Creer hapa stock dedie B",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "******"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"bassin\": {{stockBassinId}},\n  \"nom\": \"HAPA-MISE-B-{{suffix}}\"\n}"
+          },
+          "url": "{{baseUrl}}/api/v1/bassins/hapas/"
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HAPA-MISE-B cree', () => pm.response.to.have.status(201));",
+                "const hapa = pm.response.json();",
+                "pm.expect(hapa.nom).to.eql('HAPA-MISE-B-' + pm.collectionVariables.get('suffix'));",
+                "pm.collectionVariables.set('stockHapaBId', hapa.id);"
+              ]
+            }
+          }
+        ]
+      },
+        {
+          "name": "01 - Refuser somme des hapas incorrecte",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/stocks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": {{treatmentHapaLotId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"hapas\": [{ \"id_hapa\": {{stockHapaAId}}, \"effectif_entrant\": 8 }, { \"id_hapa\": {{stockHapaBId}}, \"effectif_entrant\": 9 }],\n  \"effectif_entrant\": 18\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('La somme incoherente est refusee', () => pm.response.to.have.status(400));",
+                  "pm.expect(pm.response.json()).to.have.property('effectif_entrant');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 - Refuser hapas absents",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/stocks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": {{treatmentHapaLotId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"effectif_entrant\": 18\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Les hapas sont obligatoires', () => pm.response.to.have.status(400));",
+                  "pm.expect(pm.response.json()).to.have.property('hapas');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 - Refuser hapa d un autre bassin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/stocks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": {{treatmentHapaLotId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"hapas\": [{ \"id_hapa\": {{treatmentHapaAId}}, \"effectif_entrant\": 8 }, { \"id_hapa\": {{stockHapaBId}}, \"effectif_entrant\": 10 }],\n  \"effectif_entrant\": 18\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Le hapa d un autre bassin est refuse', () => pm.response.to.have.status(400));",
+                  "pm.expect(pm.response.json()).to.have.property('hapas');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 - Refuser hapa en double",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/stocks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": {{treatmentHapaLotId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"hapas\": [{ \"id_hapa\": {{stockHapaAId}}, \"effectif_entrant\": 9 }, { \"id_hapa\": {{stockHapaAId}}, \"effectif_entrant\": 9 }],\n  \"effectif_entrant\": 18\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Le hapa en double est refuse', () => pm.response.to.have.status(400));",
+                  "pm.expect(pm.response.json()).to.have.property('hapas');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 - Mise en stock sur deux hapas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/stocks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": {{treatmentHapaLotId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"hapas\": [{ \"id_hapa\": {{stockHapaAId}}, \"effectif_entrant\": 9 }, { \"id_hapa\": {{stockHapaBId}}, \"effectif_entrant\": 9 }],\n  \"effectif_entrant\": 18,\n  \"justification_ecart\": \"\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Mise en stock creee', () => pm.response.to.have.status(201));",
+                  "const mise = pm.response.json();",
+                  "pm.expect(mise.hapas).to.have.length(2);",
+                  "pm.expect(mise.hapas[0]).to.have.property('finalite');",
+                  "pm.expect(mise.hapas.reduce((sum, row) => sum + row.effectif_entrant, 0)).to.eql(mise.effectif_entrant);",
+                  "pm.collectionVariables.set('miseEnStockHapaId', mise.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 - Effectifs par hapa apres creation cote stock",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/effectifs/par-hapa/?bassin={{stockBassinId}}&date={{today}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Effectifs stock par hapa', () => pm.response.to.have.status(200));",
+                  "const rows = pm.response.json().effectifs;",
+                  "const row_stockHapaAId = rows.find(row => row.id_hapa === Number(pm.collectionVariables.get('stockHapaAId')));",
+                  "pm.expect(row_stockHapaAId.effectif).to.eql(9);",
+                  "const row_stockHapaBId = rows.find(row => row.id_hapa === Number(pm.collectionVariables.get('stockHapaBId')));",
+                  "pm.expect(row_stockHapaBId.effectif).to.eql(9);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 - Effectifs par hapa apres creation cote traitement",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/effectifs/par-hapa/?bassin={{treatmentBassinId}}&date={{today}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Effectifs traitement transferes', () => pm.response.to.have.status(200));",
+                  "const rows = pm.response.json().effectifs;",
+                  "const row_treatmentHapaAId = rows.find(row => row.id_hapa === Number(pm.collectionVariables.get('treatmentHapaAId')));",
+                  "pm.expect(row_treatmentHapaAId.effectif).to.eql(0);",
+                  "const row_treatmentHapaBId = rows.find(row => row.id_hapa === Number(pm.collectionVariables.get('treatmentHapaBId')));",
+                  "pm.expect(row_treatmentHapaBId.effectif).to.eql(0);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 - Supprimer la mise en stock",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/stocks/{{miseEnStockHapaId}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Mise en stock supprimee', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09 - Effectifs par hapa apres suppression cote stock",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/effectifs/par-hapa/?bassin={{stockBassinId}}&date={{today}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Effectifs stock annules', () => pm.response.to.have.status(200));",
+                  "const rows = pm.response.json().effectifs;",
+                  "const row_stockHapaAId = rows.find(row => row.id_hapa === Number(pm.collectionVariables.get('stockHapaAId')));",
+                  "pm.expect(row_stockHapaAId.effectif).to.eql(0);",
+                  "const row_stockHapaBId = rows.find(row => row.id_hapa === Number(pm.collectionVariables.get('stockHapaBId')));",
+                  "pm.expect(row_stockHapaBId.effectif).to.eql(0);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 - Effectifs par hapa apres suppression cote traitement",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/effectifs/par-hapa/?bassin={{treatmentBassinId}}&date={{today}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Effectifs traitement restaures', () => pm.response.to.have.status(200));",
+                  "const rows = pm.response.json().effectifs;",
+                  "const row_treatmentHapaAId = rows.find(row => row.id_hapa === Number(pm.collectionVariables.get('treatmentHapaAId')));",
+                  "pm.expect(row_treatmentHapaAId.effectif).to.eql(8);",
+                  "const row_treatmentHapaBId = rows.find(row => row.id_hapa === Number(pm.collectionVariables.get('treatmentHapaBId')));",
+                  "pm.expect(row_treatmentHapaBId.effectif).to.eql(10);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 - Enregistrer mortalite apres cloture sur hapa traitement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/effectifs/evenements/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": {{treatmentBassinId}},\n  \"id_hapa\": {{treatmentHapaAId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"MORTALITE\",\n  \"quantite\": 1,\n  \"date_evenement\": \"{{today}}\",\n  \"cause_mortalite\": {{mortalityCauseId}},\n  \"justification\": \"Test Postman mortalite apres cloture\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Mortalite apres cloture enregistree', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().type_evenement).to.eql('MORTALITE');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12 - Refuser mise en stock apres mortalite traitement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/stocks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": {{treatmentHapaLotId}},\n  \"id_bassin\": {{stockBassinId}},\n  \"hapas\": [{ \"id_hapa\": {{stockHapaAId}}, \"effectif_entrant\": 9 }, { \"id_hapa\": {{stockHapaBId}}, \"effectif_entrant\": 9 }],\n  \"effectif_entrant\": 18,\n  \"justification_ecart\": \"\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('La mise en stock apres mortalite est refusee', () => pm.response.to.have.status(400));",
+                  "pm.expect(pm.response.json()).to.have.property('hapas');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
           "name": "Consommations provende",
           "description": "À lancer après le parcours principal : utilise le bassin de stock et la provende créés par la collection.",
           "event": [
@@ -2630,739 +3850,5 @@
                       ]
                     }
                       ]
-                    },
-    {
-      "name": "Traitements",
-      "description": "Scenarios de traitement par hapa et calcul des effectifs a la cloture.",
-      "item": [
-        {
-          "name": "01 - Creer hapa A du bassin traitement",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"bassin\": {{treatmentBassinId}},\n  \"nom\": \"HAPA-TRAIT-A-{{suffix}}\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/bassins/hapas/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Hapa A cree', () => pm.response.to.have.status(201));",
-                  "pm.expect(pm.response.json().actif).to.eql(true);",
-                  "pm.collectionVariables.set('treatmentHapaAId', pm.response.json().id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "02 - Creer hapa B du bassin traitement",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"bassin\": {{treatmentBassinId}},\n  \"nom\": \"HAPA-TRAIT-B-{{suffix}}\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/bassins/hapas/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Hapa B cree', () => pm.response.to.have.status(201));",
-                  "pm.expect(pm.response.json().actif).to.eql(true);",
-                  "pm.collectionVariables.set('treatmentHapaBId', pm.response.json().id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "03 - Creer un hapa libre pour validations",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"bassin\": {{treatmentBassinId}},\n  \"nom\": \"HAPA-TRAIT-C-{{suffix}}\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/bassins/hapas/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Hapa de validation cree', () => pm.response.to.have.status(201));",
-                  "pm.expect(pm.response.json().actif).to.eql(true);",
-                  "pm.collectionVariables.set('treatmentHapaValidationId', pm.response.json().id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "04 - Creer eclosion du lot de traitement hapa",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reference\": \"PM-ECLOSION-TRAIT-HAPA-{{suffix}}\",\n  \"reference_ponte\": \"PM-PONTE-{{suffix}}\",\n  \"date_eclosion\": \"{{today}}\",\n  \"quantite_oeufs_eclos\": \"20.00\",\n  \"quantite_alevins_obtenu\": 20\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/ecloserie/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Eclosion de traitement creee', () => pm.response.to.have.status(201));",
-                  "pm.collectionVariables.set('treatmentHapaEclosionId', pm.response.json().id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "05 - Creer lot de traitement hapa",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reference\": \"PM-LOT-TRAIT-HAPA-{{suffix}}\",\n  \"id_eclosion\": {{treatmentHapaEclosionId}},\n  \"date_creation\": \"{{today}}T12:00:00Z\",\n  \"parcours_production\": \"TRAITEMENT_REQUIS\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/lots/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Lot de traitement cree', () => pm.response.to.have.status(201));",
-                  "pm.expect(pm.response.json().quantite_initiale).to.eql(20);",
-                  "pm.collectionVariables.set('treatmentHapaLotId', pm.response.json().id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "06 - Creer un traitement avec deux hapas",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_lot\": {{treatmentHapaLotId}},\n  \"effectif_initial\": 20,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentBassinId}},\n  \"id_used_provende\": {{provendeId}},\n  \"hapas\": [\n    { \"id_hapa\": {{treatmentHapaAId}}, \"effectif_initial\": 10 },\n    { \"id_hapa\": {{treatmentHapaBId}}, \"effectif_initial\": 10 }\n  ]\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/traitement/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Traitement deux hapas cree', () => pm.response.to.have.status(201));",
-                  "const created = pm.response.json();",
-                  "pm.expect(created.hapas).to.have.length(2);",
-                  "pm.expect(created.hapas.reduce((sum, row) => sum + row.effectif_initial, 0)).to.eql(20);",
-                  "pm.collectionVariables.set('treatmentHapaId', created.id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "07 - Creer eclosion du lot de validation",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reference\": \"PM-ECLOSION-TRAIT-VALID-{{suffix}}\",\n  \"reference_ponte\": \"PM-PONTE-{{suffix}}\",\n  \"date_eclosion\": \"{{today}}\",\n  \"quantite_oeufs_eclos\": \"20.00\",\n  \"quantite_alevins_obtenu\": 20\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/ecloserie/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Eclosion de validation creee', () => pm.response.to.have.status(201));",
-                  "pm.collectionVariables.set('treatmentValidationEclosionId', pm.response.json().id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "08 - Creer le lot de validation",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reference\": \"PM-LOT-TRAIT-VALID-{{suffix}}\",\n  \"id_eclosion\": {{treatmentValidationEclosionId}},\n  \"date_creation\": \"{{today}}T12:00:00Z\",\n  \"parcours_production\": \"TRAITEMENT_REQUIS\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/lots/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Lot de validation cree', () => pm.response.to.have.status(201));",
-                  "pm.expect(pm.response.json().quantite_initiale).to.eql(20);",
-                  "pm.collectionVariables.set('treatmentValidationLotId', pm.response.json().id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "09 - Refuser somme hapa incorrecte",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_lot\": {{treatmentValidationLotId}},\n  \"effectif_initial\": 20,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentBassinId}},\n  \"id_used_provende\": {{provendeId}},\n  \"hapas\": [{ \"id_hapa\": {{treatmentHapaValidationId}}, \"effectif_initial\": 19 }]\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/traitement/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Somme hapa incorrecte refusee', () => pm.response.to.have.status(400));",
-                  "pm.expect(pm.response.json()).to.have.property('hapas');"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "10 - Refuser hapas absents",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_lot\": {{treatmentValidationLotId}},\n  \"effectif_initial\": 20,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentBassinId}},\n  \"id_used_provende\": {{provendeId}}\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/traitement/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Hapas obligatoires refuses', () => pm.response.to.have.status(400));",
-                  "pm.expect(pm.response.json()).to.have.property('hapas');"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "11 - Refuser hapa d un autre bassin",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_lot\": {{treatmentValidationLotId}},\n  \"effectif_initial\": 20,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentBassinId}},\n  \"id_used_provende\": {{provendeId}},\n  \"hapas\": [{ \"id_hapa\": {{hapaId}}, \"effectif_initial\": 20 }]\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/traitement/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Hapa autre bassin refuse', () => pm.response.to.have.status(400));",
-                  "pm.expect(pm.response.json()).to.have.property('hapas');"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "12 - Refuser hapa en double",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_lot\": {{treatmentValidationLotId}},\n  \"effectif_initial\": 20,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentBassinId}},\n  \"id_used_provende\": {{provendeId}},\n  \"hapas\": [{ \"id_hapa\": {{treatmentHapaValidationId}}, \"effectif_initial\": 10 }, { \"id_hapa\": {{treatmentHapaValidationId}}, \"effectif_initial\": 10 }]\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/traitement/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Hapa en double refuse', () => pm.response.to.have.status(400));",
-                  "pm.expect(pm.response.json()).to.have.property('hapas');"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "13 - Consulter effectifs initiaux par hapa",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              }
-            ],
-            "url": "{{baseUrl}}/api/v1/traitement/{{treatmentHapaId}}/effectifs/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Effectifs initiaux consultables', () => pm.response.to.have.status(200));",
-                  "const rows = pm.response.json();",
-                  "pm.expect(rows).to.have.length(2);",
-                  "pm.expect(rows.reduce((sum, row) => sum + row.effectif_initial, 0)).to.eql(20);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "14 - Enregistrer mortalite sur hapa A",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"bassin\": {{treatmentBassinId}},\n  \"id_hapa\": {{treatmentHapaAId}},\n  \"espece\": \"CARPE\",\n  \"type_evenement\": \"MORTALITE\",\n  \"quantite\": 2,\n  \"date_evenement\": \"{{today}}\",\n  \"cause_mortalite\": {{mortalityCauseId}},\n  \"justification\": \"Test Postman mortalite traitement hapa\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/effectifs/evenements/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Mortalite hapa enregistree', () => pm.response.to.have.status(201));",
-                  "const event = pm.response.json();",
-                  "pm.expect(event.type_evenement).to.eql('MORTALITE');",
-                  "pm.collectionVariables.set('treatmentHapaMortalityId', event.id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "15 - Verifier effectif actuel diminue",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              }
-            ],
-            "url": "{{baseUrl}}/api/v1/traitement/{{treatmentHapaId}}/effectifs/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Effectif apres mortalite consultable', () => pm.response.to.have.status(200));",
-                  "const row = pm.response.json().find(item => item.id_hapa === Number(pm.collectionVariables.get('treatmentHapaAId')));",
-                  "pm.expect(row.effectif_actuel).to.eql(8);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "16 - Cloturer avec effectif calcule",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              }
-            ],
-            "url": "{{baseUrl}}/api/v1/traitement/{{treatmentHapaId}}/cloturer/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Traitement hapa cloture', () => pm.response.to.have.status(200));",
-                  "const treatment = pm.response.json();",
-                  "pm.expect(treatment.effectif_final).to.eql(18);",
-                  "pm.expect(treatment.hapas.reduce((sum, row) => sum + row.effectif_final, 0)).to.eql(18);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "17 - Refuser seconde cloture",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              }
-            ],
-            "url": "{{baseUrl}}/api/v1/traitement/{{treatmentHapaId}}/cloturer/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Seconde cloture refusee', () => pm.response.to.have.status(400));",
-                  "pm.expect(pm.response.json()).to.have.property('detail');"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "18 - Refuser suppression apres mortalite",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              }
-            ],
-            "url": "{{baseUrl}}/api/v1/traitement/{{treatmentHapaId}}/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Suppression apres mortalite refusee', () => pm.response.to.have.status(400));",
-                  "pm.expect(pm.response.json()).to.have.property('detail');"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "19 - Creer bassin traitement sans hapa",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reference\": \"PM-TRAIT-SANS-HAPA-{{suffix}}\",\n  \"categorie\": \"TRAITEMENT\",\n  \"capacity\": 100,\n  \"statut\": \"ACTIF\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/bassins/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Bassin sans hapa cree', () => pm.response.to.have.status(201));",
-                  "pm.collectionVariables.set('treatmentNoHapaBassinId', pm.response.json().id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "20 - Creer eclosion du lot sans evenement",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reference\": \"PM-ECLOSION-TRAIT-SANS-EVT-{{suffix}}\",\n  \"reference_ponte\": \"PM-PONTE-{{suffix}}\",\n  \"date_eclosion\": \"{{today}}\",\n  \"quantite_oeufs_eclos\": \"5.00\",\n  \"quantite_alevins_obtenu\": 5\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/ecloserie/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Eclosion sans evenement creee', () => pm.response.to.have.status(201));",
-                  "pm.collectionVariables.set('treatmentNoEventEclosionId', pm.response.json().id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "21 - Creer lot sans evenement",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reference\": \"PM-LOT-TRAIT-SANS-EVT-{{suffix}}\",\n  \"id_eclosion\": {{treatmentNoEventEclosionId}},\n  \"date_creation\": \"{{today}}T12:00:00Z\",\n  \"parcours_production\": \"TRAITEMENT_REQUIS\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/lots/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Lot sans evenement cree', () => pm.response.to.have.status(201));",
-                  "pm.expect(pm.response.json().quantite_initiale).to.eql(5);",
-                  "pm.collectionVariables.set('treatmentNoEventLotId', pm.response.json().id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "22 - Creer traitement sans evenement",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_lot\": {{treatmentNoEventLotId}},\n  \"effectif_initial\": 5,\n  \"date_ouverture\": \"{{today}}\",\n  \"id_bassin\": {{treatmentNoHapaBassinId}},\n  \"id_used_provende\": {{provendeId}}\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/traitement/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Traitement sans evenement cree', () => pm.response.to.have.status(201));",
-                  "pm.expect(pm.response.json().hapas).to.eql([]);",
-                  "pm.collectionVariables.set('treatmentNoEventId', pm.response.json().id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "23 - Supprimer traitement sans evenement",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "******"
-              }
-            ],
-            "url": "{{baseUrl}}/api/v1/traitement/{{treatmentNoEventId}}/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Traitement sans evenement supprime', () => pm.response.to.have.status(204));"
-                ]
-              }
-            }
-          ]
-        }
-      ]
-    }
-  ]
+                    }]
 }

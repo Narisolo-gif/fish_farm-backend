@@ -52,7 +52,12 @@ class MiseEnStockViewSet(viewsets.ModelViewSet):
         "bassin",
         "utilisateur",
         "lot__traitement",
-    ).all()
+    ).prefetch_related(
+        "lignes_hapas__hapa",
+    ).order_by(
+        "-date_mise_en_stock",
+        "-id",
+    )
 
     def perform_destroy(self, instance):
         # Le service sécurise la suppression et la transition du lot.

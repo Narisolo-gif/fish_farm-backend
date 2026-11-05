@@ -1,4 +1,13 @@
-from django.urls import path
+from rest_framework.routers import DefaultRouter
+
+from .viewsets import LotGrossissementViewSet
 
 
-urlpatterns = []
+router = DefaultRouter()
+router.register(
+    "lots-grossissement",
+    LotGrossissementViewSet,
+    basename="lot-grossissement",
+)
+
+urlpatterns = router.urls

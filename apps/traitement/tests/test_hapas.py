@@ -14,6 +14,7 @@ from apps.effectifs.models import (
 from apps.effectifs.services import (
     enregistrer_evenement_mortalite_perte,
     enregistrer_mouvement,
+    hapa_est_bloque,
     enregistrer_mouvement_operation,
 )
 from apps.lots.models import Lot
@@ -233,6 +234,8 @@ class TraitementHapaTests(TestCase):
             ),
             {self.hapa1.pk: 3, self.hapa2.pk: 4},
         )
+        self.assertTrue(hapa_est_bloque(self.hapa1.pk))
+        self.assertTrue(hapa_est_bloque(self.hapa2.pk))
 
     def test_cloture_sans_evenement_fige_les_effectifs_initiaux(self):
         traitement = self._creer_traitement(hapas=self._hapas_data())
@@ -247,6 +250,7 @@ class TraitementHapaTests(TestCase):
             ),
             {4, 6},
         )
+        self.assertTrue(hapa_est_bloque(self.hapa1.pk))
 
     def test_cloture_refuse_un_effectif_superieur_a_l_initial(self):
         traitement = self._creer_traitement(hapas=self._hapas_data())
@@ -285,6 +289,7 @@ class TraitementHapaTests(TestCase):
         self.assertTrue(
             all(entry.annulations_associees.exists() for entry in entries)
         )
+        self.assertFalse(hapa_est_bloque(self.hapa1.pk))
 
         traitement_suivant = self._creer_traitement(
             hapas=self._hapas_data(),
@@ -304,24 +309,18 @@ class TraitementHapaTests(TestCase):
         with self.assertRaises(ValidationError):
             supprimer_traitement(traitement_suivant.pk)
 
-    def test_repli_sans_hapa_et_refus_si_traitement_concurrent_meme_espece(self):
-        bassin_sans_hapa = self._bassin("TRAITEMENT-REPLI")
-        traitement_sans_hapa = self._creer_traitement(
-            bassin=bassin_sans_hapa,
+    def test_cloture_refuse_un_traitement_legacy_sans_lignes_hapa(self):
+        lot = self._lot()
+        traitement = Traitement.objects.create(
+            lot=lot,
+            effectif_initial=10,
+            date_ouverture=self.today,
+            bassin=self.bassin,
+            used_provende=self.provende,
+            utilisateur=self.user,
         )
-        self.assertFalse(
-            TraitementHapa.objects.filter(
-                traitement=traitement_sans_hapa
-            ).exists()
-        )
-        self.assertEqual(
-            cloturer_traitement(traitement_sans_hapa.pk).effectif_final,
-            10,
-        )
-
-        bassin_partage = self._bassin("TRAITEMENT-PARTAGE")
-        premier = self._creer_traitement(bassin=bassin_partage)
-        self._creer_traitement(bassin=bassin_partage)
-        with self.assertRaises(ValidationError) as error:
-            cloturer_traitement(premier.pk)
-        self.assertIn("effectif_final", error.exception.detail)
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Traitement sans hapas : supprimez-le et recréez-le.",
+        ):
+            cloturer_traitement(traitement.pk)

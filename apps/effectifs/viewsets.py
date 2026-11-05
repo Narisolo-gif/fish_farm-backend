@@ -8,6 +8,10 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
 from apps.bassins.models import Bassin, Hapa
+from apps.core.permissions import (
+    IsAdministrateurOuGestionnaire,
+    IsTousRolesActifs,
+)
 from .calculs import effectifs_par_hapa
 from .models import (
     CategoriePerte,
@@ -25,13 +29,16 @@ from .serializers import (
     EvenementMortalitePerteSerializer,
     MouvementEffectifSerializer,
     SortieStockSerializer,
+    ValidationSortieSerializer,
 )
 from .services import (
-    annuler_sortie_stock,
-    annuler_evenement_mortalite_perte,
+    annuler_sortie,
+    annuler_evenement,
     annuler_mouvement,
+    calculer_lignes_sortie,
     solde_bassin_espece_date,
-    valider_sortie_stock,
+    totaux_evenements,
+    valider_sortie,
 )
 
 
@@ -199,10 +206,15 @@ class MouvementEffectifViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
-class CauseMortaliteViewSet(viewsets.ReadOnlyModelViewSet):
+class CauseMortaliteViewSet(viewsets.ModelViewSet):
     queryset = CauseMortalite.objects.all()
     serializer_class = CauseMortaliteSerializer
-    permission_classes = [IsAuthenticated, IsRoleEffectifAutorise]
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in {"list", "retrieve"}:
+            return [IsAuthenticated(), IsTousRolesActifs()]
+        return [IsAuthenticated(), IsAdministrateurOuGestionnaire()]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -214,10 +226,15 @@ class CauseMortaliteViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
 
-class CategoriePerteViewSet(viewsets.ReadOnlyModelViewSet):
+class CategoriePerteViewSet(viewsets.ModelViewSet):
     queryset = CategoriePerte.objects.all()
     serializer_class = CategoriePerteSerializer
-    permission_classes = [IsAuthenticated, IsRoleEffectifAutorise]
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in {"list", "retrieve"}:
+            return [IsAuthenticated(), IsTousRolesActifs()]
+        return [IsAuthenticated(), IsAdministrateurOuGestionnaire()]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -232,63 +249,77 @@ class CategoriePerteViewSet(viewsets.ReadOnlyModelViewSet):
 class EvenementMortalitePerteViewSet(viewsets.ModelViewSet):
     queryset = EvenementMortalitePerte.objects.select_related(
         "bassin",
+        "hapa",
         "cause_mortalite",
         "categorie_perte",
         "mouvement",
-        "saisi_par",
+        "utilisateur",
+        "annulee_par",
     ).all()
     serializer_class = EvenementMortalitePerteSerializer
     http_method_names = ["get", "post", "head", "options"]
 
     def get_permissions(self):
-        if self.action in ["list", "retrieve"]:
-            return [IsAuthenticated(), IsRoleEffectifAutorise()]
-        return [IsAuthenticated(), IsAdministrateurOuGestionnaireEffectif()]
+        if self.action in {"list", "retrieve", "totaux", "create"}:
+            return [IsAuthenticated(), IsTousRolesActifs()]
+        return [IsAuthenticated(), IsAdministrateurOuGestionnaire()]
 
     def get_queryset(self):
         queryset = super().get_queryset()
         params = self.request.query_params
 
-        if params.get("bassin"):
-            if not params["bassin"].isdigit():
-                raise ValidationError({"bassin": "Identifiant de bassin invalide."})
-            queryset = queryset.filter(bassin_id=params["bassin"])
-        if params.get("espece"):
-            queryset = queryset.filter(espece__iexact=params["espece"])
-        if params.get("type_evenement"):
-            queryset = queryset.filter(type_evenement=params["type_evenement"])
-
-        for query_param, field in (
-            ("date_debut", "date_evenement__gte"),
-            ("date_fin", "date_evenement__lte"),
+        for parametre, champ in (
+            ("bassin", "bassin_id"),
+            ("hapa", "hapa_id"),
+            ("cause", "cause_mortalite_id"),
+            ("categorie", "categorie_perte_id"),
         ):
-            value = params.get(query_param)
+            value = params.get(parametre)
+            if value:
+                if not value.isdigit():
+                    raise ValidationError({
+                        parametre: f"Identifiant {parametre} invalide."
+                    })
+                queryset = queryset.filter(**{champ: value})
+        if params.get("espece"):
+            if params["espece"] not in dict(MouvementEffectif._meta.get_field("espece").choices):
+                raise ValidationError({"espece": "Espèce inconnue."})
+            queryset = queryset.filter(espece=params["espece"])
+        if params.get("type_evenement"):
+            if params["type_evenement"] not in EvenementMortalitePerte.TypeEvenement.values:
+                raise ValidationError({"type_evenement": "Type d’événement invalide."})
+            queryset = queryset.filter(type_evenement=params["type_evenement"])
+        if params.get("statut"):
+            if params["statut"] not in EvenementMortalitePerte.Statut.values:
+                raise ValidationError({"statut": "Statut invalide."})
+            queryset = queryset.filter(statut=params["statut"])
+
+        dates = {}
+        for parametre in ("date_min", "date_max"):
+            value = params.get(parametre)
             if value:
                 parsed = parse_date(value)
                 if parsed is None:
                     raise ValidationError({
-                        query_param: "Format invalide. Utilisez YYYY-MM-DD."
+                        parametre: "Format invalide. Utilisez YYYY-MM-DD."
                     })
-                queryset = queryset.filter(**{field: parsed})
+                dates[parametre] = parsed
+                lookup = (
+                    "date_evenement__date__gte"
+                    if parametre == "date_min"
+                    else "date_evenement__date__lte"
+                )
+                queryset = queryset.filter(**{lookup: parsed})
 
-        if params.get("cause"):
-            if not params["cause"].isdigit():
-                raise ValidationError({"cause": "Identifiant de cause invalide."})
-            queryset = queryset.filter(cause_mortalite_id=params["cause"])
-        if params.get("categorie"):
-            if not params["categorie"].isdigit():
-                raise ValidationError({
-                    "categorie": "Identifiant de catégorie invalide."
-                })
-            queryset = queryset.filter(categorie_perte_id=params["categorie"])
-
-        date_debut = params.get("date_debut")
-        date_fin = params.get("date_fin")
-        if date_debut and date_fin and date_debut > date_fin:
+        if (
+            dates.get("date_min")
+            and dates.get("date_max")
+            and dates["date_min"] > dates["date_max"]
+        ):
             raise ValidationError({
-                "date_fin": "La date de fin doit être égale ou postérieure à la date de début."
+                "date_max": "La date maximale doit être égale ou postérieure à la date minimale."
             })
-        return queryset
+        return queryset.order_by("-date_evenement", "-id")
 
     @action(
         detail=True,
@@ -299,66 +330,63 @@ class EvenementMortalitePerteViewSet(viewsets.ModelViewSet):
         evenement = self.get_object()
         serializer = AnnulationEvenementSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        evenement, mouvement_annulation = annuler_evenement_mortalite_perte(
+        evenement = annuler_evenement(
             evenement.pk,
-            motif_annulation=serializer.validated_data["motif_annulation"],
-            saisi_par=request.user,
+            motif=serializer.validated_data["motif"],
+            utilisateur=request.user,
         )
         return Response(
-            {
-                "evenement": EvenementMortalitePerteSerializer(evenement).data,
-                "mouvement_annulation": MouvementEffectifSerializer(
-                    mouvement_annulation
-                ).data,
-            },
+            EvenementMortalitePerteSerializer(evenement).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @action(detail=False, methods=["get"], url_path="totaux")
+    def totaux(self, request):
+        for parametre in ("date_min", "date_max"):
+            value = request.query_params.get(parametre)
+            if value and parse_date(value) is None:
+                raise ValidationError({
+                    parametre: "Format invalide. Utilisez YYYY-MM-DD."
+                })
+        return Response(totaux_evenements(request.query_params))
 
 
 class SortieStockViewSet(viewsets.ModelViewSet):
     queryset = SortieStock.objects.select_related(
-        "bassin_source",
+        "lot",
         "bassin_destination",
         "utilisateur",
         "validee_par",
         "annulee_par",
-    ).all()
+    ).prefetch_related("lignes__hapa__bassin").all()
     serializer_class = SortieStockSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_permissions(self):
-        if self.action in {"list", "retrieve", "create"}:
-            return [IsAuthenticated(), IsRoleEffectifAutorise()]
-        return [IsAuthenticated(), IsAdministrateurOuGestionnaireEffectif()]
+        if self.action in {"list", "retrieve", "create", "apercu"}:
+            return [IsAuthenticated(), IsTousRolesActifs()]
+        return [IsAuthenticated(), IsAdministrateurOuGestionnaire()]
 
     def get_queryset(self):
         queryset = super().get_queryset()
         params = self.request.query_params
-        type_sortie = params.get("type_sortie")
-        if type_sortie:
-            if type_sortie not in SortieStock.TypeSortie.values:
-                raise ValidationError({"type_sortie": "Type de sortie inconnu."})
-            queryset = queryset.filter(type_sortie=type_sortie)
-
         statut = params.get("statut")
         if statut:
             if statut not in SortieStock.Statut.values:
                 raise ValidationError({"statut": "Statut inconnu."})
             queryset = queryset.filter(statut=statut)
 
-        bassin_source = params.get("bassin_source")
-        if bassin_source:
-            if not bassin_source.isdigit():
-                raise ValidationError({
-                    "bassin_source": "Identifiant de bassin invalide."
-                })
-            queryset = queryset.filter(bassin_source_id=bassin_source)
-
-        espece = params.get("espece")
-        if espece:
-            if espece not in dict(MouvementEffectif._meta.get_field("espece").choices):
-                raise ValidationError({"espece": "Espèce inconnue."})
-            queryset = queryset.filter(espece=espece)
+        for parametre, champ in (
+            ("lot", "lot_id"),
+            ("bassin_destination", "bassin_destination_id"),
+        ):
+            valeur = params.get(parametre)
+            if valeur:
+                if not valeur.isdigit():
+                    raise ValidationError({
+                        parametre: "Identifiant invalide."
+                    })
+                queryset = queryset.filter(**{champ: valeur})
 
         date_min_value = params.get("date_min")
         date_max_value = params.get("date_max")
@@ -380,13 +408,20 @@ class SortieStockViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(date_sortie__date__gte=date_min)
         if date_max:
             queryset = queryset.filter(date_sortie__date__lte=date_max)
-        return queryset
+        return queryset.order_by("-date_sortie", "-id")
 
     @action(detail=True, methods=["post"], url_path="valider")
     def valider(self, request, pk=None):
-        sortie = valider_sortie_stock(
+        serializer = ValidationSortieSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        sortie = valider_sortie(
             self.get_object().pk,
             utilisateur=request.user,
+            effectif_entrant=serializer.validated_data.get("effectif_entrant"),
+            justification_ecart=serializer.validated_data.get(
+                "justification_ecart",
+                "",
+            ),
         )
         return Response(self.get_serializer(sortie).data)
 
@@ -394,9 +429,39 @@ class SortieStockViewSet(viewsets.ModelViewSet):
     def annuler(self, request, pk=None):
         serializer = AnnulationSortieStockSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        sortie = annuler_sortie_stock(
+        sortie = annuler_sortie(
             self.get_object().pk,
             motif=serializer.validated_data["motif"],
             utilisateur=request.user,
         )
         return Response(self.get_serializer(sortie).data)
+
+    @action(detail=True, methods=["get"], url_path="apercu")
+    def apercu(self, request, pk=None):
+        sortie = self.get_object()
+        if sortie.lignes.exists():
+            lignes = [
+                {
+                    "hapa": ligne.hapa,
+                    "quantite": ligne.quantite,
+                }
+                for ligne in sortie.lignes.select_related("hapa")
+            ]
+            effectif_sortant = sortie.effectif_sortant
+        else:
+            date_locale = timezone.localtime(sortie.date_sortie).date()
+            lignes = calculer_lignes_sortie(sortie.lot, date_locale)
+            effectif_sortant = sum(ligne["quantite"] for ligne in lignes)
+        return Response({
+            "lignes": [
+                {
+                    "id_hapa": ligne["hapa"].pk,
+                    "nom_hapa": ligne["hapa"].nom,
+                    "quantite": ligne["quantite"],
+                }
+                for ligne in lignes
+            ],
+            "effectif_sortant": effectif_sortant,
+            "effectif_entrant": sortie.effectif_entrant or effectif_sortant,
+            "ecart_effectif": sortie.ecart_effectif or 0,
+        })

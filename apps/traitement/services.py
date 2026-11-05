@@ -7,14 +7,14 @@ from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.bassins.models import Bassin, Hapa
 from apps.effectifs.calculs import (
-    bassin_a_des_hapas,
-    effectifs_du_bassin,
     effectifs_par_hapa,
 )
 from apps.effectifs.models import MouvementEffectif
 from apps.effectifs.services import (
     annuler_mouvement,
+    bloquer_hapa,
     enregistrer_mouvement_operation,
+    lever_blocages,
 )
 from apps.lots.models import Lot
 
@@ -33,6 +33,10 @@ def creer_traitement(validated_data, utilisateur):
     bassin = Bassin.objects.select_for_update().get(
         pk=validated_data["bassin"].pk
     )
+    if bassin.categorie != Bassin.Categorie.TRAITEMENT:
+        raise ValidationError({
+            "id_bassin": "Le bassin doit être de catégorie TRAITEMENT."
+        })
 
     if lot.parcours_production == Lot.ParcoursProduction.SANS_TRAITEMENT:
         raise ValidationError({
@@ -49,73 +53,67 @@ def creer_traitement(validated_data, utilisateur):
             "id_lot": "Seul un lot au stade CREEE peut être mis en traitement."
         })
 
-    hapas = []
-    if bassin_a_des_hapas(bassin.pk):
-        if not hapas_data:
-            raise ValidationError({
-                "hapas": "Les hapas et leurs effectifs initiaux sont obligatoires."
-            })
-
-        hapa_ids = [ligne["id_hapa"] for ligne in hapas_data]
-        if len(hapa_ids) != len(set(hapa_ids)):
-            raise ValidationError({
-                "hapas": "Un hapa ne peut être indiqué qu'une seule fois."
-            })
-
-        hapas = list(
-            Hapa.objects.select_for_update()
-            .filter(pk__in=sorted(hapa_ids))
-            .order_by("pk")
-        )
-        hapas_by_id = {hapa.pk: hapa for hapa in hapas}
-        if len(hapas_by_id) != len(hapa_ids):
-            raise ValidationError({
-                "hapas": "Un ou plusieurs hapas sont introuvables."
-            })
-
-        effectifs = effectifs_par_hapa(
-            bassin.pk,
-            a_la_date=validated_data["date_ouverture"],
-        )
-        for ligne in hapas_data:
-            hapa = hapas_by_id[ligne["id_hapa"]]
-            if hapa.bassin_id != bassin.pk:
-                raise ValidationError({
-                    "hapas": "Chaque hapa doit appartenir au bassin du traitement."
-                })
-            if not hapa.actif or hapa.statut != Hapa.Statut.ACTIF:
-                raise ValidationError({
-                    "hapas": f"Le hapa {hapa.nom} est inactif."
-                })
-            if ligne["effectif_initial"] <= 0:
-                raise ValidationError({
-                    "hapas": "L’effectif initial de chaque hapa doit être positif."
-                })
-            if any(
-                effectif != 0
-                for (hapa_id, _), effectif in effectifs.items()
-                if hapa_id == hapa.pk
-            ):
-                raise ValidationError({
-                    "hapas": f"Le hapa {hapa.nom} doit être vide à la date d’ouverture."
-                })
-            if TraitementHapa.objects.filter(
-                hapa=hapa,
-                traitement__statut=Traitement.Statut.EN_COURS,
-            ).exists():
-                raise ValidationError({
-                    "hapas": f"Le hapa {hapa.nom} est déjà utilisé par un traitement en cours."
-                })
-
-        if sum(ligne["effectif_initial"] for ligne in hapas_data) != validated_data[
-            "effectif_initial"
-        ]:
-            raise ValidationError({
-                "hapas": "La somme des effectifs initiaux par hapa doit égaler l’effectif initial du traitement."
-            })
-    elif hapas_data is not None:
+    if not hapas_data:
         raise ValidationError({
-            "hapas": "Les hapas ne sont pas autorisés pour un bassin sans hapa actif."
+            "hapas": "Les hapas et leurs effectifs initiaux sont obligatoires."
+        })
+
+    hapa_ids = [ligne["id_hapa"] for ligne in hapas_data]
+    if len(hapa_ids) != len(set(hapa_ids)):
+        raise ValidationError({
+            "hapas": "Un hapa ne peut être indiqué qu'une seule fois."
+        })
+
+    hapas = list(
+        Hapa.objects.select_for_update()
+        .filter(pk__in=sorted(hapa_ids))
+        .order_by("pk")
+    )
+    hapas_by_id = {hapa.pk: hapa for hapa in hapas}
+    if len(hapas_by_id) != len(hapa_ids):
+        raise ValidationError({
+            "hapas": "Un ou plusieurs hapas sont introuvables."
+        })
+
+    effectifs = effectifs_par_hapa(
+        bassin.pk,
+        a_la_date=validated_data["date_ouverture"],
+    )
+    for ligne in hapas_data:
+        hapa = hapas_by_id[ligne["id_hapa"]]
+        if hapa.bassin_id != bassin.pk:
+            raise ValidationError({
+                "hapas": "Chaque hapa doit appartenir au bassin du traitement."
+            })
+        if not hapa.actif or hapa.statut != Hapa.Statut.ACTIF:
+            raise ValidationError({
+                "hapas": f"Le hapa {hapa.nom} est inactif."
+            })
+        if ligne["effectif_initial"] <= 0:
+            raise ValidationError({
+                "hapas": "L’effectif initial de chaque hapa doit être positif."
+            })
+        if any(
+            effectif != 0
+            for (hapa_id, _), effectif in effectifs.items()
+            if hapa_id == hapa.pk
+        ):
+            raise ValidationError({
+                "hapas": f"Le hapa {hapa.nom} doit être vide à la date d’ouverture."
+            })
+        if TraitementHapa.objects.filter(
+            hapa=hapa,
+            traitement__statut=Traitement.Statut.EN_COURS,
+        ).exists():
+            raise ValidationError({
+                "hapas": f"Le hapa {hapa.nom} est déjà utilisé par un traitement en cours."
+            })
+
+    if sum(ligne["effectif_initial"] for ligne in hapas_data) != validated_data[
+        "effectif_initial"
+    ]:
+        raise ValidationError({
+            "hapas": "La somme des effectifs initiaux par hapa doit égaler l’effectif initial du traitement."
         })
 
     validated_data["bassin"] = bassin
@@ -125,37 +123,25 @@ def creer_traitement(validated_data, utilisateur):
     validated_data["date_cloture"] = None
     traitement = Traitement.objects.create(**validated_data)
 
-    if hapas_data is not None:
-        lignes_hapas = []
-        hapas_by_id = {hapa.pk: hapa for hapa in hapas}
-        for ligne in hapas_data:
-            hapa = hapas_by_id[ligne["id_hapa"]]
-            ligne_traitement = TraitementHapa.objects.create(
-                traitement=traitement,
-                hapa=hapa,
-                effectif_initial=ligne["effectif_initial"],
-            )
-            lignes_hapas.append(ligne_traitement)
+    lignes_hapas = []
+    hapas_by_id = {hapa.pk: hapa for hapa in hapas}
+    for ligne in hapas_data:
+        hapa = hapas_by_id[ligne["id_hapa"]]
+        ligne_traitement = TraitementHapa.objects.create(
+            traitement=traitement,
+            hapa=hapa,
+            effectif_initial=ligne["effectif_initial"],
+        )
+        lignes_hapas.append(ligne_traitement)
 
-        for ligne in lignes_hapas:
-            enregistrer_mouvement_operation(
-                operation=traitement,
-                bassin=bassin,
-                hapa=ligne.hapa,
-                espece=lot.espece,
-                type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
-                quantite=ligne.effectif_initial,
-                date_evenement=traitement.date_ouverture,
-                saisi_par=utilisateur,
-                lot_origine=lot,
-            )
-    else:
+    for ligne in lignes_hapas:
         enregistrer_mouvement_operation(
             operation=traitement,
             bassin=bassin,
+            hapa=ligne.hapa,
             espece=lot.espece,
             type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
-            quantite=traitement.effectif_initial,
+            quantite=ligne.effectif_initial,
             date_evenement=traitement.date_ouverture,
             saisi_par=utilisateur,
             lot_origine=lot,
@@ -213,53 +199,32 @@ def cloturer_traitement(traitement_id):
         .order_by("hapa_id")
     )
 
-    if lignes:
-        list(
-            Hapa.objects.select_for_update()
-            .filter(pk__in=[ligne.hapa_id for ligne in lignes])
-            .order_by("pk")
-        )
-        effectifs = effectifs_par_hapa(
-            bassin.pk,
-            a_la_date=date_cloture,
-        )
-        effectifs_final = {}
-        for ligne in lignes:
-            courant = effectifs.get((ligne.hapa_id, lot.espece), 0)
-            if courant > ligne.effectif_initial:
-                raise ValidationError({
-                    "effectif_final": (
-                        f"L’effectif calculé du hapa {ligne.hapa.nom} ({courant}) "
-                        f"dépasse son effectif initial ({ligne.effectif_initial})."
-                    )
-                })
-            effectifs_final[ligne.pk] = courant
-        effectif_final = sum(effectifs_final.values())
-    else:
-        autre_traitement = Traitement.objects.filter(
-            bassin=bassin,
-            statut=Traitement.Statut.EN_COURS,
-            lot__espece=lot.espece,
-        ).exclude(pk=traitement.pk).exists()
-        if autre_traitement:
-            raise ValidationError({
-                "effectif_final": (
-                    "Effectif non calculable sans hapas : un autre traitement "
-                    "de la même espèce est en cours dans ce bassin."
-                )
-            })
+    if not lignes:
+        raise ValidationError({
+            "hapas": "Traitement sans hapas : supprimez-le et recréez-le."
+        })
 
-        effectif_final = effectifs_du_bassin(
-            bassin.pk,
-            a_la_date=date_cloture,
-        ).get(lot.espece, 0)
-        if effectif_final > traitement.effectif_initial:
+    list(
+        Hapa.objects.select_for_update()
+        .filter(pk__in=[ligne.hapa_id for ligne in lignes])
+        .order_by("pk")
+    )
+    effectifs = effectifs_par_hapa(
+        bassin.pk,
+        a_la_date=date_cloture,
+    )
+    effectifs_final = {}
+    for ligne in lignes:
+        courant = effectifs.get((ligne.hapa_id, lot.espece), 0)
+        if courant > ligne.effectif_initial:
             raise ValidationError({
                 "effectif_final": (
-                    f"L’effectif calculé ({effectif_final}) dépasse "
-                    f"l’effectif initial ({traitement.effectif_initial})."
+                    f"L’effectif calculé du hapa {ligne.hapa.nom} ({courant}) "
+                    f"dépasse son effectif initial ({ligne.effectif_initial})."
                 )
             })
+        effectifs_final[ligne.pk] = courant
+    effectif_final = sum(effectifs_final.values())
 
     for ligne in lignes:
         ligne.effectif_final = effectifs_final[ligne.pk]
@@ -274,6 +239,12 @@ def cloturer_traitement(traitement_id):
         "statut",
         "updated_at",
     ])
+    for ligne in lignes:
+        bloquer_hapa(
+            ligne.hapa,
+            traitement,
+            "Traitement clôturé : transfert en attente",
+        )
     return traitement
 
 
@@ -351,6 +322,7 @@ def supprimer_traitement(traitement_id):
         )
 
     try:
+        lever_blocages(traitement)
         TraitementHapa.objects.filter(traitement=traitement).delete()
         traitement.delete()
     except ProtectedError as exc:

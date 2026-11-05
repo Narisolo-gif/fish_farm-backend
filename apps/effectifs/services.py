@@ -1,28 +1,32 @@
 from __future__ import annotations
 
+from datetime import datetime, time, timedelta
+
 from django.contrib.contenttypes.models import ContentType
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.db.models import ExpressionWrapper, F, IntegerField, Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.bassins.models import Bassin, Hapa
 from apps.lots.models import Lot
 from .calculs import (
-    HAPA_OBLIGATOIRE,
-    bassin_a_des_hapas,
     effectif_vivant,
     effectifs_du_bassin,
     effectifs_par_hapa,
     lots_presents_dans_hapa,
 )
 from .models import (
+    BlocageSaisie,
     CategoriePerte,
     CauseMortalite,
     EvenementMortalitePerte,
     MouvementEffectif,
     SortieStock,
-    SortieStockComposition,
+    SortieStockLigne,
 )
+
+JOURS_SAISIE_RETROACTIVE = None
 
 
 def _sens_pour_type(type_mouvement: str) -> int:
@@ -99,10 +103,24 @@ def _verifier_disponibilite_cumulee(
 
 
 def _verifier_hapa(bassin, hapa, *, champ="id_hapa"):
-    if HAPA_OBLIGATOIRE and bassin_a_des_hapas(bassin.pk) and hapa is None:
-        raise ValidationError({champ: "Un hapa est obligatoire pour ce bassin."})
+    hapa_obligatoire = bassin.categorie in {
+        Bassin.Categorie.TRAITEMENT,
+        Bassin.Categorie.STOCKS,
+    }
+    hapa_interdit = bassin.categorie in {
+        Bassin.Categorie.REPRODUCTION,
+        Bassin.Categorie.GROSSISSEMENT,
+    }
     if hapa is None:
+        if hapa_obligatoire:
+            raise ValidationError({
+                champ: "Un hapa est obligatoire pour ce bassin."
+            })
         return
+    if hapa_interdit:
+        raise ValidationError({
+            champ: "Un hapa est interdit pour cette catégorie de bassin."
+        })
     try:
         hapa = Hapa.objects.select_for_update().get(pk=hapa.pk)
     except Hapa.DoesNotExist as exc:
@@ -152,13 +170,7 @@ def enregistrer_mouvement(
         })
 
     sens = _sens_pour_type(type_mouvement)
-    destination_grossissement = (
-        type_mouvement == MouvementEffectif.TypeMouvement.ENTREE
-        and bassin.categorie == Bassin.Categorie.GROSSISSEMENT
-        and hapa is None
-    )
-    if not destination_grossissement:
-        _verifier_hapa(bassin, hapa)
+    _verifier_hapa(bassin, hapa)
     if hapa is not None and type_mouvement == MouvementEffectif.TypeMouvement.ENTREE:
         effectifs_hapa = effectifs_par_hapa(
             bassin.pk, a_la_date=date_evenement
@@ -323,102 +335,25 @@ def enregistrer_evenement_mortalite_perte(
     categorie_perte=None,
     justification: str = "",
 ):
-    if type_evenement not in EvenementMortalitePerte.TypeEvenement.values:
-        raise ValidationError({"type_evenement": "Type d’événement invalide."})
-    if quantite <= 0:
-        raise ValidationError({"quantite": "La quantité doit être positive."})
-    if date_evenement > timezone.localdate():
-        raise ValidationError({
-            "date_evenement": "La date d’événement ne peut pas être dans le futur."
-        })
-
-    # Le verrou partagé avec les mouvements garantit la disponibilité lors de saisies concurrentes.
-    bassin = Bassin.objects.select_for_update().get(pk=bassin.pk)
-    if bassin.statut != Bassin.Statut.ACTIF:
-        raise ValidationError({"bassin": "Le bassin sélectionné est inactif."})
-    _verifier_hapa(bassin, hapa, champ="hapa")
-
-    if type_evenement == EvenementMortalitePerte.TypeEvenement.MORTALITE:
-        cause_is_active = (
-            cause_mortalite is not None
-            and CauseMortalite.objects.filter(
-                pk=cause_mortalite.pk,
-                actif=True,
-            ).exists()
+    if not isinstance(date_evenement, datetime):
+        date_evenement = timezone.make_aware(
+            datetime.combine(date_evenement, time.min),
+            timezone.get_current_timezone(),
         )
-        if not cause_is_active:
-            raise ValidationError({
-                "cause_mortalite": "Une cause de mortalité active est obligatoire."
-            })
-        if categorie_perte is not None:
-            raise ValidationError({
-                "categorie_perte": "Une mortalité ne peut pas avoir de catégorie de perte."
-            })
-    else:
-        category_is_active = (
-            categorie_perte is not None
-            and CategoriePerte.objects.filter(
-                pk=categorie_perte.pk,
-                actif=True,
-            ).exists()
-        )
-        if not category_is_active:
-            raise ValidationError({
-                "categorie_perte": "Une catégorie de perte active est obligatoire."
-            })
-        if cause_mortalite is not None:
-            raise ValidationError({
-                "cause_mortalite": "Une perte ne peut pas avoir de cause de mortalité."
-            })
-        if not justification or not justification.strip():
-            raise ValidationError({
-                "justification": "La justification est obligatoire pour une perte."
-            })
-
-    effectif_disponible = solde_bassin_espece_date(
-        bassin.pk,
-        espece,
-        date_evenement,
+    return enregistrer_evenement(
+        validated_data={
+            "bassin": bassin,
+            "hapa": hapa,
+            "espece": espece,
+            "type_evenement": type_evenement,
+            "quantite": quantite,
+            "date_evenement": date_evenement,
+            "cause_mortalite": cause_mortalite,
+            "categorie_perte": categorie_perte,
+            "justification": justification,
+        },
+        utilisateur=saisi_par,
     )
-    if quantite > effectif_disponible:
-        raise ValidationError({
-            "quantite": (
-                f"La quantité ({quantite}) dépasse l’effectif disponible "
-                f"({effectif_disponible}) à cette date."
-            )
-        })
-
-    evenement = EvenementMortalitePerte.objects.create(
-        bassin=bassin,
-        hapa=hapa,
-        espece=espece,
-        type_evenement=type_evenement,
-        quantite=quantite,
-        date_evenement=date_evenement,
-        cause_mortalite=cause_mortalite,
-        categorie_perte=categorie_perte,
-        justification=justification.strip() if justification else "",
-        saisi_par=saisi_par,
-    )
-    mouvement = enregistrer_mouvement_operation(
-        operation=evenement,
-        bassin=bassin,
-        espece=espece,
-        type_mouvement=(
-            MouvementEffectif.TypeMouvement.MORTALITE
-            if type_evenement == EvenementMortalitePerte.TypeEvenement.MORTALITE
-            else MouvementEffectif.TypeMouvement.PERTE
-        ),
-        quantite=quantite,
-        date_evenement=date_evenement,
-        saisi_par=saisi_par,
-        hapa=hapa,
-    )
-    EvenementMortalitePerte.objects.filter(pk=evenement.pk).update(
-        mouvement=mouvement,
-    )
-    evenement.mouvement = mouvement
-    return evenement
 
 
 @transaction.atomic
@@ -428,29 +363,300 @@ def annuler_evenement_mortalite_perte(
     motif_annulation: str,
     saisi_par,
 ):
-    evenement = (
-        EvenementMortalitePerte.objects
-        .select_for_update()
-        .get(pk=evenement_id)
+    evenement = annuler_evenement(
+        evenement_id,
+        motif=motif_annulation,
+        utilisateur=saisi_par,
     )
-    if evenement.statut == EvenementMortalitePerte.Statut.ANNULE:
+    mouvement_annulation = MouvementEffectif.objects.get(
+        annule_mouvement_id=evenement.mouvement_id,
+    )
+    return evenement, mouvement_annulation
+
+
+@transaction.atomic
+def bloquer_hapa(hapa, operation, motif):
+    hapa = Hapa.objects.select_for_update().get(pk=hapa.pk)
+    operation_type = operation._meta.label_lower
+    blocage = BlocageSaisie.objects.select_for_update().filter(
+        hapa=hapa,
+        operation_type=operation_type,
+        operation_id=operation.pk,
+        actif=True,
+    ).first()
+    if blocage is not None:
+        return blocage
+    return BlocageSaisie.objects.create(
+        hapa=hapa,
+        operation_type=operation_type,
+        operation_id=operation.pk,
+        motif=motif,
+    )
+
+
+@transaction.atomic
+def lever_blocages(operation):
+    operation_type = operation._meta.label_lower
+    blocages = BlocageSaisie.objects.select_for_update().filter(
+        operation_type=operation_type,
+        operation_id=operation.pk,
+        actif=True,
+    )
+    return blocages.update(actif=False, leve_le=timezone.now())
+
+
+def hapa_est_bloque(hapa_id):
+    return BlocageSaisie.objects.filter(hapa_id=hapa_id, actif=True).exists()
+
+
+@transaction.atomic
+def enregistrer_evenement(validated_data, utilisateur):
+    donnees = dict(validated_data)
+    bassin = Bassin.objects.select_for_update().get(
+        pk=donnees["bassin"].pk
+    )
+    if bassin.statut != Bassin.Statut.ACTIF:
+        raise ValidationError({
+            "id_bassin": "Le bassin sélectionné est inactif."
+        })
+
+    hapa = donnees.get("hapa")
+    _verifier_hapa(bassin, hapa, champ="id_hapa")
+    if hapa is not None and hapa_est_bloque(hapa.pk):
+        raise ValidationError({
+            "id_hapa": (
+                "Hapa bloqué : le stade du lot est clôturé. "
+                "Les écarts se justifient à l'ouverture du stade suivant."
+            )
+        })
+
+    date_evenement = donnees.get("date_evenement") or timezone.now()
+    if timezone.is_naive(date_evenement):
+        date_evenement = timezone.make_aware(
+            date_evenement,
+            timezone.get_current_timezone(),
+        )
+    maintenant = timezone.now()
+    if date_evenement > maintenant:
+        raise ValidationError({
+            "date_evenement": "La date d’événement ne peut pas être dans le futur."
+        })
+    if (
+        JOURS_SAISIE_RETROACTIVE is not None
+        and date_evenement < maintenant - timedelta(days=JOURS_SAISIE_RETROACTIVE)
+    ):
+        raise ValidationError({
+            "date_evenement": (
+                "La date dépasse la période de saisie rétroactive autorisée."
+            )
+        })
+
+    quantite = donnees.get("quantite")
+    if quantite is None or quantite < 1:
+        raise ValidationError({
+            "quantite": "La quantité doit être supérieure ou égale à 1."
+        })
+
+    type_evenement = donnees.get("type_evenement")
+    cause = donnees.get("cause_mortalite")
+    categorie = donnees.get("categorie_perte")
+    justification = donnees.get("justification", "")
+    if type_evenement == EvenementMortalitePerte.TypeEvenement.MORTALITE:
+        if cause is None or not CauseMortalite.objects.filter(
+            pk=cause.pk,
+            actif=True,
+        ).exists():
+            raise ValidationError({
+                "id_cause": "Une cause de mortalité active est obligatoire."
+            })
+        if categorie is not None:
+            raise ValidationError({
+                "id_categorie": (
+                    "Une mortalité ne peut pas avoir de catégorie de perte."
+                )
+            })
+    elif type_evenement == EvenementMortalitePerte.TypeEvenement.PERTE:
+        if categorie is None or not CategoriePerte.objects.filter(
+            pk=categorie.pk,
+            actif=True,
+        ).exists():
+            raise ValidationError({
+                "id_categorie": "Une catégorie de perte active est obligatoire."
+            })
+        if cause is not None:
+            raise ValidationError({
+                "id_cause": "Une perte ne peut pas avoir de cause de mortalité."
+            })
+        if not justification.strip():
+            raise ValidationError({
+                "justification": "La justification est obligatoire pour une perte."
+            })
+    else:
+        raise ValidationError({
+            "type_evenement": "Type d’événement invalide."
+        })
+
+    date_locale = timezone.localtime(date_evenement).date()
+    espece = donnees.get("espece")
+    if espece is None:
+        balances = (
+            effectifs_par_hapa(bassin.pk, a_la_date=date_locale)
+            if hapa is not None
+            else effectifs_du_bassin(bassin.pk, a_la_date=date_locale)
+        )
+        especes_presentes = {
+            espece_ligne
+            for (hapa_id, espece_ligne), effectif in balances.items()
+            if hapa is not None and hapa_id == hapa.pk and effectif > 0
+        } if hapa is not None else {
+            espece_ligne
+            for espece_ligne, effectif in balances.items()
+            if effectif > 0
+        }
+        if len(especes_presentes) != 1:
+            raise ValidationError({
+                "espece": "Effectif indéterminé : précisez l'espèce."
+            })
+        espece = next(iter(especes_presentes))
+
+    if espece not in dict(Lot.Espece.choices):
+        raise ValidationError({"espece": "Espèce inconnue."})
+
+    effectif_disponible = effectif_vivant(
+        bassin.pk,
+        espece,
+        a_la_date=date_locale,
+        hapa_id=hapa.pk if hapa is not None else None,
+    )
+    if quantite > effectif_disponible:
+        raise ValidationError({
+            "quantite": (
+                f"La quantité ({quantite}) dépasse l’effectif disponible "
+                f"({effectif_disponible}) à cette date."
+            )
+        })
+
+    lot_origine = None
+    if hapa is not None:
+        lots = lots_presents_dans_hapa(hapa.pk, a_la_date=date_locale)
+        if len(lots) == 1:
+            lot_origine = Lot.objects.get(pk=next(iter(lots)))
+
+    evenement = EvenementMortalitePerte.objects.create(
+        bassin=bassin,
+        hapa=hapa,
+        espece=espece,
+        type_evenement=type_evenement,
+        quantite=quantite,
+        date_evenement=date_evenement,
+        cause_mortalite=cause,
+        categorie_perte=categorie,
+        justification=justification.strip() if justification else "",
+        observation=donnees.get("observation", ""),
+        utilisateur=utilisateur,
+    )
+    mouvement = enregistrer_mouvement_operation(
+        operation=evenement,
+        bassin=bassin,
+        hapa=hapa,
+        espece=espece,
+        type_mouvement=(
+            MouvementEffectif.TypeMouvement.MORTALITE
+            if type_evenement == EvenementMortalitePerte.TypeEvenement.MORTALITE
+            else MouvementEffectif.TypeMouvement.PERTE
+        ),
+        quantite=quantite,
+        date_evenement=date_locale,
+        saisi_par=utilisateur,
+        lot_origine=lot_origine,
+    )
+    EvenementMortalitePerte.objects.filter(pk=evenement.pk).update(
+        mouvement=mouvement,
+    )
+    evenement.mouvement = mouvement
+    return evenement
+
+
+@transaction.atomic
+def annuler_evenement(evenement_id, motif, utilisateur):
+    try:
+        evenement = EvenementMortalitePerte.objects.select_for_update().get(
+            pk=evenement_id
+        )
+    except EvenementMortalitePerte.DoesNotExist as exc:
+        raise ValidationError({"detail": "Événement introuvable."}) from exc
+    if evenement.statut == EvenementMortalitePerte.Statut.ANNULEE:
         raise ValidationError({"detail": "Cet événement a déjà été annulé."})
+    if not motif or not motif.strip():
+        raise ValidationError({"motif": "Le motif d’annulation est obligatoire."})
     if evenement.mouvement_id is None:
         raise ValidationError({
             "detail": "Aucun mouvement n’est associé à cet événement."
         })
 
-    # L'annulation conserve l'événement et compense son mouvement dans la même transaction.
-    mouvement_annulation = annuler_mouvement(
+    annuler_mouvement(
         evenement.mouvement_id,
-        motif_annulation=motif_annulation,
-        saisi_par=saisi_par,
+        motif_annulation=motif,
+        saisi_par=utilisateur,
     )
+    annulee_le = timezone.now()
     EvenementMortalitePerte.objects.filter(pk=evenement.pk).update(
-        statut=EvenementMortalitePerte.Statut.ANNULE,
+        statut=EvenementMortalitePerte.Statut.ANNULEE,
+        motif_annulation=motif.strip(),
+        annulee_par=utilisateur,
+        annulee_le=annulee_le,
     )
-    evenement.statut = EvenementMortalitePerte.Statut.ANNULE
-    return evenement, mouvement_annulation
+    evenement.statut = EvenementMortalitePerte.Statut.ANNULEE
+    evenement.motif_annulation = motif.strip()
+    evenement.annulee_par = utilisateur
+    evenement.annulee_le = annulee_le
+    return evenement
+
+
+def totaux_evenements(filtres=None):
+    filtres = filtres or {}
+    queryset = EvenementMortalitePerte.objects.filter(
+        statut=EvenementMortalitePerte.Statut.VALIDE,
+    )
+    champs_filtres = {
+        "bassin": "bassin_id",
+        "hapa": "hapa_id",
+        "espece": "espece",
+        "type_evenement": "type_evenement",
+        "cause": "cause_mortalite_id",
+        "categorie": "categorie_perte_id",
+    }
+    for parametre, champ in champs_filtres.items():
+        if filtres.get(parametre) not in (None, ""):
+            queryset = queryset.filter(**{champ: filtres[parametre]})
+    if filtres.get("date_min"):
+        queryset = queryset.filter(
+            date_evenement__date__gte=filtres["date_min"]
+        )
+    if filtres.get("date_max"):
+        queryset = queryset.filter(
+            date_evenement__date__lte=filtres["date_max"]
+        )
+
+    return {
+        "par_type": list(
+            queryset.values("type_evenement")
+            .annotate(total=Sum("quantite"))
+            .order_by("type_evenement")
+        ),
+        "par_cause": list(
+            queryset.filter(cause_mortalite__isnull=False)
+            .values("cause_mortalite_id", "cause_mortalite__libelle")
+            .annotate(total=Sum("quantite"))
+            .order_by("cause_mortalite__libelle")
+        ),
+        "par_categorie": list(
+            queryset.filter(categorie_perte__isnull=False)
+            .values("categorie_perte_id", "categorie_perte__libelle")
+            .annotate(total=Sum("quantite"))
+            .order_by("categorie_perte__libelle")
+        ),
+    }
 
 
 def _normaliser_date_sortie(date_sortie):
@@ -460,360 +666,342 @@ def _normaliser_date_sortie(date_sortie):
             date_sortie,
             timezone.get_current_timezone(),
         )
-    return date_sortie.replace(second=0, microsecond=0)
-
-
-def _verrouiller_bassins_sortie(bassin_source_id, bassin_destination_id=None):
-    # Un ordre stable évite que deux transferts verrouillent les bassins à l'inverse.
-    bassin_ids = sorted({
-        bassin_id
-        for bassin_id in (bassin_source_id, bassin_destination_id)
-        if bassin_id is not None
-    })
-    bassins = {
-        bassin.pk: bassin
-        for bassin in (
-            Bassin.objects.select_for_update()
-            .filter(pk__in=bassin_ids)
-            .order_by("pk")
-        )
-    }
-    if len(bassins) != len(bassin_ids):
-        raise ValidationError({"id_bassin_source": "Un bassin est introuvable."})
-    return bassins
-
-
-def _valider_donnees_sortie(
-    *,
-    type_sortie,
-    bassin_source,
-    bassin_destination,
-    espece,
-    quantite,
-    date_sortie,
-    hapa=None,
-):
-    if type_sortie not in SortieStock.TypeSortie.values:
-        raise ValidationError({"type_sortie": "Type de sortie inconnu."})
-    if quantite <= 0:
-        raise ValidationError({"quantite": "La quantité doit être strictement positive."})
-
-    date_sortie = _normaliser_date_sortie(date_sortie)
     if date_sortie > timezone.now():
         raise ValidationError({"date_sortie": "La date de sortie ne peut pas être future."})
+    return date_sortie
 
-    bassins = _verrouiller_bassins_sortie(
-        bassin_source.pk,
-        bassin_destination.pk if bassin_destination else None,
-    )
-    bassin_source = bassins[bassin_source.pk]
-    bassin_destination = (
-        bassins[bassin_destination.pk]
-        if bassin_destination is not None
-        else None
-    )
 
-    if bassin_source.statut != Bassin.Statut.ACTIF:
+def _verifier_finalite_grossissement(lot):
+    mise_en_stock = getattr(lot, "mise_en_stock", None)
+    finalite = getattr(mise_en_stock, "finalite", None)
+    if finalite != "GROSSISSEMENT":
+        if finalite:
+            message = f"finalité du lot : {finalite}"
+        else:
+            message = "finalité du lot non définie"
+        raise ValidationError({"id_lot": message})
+
+
+def _verifier_bassin_destination(bassin):
+    if bassin.statut != Bassin.Statut.ACTIF:
+        raise ValidationError({"id_bassin_destination": "Le bassin destination doit être actif."})
+    if bassin.categorie != Bassin.Categorie.GROSSISSEMENT:
         raise ValidationError({
-            "id_bassin_source": "Le bassin source doit être actif."
+            "id_bassin_destination": (
+                "Le bassin destination doit être de catégorie GROSSISSEMENT."
+            )
         })
-    if bassin_source.categorie != Bassin.Categorie.STOCKS:
+
+
+def calculer_lignes_sortie(lot, date_locale):
+    _verifier_finalite_grossissement(lot)
+    contributions = (
+        MouvementEffectif.objects
+        .filter(
+            bassin__categorie=Bassin.Categorie.STOCKS,
+            lot_origine__isnull=False,
+            hapa__isnull=False,
+            date_evenement__lte=date_locale,
+        )
+        .annotate(
+            contribution=ExpressionWrapper(
+                F("sens") * F("quantite"),
+                output_field=IntegerField(),
+            )
+        )
+        .values("bassin_id", "hapa_id", "lot_origine_id")
+        .annotate(restant=Sum("contribution"))
+    )
+    soldes_lots = [
+        row for row in contributions
+        if row["restant"] and row["restant"] > 0
+    ]
+    hapas_lot = [
+        row for row in soldes_lots
+        if row["lot_origine_id"] == lot.pk
+    ]
+    if not hapas_lot:
+        raise ValidationError({"id_lot": "Le lot n’est présent dans aucun hapa de stock."})
+
+    hapa_ids = {row["hapa_id"] for row in hapas_lot}
+    bassins_source = {row["bassin_id"] for row in hapas_lot}
+    if len(bassins_source) != 1:
         raise ValidationError({
-            "id_bassin_source": "Le bassin source doit être de catégorie STOCKS."
+            "id_lot": "Le lot est réparti dans plusieurs bassins de stock."
         })
-    _verifier_hapa(bassin_source, hapa, champ="id_hapa")
-    if (
-        bassin_destination is not None
-        and bassin_destination.pk == bassin_source.pk
-    ):
-        raise ValidationError({
-            "id_bassin_destination": "La source et la destination doivent être distinctes."
-        })
-    if type_sortie == SortieStock.TypeSortie.GROSSISSEMENT:
-        if bassin_destination is None:
+    hapas = {
+        hapa.pk: hapa
+        for hapa in Hapa.objects.filter(pk__in=hapa_ids)
+        .select_related("bassin")
+        .order_by("pk")
+    }
+
+    autres_lots = {
+        row["lot_origine_id"]
+        for row in soldes_lots
+        if row["hapa_id"] in hapa_ids and row["lot_origine_id"] != lot.pk
+    }
+    references_lots = dict(
+        Lot.objects.filter(pk__in=autres_lots).values_list("pk", "reference")
+    )
+    for row in hapas_lot:
+        hapa = hapas[row["hapa_id"]]
+        if not hapa.actif or hapa.statut != Hapa.Statut.ACTIF:
             raise ValidationError({
-                "id_bassin_destination": "Le bassin destination est obligatoire."
+                "id_lot": f"Le hapa {hapa.nom} contenant le lot est inactif."
             })
-        if bassin_destination.statut != Bassin.Statut.ACTIF:
+        lot_partage = next(
+            (
+                item["lot_origine_id"]
+                for item in soldes_lots
+                if item["hapa_id"] == hapa.pk
+                and item["lot_origine_id"] != lot.pk
+            ),
+            None,
+        )
+        if lot_partage is not None:
             raise ValidationError({
-                "id_bassin_destination": "Le bassin destination doit être actif."
-            })
-        if bassin_destination.categorie != Bassin.Categorie.GROSSISSEMENT:
-            raise ValidationError({
-                "id_bassin_destination": (
-                    "Le bassin destination doit être de catégorie GROSSISSEMENT."
+                "id_lot": (
+                    f"Le lot partage le hapa {hapa.nom} avec le lot "
+                    f"{references_lots[lot_partage]}."
                 )
             })
-    elif bassin_destination is not None:
-        raise ValidationError({
-            "id_bassin_destination": "Une vente ne peut pas avoir de bassin destination."
-        })
 
-    return date_sortie, bassin_source, bassin_destination
-
-
-@transaction.atomic
-def creer_sortie_stock(validated_data, utilisateur):
-    validated_data = dict(validated_data)
-    composition = validated_data.pop("composition", None)
-    date_sortie, bassin_source, bassin_destination = _valider_donnees_sortie(
-        type_sortie=validated_data["type_sortie"],
-        bassin_source=validated_data["bassin_source"],
-        bassin_destination=validated_data.get("bassin_destination"),
-        espece=validated_data["espece"],
-        quantite=validated_data["quantite"],
-        date_sortie=validated_data.get("date_sortie"),
-        hapa=validated_data.get("hapa"),
-    )
-    donnees = dict(validated_data)
-    donnees.update({
-        "bassin_source": bassin_source,
-        "bassin_destination": bassin_destination,
-        "date_sortie": date_sortie,
-        "utilisateur": utilisateur,
-    })
-    sortie = SortieStock.objects.create(**donnees)
-    if composition is not None:
-        _remplacer_composition(sortie, composition)
-    return sortie
-
-
-def _remplacer_composition(sortie, composition):
-    SortieStockComposition.objects.filter(sortie=sortie).delete()
-    certitude = (
-        SortieStockComposition.Certitude.EXACTE
-        if len(composition) == 1
-        else SortieStockComposition.Certitude.ESTIMEE
-    )
-    SortieStockComposition.objects.bulk_create([
-        SortieStockComposition(
-            sortie=sortie,
-            lot_origine=ligne["lot_origine"],
-            quantite=ligne["quantite"],
-            certitude=certitude,
+    effets = (
+        MouvementEffectif.objects
+        .filter(
+            bassin_id=next(iter(bassins_source)),
+            hapa_id__in=hapa_ids,
+            date_evenement__lte=date_locale,
         )
-        for ligne in composition
-    ])
+        .annotate(
+            contribution=ExpressionWrapper(
+                F("sens") * F("quantite"),
+                output_field=IntegerField(),
+            )
+        )
+        .values("hapa_id")
+        .annotate(effectif=Sum("contribution"))
+    )
+    effectifs = {row["hapa_id"]: row["effectif"] or 0 for row in effets}
+    effectifs_attribues = {}
+    for row in soldes_lots:
+        if row["hapa_id"] in hapa_ids:
+            effectifs_attribues[row["hapa_id"]] = (
+                effectifs_attribues.get(row["hapa_id"], 0) + row["restant"]
+            )
+    lignes = []
+    for row in sorted(hapas_lot, key=lambda item: item["hapa_id"]):
+        hapa = hapas[row["hapa_id"]]
+        quantite = effectifs.get(hapa.pk, 0)
+        if quantite <= 0:
+            raise ValidationError({
+                "id_lot": f"Le hapa {hapa.nom} n’a plus d’effectif vivant."
+            })
+        if effectifs_attribues.get(hapa.pk, 0) != quantite:
+            raise ValidationError({
+                "id_lot": (
+                    f"Le contenu du hapa {hapa.nom} ne permet pas de confirmer "
+                    "que le lot y est seul."
+                )
+            })
+        lignes.append({"hapa": hapa, "quantite": quantite})
+    return lignes
+
+
+def _verifier_presence_lot(lot, date_sortie):
+    return calculer_lignes_sortie(
+        lot,
+        timezone.localtime(date_sortie).date(),
+    )
 
 
 @transaction.atomic
-def modifier_sortie_stock(sortie_id, validated_data):
-    validated_data = dict(validated_data)
-    composition = validated_data.pop("composition", None)
+def creer_sortie(validated_data, utilisateur):
+    lot = Lot.objects.select_for_update().get(pk=validated_data["lot"].pk)
+    bassin_destination = Bassin.objects.select_for_update().get(
+        pk=validated_data["bassin_destination"].pk
+    )
+    _verifier_bassin_destination(bassin_destination)
+    date_sortie = _normaliser_date_sortie(validated_data.get("date_sortie"))
+    _verifier_presence_lot(lot, date_sortie)
+    try:
+        with transaction.atomic():
+            return SortieStock.objects.create(
+                type_sortie=SortieStock.TypeSortie.GROSSISSEMENT,
+                lot=lot,
+                bassin_destination=bassin_destination,
+                espece=lot.espece,
+                date_sortie=date_sortie,
+                observation=validated_data.get("observation", ""),
+                utilisateur=utilisateur,
+            )
+    except IntegrityError as exc:
+        cause = exc.__cause__
+        constraint_name = getattr(
+            getattr(cause, "diag", None),
+            "constraint_name",
+            None,
+        )
+        if (
+            constraint_name == "sortie_stock_lot_active_unique"
+            or "UNIQUE constraint failed: effectifs_sortiestock.lot_id"
+            in str(cause)
+        ):
+            raise ValidationError({
+                "id_lot": "Une sortie active existe déjà pour ce lot."
+            }) from exc
+        raise
+
+
+@transaction.atomic
+def modifier_sortie(sortie_id, validated_data):
     sortie = SortieStock.objects.select_for_update().get(pk=sortie_id)
     if sortie.statut != SortieStock.Statut.BROUILLON:
-        raise ValidationError({
-            "statut": "Seul un brouillon peut être modifié."
-        })
-
-    donnees = {
-        "type_sortie": validated_data.get("type_sortie", sortie.type_sortie),
-        "bassin_source": validated_data.get("bassin_source", sortie.bassin_source),
-        "bassin_destination": validated_data.get(
+        raise ValidationError({"statut": "Seul un brouillon peut être modifié."})
+    lot = Lot.objects.select_for_update().get(pk=sortie.lot_id)
+    bassin_destination = Bassin.objects.select_for_update().get(
+        pk=validated_data.get(
             "bassin_destination",
             sortie.bassin_destination,
-        ),
-        "espece": validated_data.get("espece", sortie.espece),
-        "quantite": validated_data.get("quantite", sortie.quantite),
-        "date_sortie": validated_data.get("date_sortie", sortie.date_sortie),
-        "hapa": validated_data.get("hapa", sortie.hapa),
-    }
-    date_sortie, bassin_source, bassin_destination = _valider_donnees_sortie(
-        **donnees,
+        ).pk
     )
-    for field, value in donnees.items():
-        setattr(sortie, field, value)
-    sortie.bassin_source = bassin_source
+    _verifier_bassin_destination(bassin_destination)
+    date_sortie = _normaliser_date_sortie(
+        validated_data.get("date_sortie", sortie.date_sortie)
+    )
+    _verifier_presence_lot(lot, date_sortie)
     sortie.bassin_destination = bassin_destination
     sortie.date_sortie = date_sortie
     if "observation" in validated_data:
         sortie.observation = validated_data["observation"]
     sortie.save()
-    if composition is not None:
-        _remplacer_composition(sortie, composition)
     return sortie
 
 
 def _apres_validation_grossissement(sortie):
-    # Point d'extension réservé à la création du lot de grossissement (étape 6).
-    pass
+    from .signals import sortie_stock_validee
+
+    sortie_stock_validee.send(
+        sender=SortieStock,
+        sortie=sortie,
+        utilisateur=sortie.validee_par,
+    )
+
+
+def _avant_annulation_grossissement(sortie, utilisateur):
+    from .signals import sortie_stock_avant_annulation
+
+    sortie_stock_avant_annulation.send(
+        sender=SortieStock,
+        sortie=sortie,
+        utilisateur=utilisateur,
+    )
 
 
 @transaction.atomic
-def valider_sortie_stock(sortie_id, utilisateur):
+def valider_sortie(
+    sortie_id,
+    effectif_entrant=None,
+    justification_ecart="",
+    *,
+    utilisateur,
+):
     sortie = SortieStock.objects.select_for_update().get(pk=sortie_id)
     if sortie.statut != SortieStock.Statut.BROUILLON:
         raise ValidationError({"statut": "Seul un brouillon peut être validé."})
-
-    date_sortie, bassin_source, bassin_destination = _valider_donnees_sortie(
-        type_sortie=sortie.type_sortie,
-        bassin_source=sortie.bassin_source,
-        bassin_destination=sortie.bassin_destination,
-        espece=sortie.espece,
-        quantite=sortie.quantite,
-        date_sortie=sortie.date_sortie,
-        hapa=sortie.hapa,
+    lot = Lot.objects.select_for_update().get(pk=sortie.lot_id)
+    date_sortie = _normaliser_date_sortie(sortie.date_sortie)
+    lignes_calculees = calculer_lignes_sortie(
+        lot,
+        timezone.localtime(date_sortie).date(),
     )
+    bassin_source_id = lignes_calculees[0]["hapa"].bassin_id
+    bassin_ids = sorted({bassin_source_id, sortie.bassin_destination_id})
+    bassins = {
+        bassin.pk: bassin
+        for bassin in Bassin.objects.select_for_update()
+        .filter(pk__in=bassin_ids)
+        .order_by("pk")
+    }
+    if len(bassins) != len(bassin_ids):
+        raise ValidationError({"id_bassin_destination": "Un bassin est introuvable."})
+    bassin_source = bassins[bassin_source_id]
+    bassin_destination = bassins[sortie.bassin_destination_id]
+    if bassin_source.categorie != Bassin.Categorie.STOCKS:
+        raise ValidationError({"id_lot": "Le lot n’est pas dans un bassin de stock."})
+    _verifier_bassin_destination(bassin_destination)
+    hapa_ids = sorted(ligne["hapa"].pk for ligne in lignes_calculees)
+    hapas_verrouilles = list(
+        Hapa.objects.select_for_update()
+        .filter(pk__in=hapa_ids)
+        .order_by("pk")
+    )
+    if len(hapas_verrouilles) != len(hapa_ids):
+        raise ValidationError({"id_lot": "Un hapa du lot est introuvable."})
     date_locale = timezone.localtime(date_sortie).date()
-    effectif_disponible = effectifs_du_bassin(
-        bassin_source.pk,
-        a_la_date=date_locale,
-    ).get(sortie.espece, 0)
-    if effectif_disponible < sortie.quantite:
+    lignes_calculees = calculer_lignes_sortie(lot, date_locale)
+    effectif_sortant = sum(ligne["quantite"] for ligne in lignes_calculees)
+    if effectif_sortant <= 0:
+        raise ValidationError({"id_lot": "L’effectif sortant doit être positif."})
+    if effectif_entrant is None:
+        effectif_entrant = effectif_sortant
+    if effectif_entrant <= 0:
+        raise ValidationError({"effectif_entrant": "L’effectif entrant doit être positif."})
+    if effectif_entrant > effectif_sortant:
         raise ValidationError({
-            "quantite": (
-                f"Effectif disponible : {effectif_disponible}; "
-                f"quantité demandée : {sortie.quantite}."
-            )
+            "effectif_entrant": "L’effectif entrant ne peut pas dépasser l’effectif sortant."
+        })
+    if effectif_entrant != effectif_sortant and not justification_ecart.strip():
+        raise ValidationError({
+            "justification_ecart": "Une justification est obligatoire en cas d’écart."
         })
 
-    if sortie.hapa_id:
-        effectif_hapa = effectif_vivant(
-            bassin_source.pk,
-            sortie.espece,
-            a_la_date=date_locale,
-            hapa_id=sortie.hapa_id,
-        )
-        if effectif_hapa < sortie.quantite:
-            raise ValidationError({
-                "quantite": (
-                    f"Effectif disponible dans le hapa : {effectif_hapa}; "
-                    f"quantité demandée : {sortie.quantite}."
-                )
-            })
-
-    lignes = list(sortie.composition.select_related("lot_origine").all())
-    if not lignes:
-        if sortie.hapa_id:
-            lots = lots_presents_dans_hapa(sortie.hapa_id, a_la_date=date_locale)
-            if len(lots) > 1:
-                raise ValidationError({
-                    "composition": "Plusieurs lots sont présents dans le hapa : précisez la composition."
-                })
-            lot_id = next(iter(lots), None)
-            if lot_id is not None and lots[lot_id] < sortie.quantite:
-                raise ValidationError({
-                    "quantite": "Le lot présent dans le hapa ne contient pas la quantité demandée."
-                })
-            ligne_data = [{
-                "lot_origine_id": lot_id,
-                "quantite": sortie.quantite,
-                "certitude": (
-                    SortieStockComposition.Certitude.EXACTE
-                    if lot_id is not None
-                    else SortieStockComposition.Certitude.ESTIMEE
-                ),
-            }]
-        else:
-            ligne_data = [{
-                "lot_origine_id": None,
-                "quantite": sortie.quantite,
-                "certitude": SortieStockComposition.Certitude.ESTIMEE,
-            }]
-    else:
-        if sum(ligne.quantite for ligne in lignes) != sortie.quantite:
-            raise ValidationError({
-                "composition": "La somme des quantités doit correspondre à la sortie."
-            })
-        lots = (
-            lots_presents_dans_hapa(sortie.hapa_id, a_la_date=date_locale)
-            if sortie.hapa_id
-            else {}
-        )
-        cumuls = {}
-        for ligne in lignes:
-            if ligne.lot_origine_id is None or not sortie.hapa_id:
-                raise ValidationError({
-                    "composition": "Chaque lot doit être présent dans le hapa source."
-                })
-            cumuls[ligne.lot_origine_id] = (
-                cumuls.get(ligne.lot_origine_id, 0) + ligne.quantite
-            )
-        for lot_id, quantite_ligne in cumuls.items():
-            if lots.get(lot_id, 0) < quantite_ligne:
-                raise ValidationError({
-                    "composition": "Le lot indiqué n’est pas présent en quantité suffisante dans le hapa."
-                })
-        certainty = (
-            SortieStockComposition.Certitude.EXACTE
-            if len(lignes) == 1
-            else SortieStockComposition.Certitude.ESTIMEE
-        )
-        for ligne in lignes:
-            ligne.certitude = certainty
-        SortieStockComposition.objects.bulk_update(lignes, ["certitude"])
-        ligne_data = [{
-            "lot_origine_id": ligne.lot_origine_id,
-            "quantite": ligne.quantite,
-            "certitude": certainty,
-        } for ligne in lignes]
-
-    type_sortie = sortie.type_sortie
-    date_evenement = date_locale
-    content_type = ContentType.objects.get_for_model(sortie)
-    if not lignes:
-        lots_lookup = {
-            lot.pk: lot
-            for lot in Lot.objects.filter(
-                pk__in=[
-                    ligne["lot_origine_id"]
-                    for ligne in ligne_data
-                    if ligne["lot_origine_id"] is not None
-                ]
-            )
-        }
-        SortieStockComposition.objects.bulk_create([
-            SortieStockComposition(
-                sortie=sortie,
-                lot_origine=lots_lookup.get(ligne["lot_origine_id"]),
-                quantite=ligne["quantite"],
-                certitude=ligne["certitude"],
-            )
-            for ligne in ligne_data
-        ])
-    for ligne in ligne_data:
-        lot_origine = Lot.objects.get(pk=ligne["lot_origine_id"]) if ligne["lot_origine_id"] else None
-        enregistrer_mouvement(
-            bassin=bassin_source,
-            espece=sortie.espece,
-            type_mouvement=(
-                MouvementEffectif.TypeMouvement.SORTIE
-                if type_sortie == SortieStock.TypeSortie.GROSSISSEMENT
-                else MouvementEffectif.TypeMouvement.VENTE
-            ),
+    SortieStockLigne.objects.bulk_create([
+        SortieStockLigne(
+            sortie=sortie,
+            hapa=ligne["hapa"],
             quantite=ligne["quantite"],
-            date_evenement=date_evenement,
-            saisi_par=utilisateur,
-            lot_origine=lot_origine,
-            hapa=sortie.hapa,
-            operation_source_content_type=content_type,
-            operation_source_object_id=sortie.pk,
         )
-        if type_sortie == SortieStock.TypeSortie.GROSSISSEMENT:
-            enregistrer_mouvement(
-                bassin=bassin_destination,
-                espece=sortie.espece,
-                type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
-                quantite=ligne["quantite"],
-                date_evenement=date_evenement,
-                saisi_par=utilisateur,
-                lot_origine=lot_origine,
-                operation_source_content_type=content_type,
-                operation_source_object_id=sortie.pk,
-            )
+        for ligne in lignes_calculees
+    ])
+    for ligne in lignes_calculees:
+        enregistrer_mouvement_operation(
+            operation=sortie,
+            bassin=bassin_source,
+            espece=lot.espece,
+            type_mouvement=MouvementEffectif.TypeMouvement.SORTIE,
+            quantite=ligne["quantite"],
+            date_evenement=date_locale,
+            saisi_par=utilisateur,
+            lot_origine=lot,
+            hapa=ligne["hapa"],
+        )
+    enregistrer_mouvement_operation(
+        operation=sortie,
+        bassin=bassin_destination,
+        espece=lot.espece,
+        type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
+        quantite=effectif_entrant,
+        date_evenement=date_locale,
+        saisi_par=utilisateur,
+        lot_origine=lot,
+    )
 
     sortie.date_sortie = date_sortie
+    sortie.effectif_sortant = effectif_sortant
+    sortie.effectif_entrant = effectif_entrant
+    sortie.justification_ecart = justification_ecart.strip()
     sortie.statut = SortieStock.Statut.VALIDEE
     sortie.validee_par = utilisateur
     sortie.validee_le = timezone.now()
     sortie.save()
-    if type_sortie == SortieStock.TypeSortie.GROSSISSEMENT:
-        _apres_validation_grossissement(sortie)
+    _apres_validation_grossissement(sortie)
     return sortie
 
 
 @transaction.atomic
-def annuler_sortie_stock(sortie_id, motif, utilisateur):
+def annuler_sortie(sortie_id, motif, utilisateur):
     sortie = SortieStock.objects.select_for_update().get(pk=sortie_id)
     if sortie.statut not in {
         SortieStock.Statut.BROUILLON,
@@ -825,47 +1013,62 @@ def annuler_sortie_stock(sortie_id, motif, utilisateur):
     if not motif or not motif.strip():
         raise ValidationError({"motif": "Le motif d’annulation est obligatoire."})
 
-    _verrouiller_bassins_sortie(
-        sortie.bassin_source_id,
-        sortie.bassin_destination_id,
-    )
     if sortie.statut == SortieStock.Statut.VALIDEE:
+        _avant_annulation_grossissement(sortie, utilisateur)
         content_type = ContentType.objects.get_for_model(sortie)
         mouvements = MouvementEffectif.objects.filter(
             operation_source_content_type=content_type,
             operation_source_object_id=sortie.pk,
         )
-        if sortie.type_sortie == SortieStock.TypeSortie.GROSSISSEMENT:
-            # Annuler d'abord l'entrée permet de refuser si les poissons ont quitté la destination.
-            mouvements_destination = mouvements.filter(
-                bassin_id=sortie.bassin_destination_id,
-                type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
+        mouvements_operation = list(
+            mouvements.filter(
+                type_mouvement__in=[
+                    MouvementEffectif.TypeMouvement.ENTREE,
+                    MouvementEffectif.TypeMouvement.SORTIE,
+                ]
             )
-            if not mouvements_destination.exists():
-                raise ValidationError({
-                    "detail": "Mouvement d’entrée de destination introuvable."
-                })
-            for mouvement_destination in mouvements_destination.order_by("-id"):
-                annuler_mouvement(
-                    mouvement_destination.pk,
-                    motif_annulation=motif,
-                    saisi_par=utilisateur,
-                )
-
-        type_mouvement_source = (
-            MouvementEffectif.TypeMouvement.VENTE
-            if sortie.type_sortie == SortieStock.TypeSortie.VENTE
-            else MouvementEffectif.TypeMouvement.SORTIE
+            .select_for_update()
+            .select_related("bassin")
+            .order_by("id")
         )
-        mouvements_source = mouvements.filter(
-            bassin_id=sortie.bassin_source_id,
-            type_mouvement=type_mouvement_source,
-        )
-        if not mouvements_source.exists():
+        mouvements_destination = [
+            mouvement
+            for mouvement in mouvements_operation
+            if (
+                mouvement.bassin_id == sortie.bassin_destination_id
+                and mouvement.type_mouvement
+                == MouvementEffectif.TypeMouvement.ENTREE
+            )
+        ]
+        mouvements_source = [
+            mouvement
+            for mouvement in mouvements_operation
+            if mouvement.type_mouvement == MouvementEffectif.TypeMouvement.SORTIE
+        ]
+        if len(mouvements_source) != sortie.lignes.count():
             raise ValidationError({
-                "detail": "Mouvement de sortie source introuvable."
+                "detail": "Les mouvements de sortie source sont incomplets."
             })
-        for mouvement_source in mouvements_source.order_by("-id"):
+        if len(mouvements_destination) != 1:
+            raise ValidationError({
+                "detail": "Mouvement d’entrée de destination introuvable."
+            })
+        bassin_ids = sorted({
+            sortie.bassin_destination_id,
+            *(mouvement.bassin_id for mouvement in mouvements_source),
+        })
+        list(
+            Bassin.objects.select_for_update()
+            .filter(pk__in=bassin_ids)
+            .order_by("pk")
+        )
+        for mouvement_destination in reversed(mouvements_destination):
+            annuler_mouvement(
+                mouvement_destination.pk,
+                motif_annulation=motif,
+                saisi_par=utilisateur,
+            )
+        for mouvement_source in reversed(mouvements_source):
             annuler_mouvement(
                 mouvement_source.pk,
                 motif_annulation=motif,

@@ -3,18 +3,6 @@ from django.utils import timezone
 
 from .models import MouvementEffectif
 
-HAPA_OBLIGATOIRE = True
-
-
-def bassin_a_des_hapas(bassin_id):
-    from apps.bassins.models import Hapa
-
-    return Hapa.objects.filter(
-        bassin_id=bassin_id,
-        actif=True,
-        statut="ACTIF",
-    ).exists()
-
 
 def effectif_vivant(bassin_id, espece, a_la_date=None, hapa_id=None):
     date_reference = a_la_date or timezone.localdate()

@@ -12,7 +12,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
-from apps.bassins.models import Bassin
+from apps.bassins.models import Bassin, Hapa
 from apps.core.models import Role
 from apps.ecloserie.models import Eclosion
 from apps.lots.models import Lot
@@ -52,7 +52,6 @@ class EffectifServiceTests(TestCase):
             capacity=100,
             statut=Bassin.Statut.ACTIF,
         )
-
     def _create_role(self, libelle):
         return Role.objects.create(libelle=libelle, description="Test")
 
@@ -162,6 +161,12 @@ class EvenementMortalitePerteTests(TestCase):
             capacity=100,
             statut=Bassin.Statut.ACTIF,
         )
+        self.hapa = Hapa.objects.create(
+            bassin=self.bassin,
+            nom="MORT-A",
+            actif=True,
+            statut=Hapa.Statut.ACTIF,
+        )
         self.client = APIClient()
         self.client.force_authenticate(self.user)
         self.today = timezone.localdate()
@@ -176,6 +181,7 @@ class EvenementMortalitePerteTests(TestCase):
             quantite=quantity,
             date_evenement=self.today,
             saisi_par=self.user,
+            hapa=self.hapa,
         )
 
     def test_mortality_and_loss_create_linked_debit_movements(self):
@@ -188,6 +194,7 @@ class EvenementMortalitePerteTests(TestCase):
             quantite=2,
             date_evenement=self.today,
             saisi_par=self.user,
+            hapa=self.hapa,
             cause_mortalite=self.cause,
         )
         loss = enregistrer_evenement_mortalite_perte(
@@ -197,6 +204,7 @@ class EvenementMortalitePerteTests(TestCase):
             quantite=3,
             date_evenement=self.today,
             saisi_par=self.user,
+            hapa=self.hapa,
             categorie_perte=self.categorie,
             justification="Comptage physique inférieur au registre",
         )
@@ -212,14 +220,15 @@ class EvenementMortalitePerteTests(TestCase):
         self._add_stock()
 
         response = self.client.post(
-            "/api/v1/effectifs/evenements/",
+            "/api/v1/effectifs/evenements-mortalite-perte/",
             {
-                "bassin": self.bassin.pk,
+                "id_bassin": self.bassin.pk,
+                "id_hapa": self.hapa.pk,
                 "espece": "CARPE",
                 "type_evenement": "PERTE",
                 "quantite": 2,
                 "date_evenement": self.today.isoformat(),
-                "categorie_perte": self.categorie.pk,
+                "id_categorie": self.categorie.pk,
                 "justification": "   ",
             },
             format="json",
@@ -253,17 +262,19 @@ class EvenementMortalitePerteTests(TestCase):
                             bassin=self.bassin,
                             espece="CARPE",
                             quantite=1,
-                            date_evenement=self.today,
-                            saisi_par=self.user,
+                            date_evenement=timezone.now(),
+                            hapa=self.hapa,
+                            utilisateur=self.user,
                             **event_fields,
                         )
 
     def test_mortality_requires_cause_and_rejects_excess_quantity(self):
         self._add_stock(quantity=5)
         missing_cause = self.client.post(
-            "/api/v1/effectifs/evenements/",
+            "/api/v1/effectifs/evenements-mortalite-perte/",
             {
-                "bassin": self.bassin.pk,
+                "id_bassin": self.bassin.pk,
+                "id_hapa": self.hapa.pk,
                 "espece": "CARPE",
                 "type_evenement": "MORTALITE",
                 "quantite": 1,
@@ -274,14 +285,15 @@ class EvenementMortalitePerteTests(TestCase):
         self.assertEqual(missing_cause.status_code, 400, missing_cause.data)
 
         excessive = self.client.post(
-            "/api/v1/effectifs/evenements/",
+            "/api/v1/effectifs/evenements-mortalite-perte/",
             {
-                "bassin": self.bassin.pk,
+                "id_bassin": self.bassin.pk,
+                "id_hapa": self.hapa.pk,
                 "espece": "CARPE",
                 "type_evenement": "MORTALITE",
                 "quantite": 6,
                 "date_evenement": self.today.isoformat(),
-                "cause_mortalite": self.cause.pk,
+                "id_cause": self.cause.pk,
             },
             format="json",
         )
@@ -289,7 +301,7 @@ class EvenementMortalitePerteTests(TestCase):
         self.assertFalse(EvenementMortalitePerte.objects.exists())
         self.assertEqual(MouvementEffectif.objects.count(), 1)
 
-    def test_journal_accepts_each_basin_category(self):
+    def test_journal_respects_hapa_rules_by_basin_category(self):
         for category in Bassin.Categorie:
             with self.subTest(category=category):
                 basin = Bassin.objects.create(
@@ -298,8 +310,20 @@ class EvenementMortalitePerteTests(TestCase):
                     capacity=100,
                     statut=Bassin.Statut.ACTIF,
                 )
+                hapa = None
+                if category in {
+                    Bassin.Categorie.TRAITEMENT,
+                    Bassin.Categorie.STOCKS,
+                }:
+                    hapa = Hapa.objects.create(
+                        bassin=basin,
+                        nom=f"MORT-{category.value}",
+                        actif=True,
+                        statut=Hapa.Statut.ACTIF,
+                    )
                 enregistrer_mouvement(
                     bassin=basin,
+                    hapa=hapa,
                     espece="CARPE",
                     type_mouvement=MouvementEffectif.TypeMouvement.ENTREE,
                     quantite=2,
@@ -309,6 +333,7 @@ class EvenementMortalitePerteTests(TestCase):
 
                 event = enregistrer_evenement_mortalite_perte(
                     bassin=basin,
+                    hapa=hapa,
                     espece="CARPE",
                     type_evenement=EvenementMortalitePerte.TypeEvenement.MORTALITE,
                     quantite=1,
@@ -322,18 +347,19 @@ class EvenementMortalitePerteTests(TestCase):
     def test_inactive_references_basin_and_future_date_are_rejected(self):
         self._add_stock()
         payload = {
-            "bassin": self.bassin.pk,
+            "id_bassin": self.bassin.pk,
+            "id_hapa": self.hapa.pk,
             "espece": "CARPE",
             "type_evenement": "MORTALITE",
             "quantite": 1,
             "date_evenement": self.today.isoformat(),
-            "cause_mortalite": self.cause.pk,
+            "id_cause": self.cause.pk,
         }
 
         self.cause.actif = False
         self.cause.save(update_fields=["actif"])
         inactive_cause = self.client.post(
-            "/api/v1/effectifs/evenements/",
+            "/api/v1/effectifs/evenements-mortalite-perte/",
             payload,
             format="json",
         )
@@ -344,7 +370,7 @@ class EvenementMortalitePerteTests(TestCase):
         self.bassin.statut = Bassin.Statut.INACTIF
         self.bassin.save(update_fields=["statut"])
         inactive_basin = self.client.post(
-            "/api/v1/effectifs/evenements/",
+            "/api/v1/effectifs/evenements-mortalite-perte/",
             payload,
             format="json",
         )
@@ -354,7 +380,7 @@ class EvenementMortalitePerteTests(TestCase):
         self.bassin.save(update_fields=["statut"])
         payload["date_evenement"] = (self.today + timedelta(days=1)).isoformat()
         future_date = self.client.post(
-            "/api/v1/effectifs/evenements/",
+            "/api/v1/effectifs/evenements-mortalite-perte/",
             payload,
             format="json",
         )
@@ -371,21 +397,22 @@ class EvenementMortalitePerteTests(TestCase):
             quantite=2,
             date_evenement=self.today,
             saisi_par=self.user,
+            hapa=self.hapa,
             cause_mortalite=self.cause,
         )
 
         response = self.client.post(
-            f"/api/v1/effectifs/evenements/{event.pk}/annuler/",
-            {"motif_annulation": "Événement saisi par erreur"},
+            f"/api/v1/effectifs/evenements-mortalite-perte/{event.pk}/annuler/",
+            {"motif": "Événement saisi par erreur"},
             format="json",
         )
 
         self.assertEqual(response.status_code, 201, response.data)
         event.refresh_from_db()
-        self.assertEqual(event.statut, EvenementMortalitePerte.Statut.ANNULE)
+        self.assertEqual(event.statut, EvenementMortalitePerte.Statut.ANNULEE)
         self.assertEqual(
-            response.data["mouvement_annulation"]["annule_mouvement"],
-            event.mouvement_id,
+            response.data["statut"],
+            EvenementMortalitePerte.Statut.ANNULEE,
         )
         self.assertEqual(
             solde_bassin_espece_date(self.bassin.pk, "CARPE", self.today),
@@ -393,8 +420,8 @@ class EvenementMortalitePerteTests(TestCase):
         )
 
         repeated = self.client.post(
-            f"/api/v1/effectifs/evenements/{event.pk}/annuler/",
-            {"motif_annulation": "Deuxième tentative"},
+            f"/api/v1/effectifs/evenements-mortalite-perte/{event.pk}/annuler/",
+            {"motif": "Deuxième tentative"},
             format="json",
         )
         self.assertEqual(repeated.status_code, 400, repeated.data)
@@ -409,16 +436,17 @@ class EvenementMortalitePerteTests(TestCase):
             quantite=1,
             date_evenement=self.today,
             saisi_par=self.user,
+            hapa=self.hapa,
             cause_mortalite=self.cause,
         )
 
         response = self.client.get(
-            "/api/v1/effectifs/evenements/",
+            "/api/v1/effectifs/evenements-mortalite-perte/",
             {
                 "bassin": self.bassin.pk,
                 "espece": "CARPE",
-                "date_debut": self.today.isoformat(),
-                "date_fin": self.today.isoformat(),
+                "date_min": self.today.isoformat(),
+                "date_max": self.today.isoformat(),
                 "cause": self.cause.pk,
             },
         )

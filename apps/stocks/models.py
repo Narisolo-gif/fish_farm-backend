@@ -1,12 +1,15 @@
 
 from django.conf import settings
 from django.db import models
-
-from apps.bassins.models import Hapa
+from django.utils import timezone
 
 
 class MiseEnStock(models.Model):
     """Enregistrement de l'entrée physique d'un lot dans un bassin de stock."""
+
+    class Finalite(models.TextChoices):
+        GROSSISSEMENT = "GROSSISSEMENT", "Grossissement"
+        VENTE = "VENTE", "Vente"
 
     lot = models.OneToOneField(
         "lots.Lot",
@@ -20,19 +23,18 @@ class MiseEnStock(models.Model):
         related_name="mises_en_stock",
     )
 
-    hapa = models.ForeignKey(
-        Hapa,
-        on_delete=models.PROTECT,
-        related_name="mises_en_stock",
+    finalite = models.CharField(
+        max_length=20,
+        choices=Finalite.choices,
         null=True,
         blank=True,
     )
 
-    # Quantité réellement présente dans le bassin après le transfert.
+    # Total des lignes, calculé par le service.
     effectif_entrant = models.PositiveIntegerField()
 
-    # La date est enregistrée automatiquement à la création.
-    date_mise_en_stock = models.DateTimeField(auto_now_add=True)
+    # La date de l'événement peut être antérieure à sa saisie.
+    date_mise_en_stock = models.DateTimeField(default=timezone.now)
 
     # L'utilisateur est fourni par le backend, jamais par le client.
     utilisateur = models.ForeignKey(
@@ -74,3 +76,30 @@ class MiseEnStock(models.Model):
 
     def __str__(self):
         return f"Mise en stock du lot {self.lot.reference}"
+
+
+class MiseEnStockHapa(models.Model):
+    mise_en_stock = models.ForeignKey(
+        MiseEnStock,
+        on_delete=models.PROTECT,
+        related_name="lignes_hapas",
+    )
+    hapa = models.ForeignKey(
+        "bassins.Hapa",
+        on_delete=models.PROTECT,
+        related_name="lignes_mise_en_stock",
+    )
+    effectif_entrant = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["mise_en_stock", "hapa"],
+                name="unique_mise_en_stock_hapa",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(effectif_entrant__gt=0),
+                name="mise_en_stock_hapa_effectif_positif",
+            ),
+        ]

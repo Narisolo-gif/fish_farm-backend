@@ -3,6 +3,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 from apps.bassins.models import Bassin, Hapa
 from apps.lots.models import Lot
@@ -190,14 +191,37 @@ class CategoriePerte(models.Model):
         return self.libelle
 
 
+class BlocageSaisie(models.Model):
+    hapa = models.ForeignKey(
+        Hapa,
+        on_delete=models.PROTECT,
+        related_name="blocages_saisie",
+    )
+    operation_type = models.CharField(max_length=100)
+    operation_id = models.PositiveIntegerField()
+    motif = models.TextField()
+    actif = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    leve_le = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["hapa", "operation_type", "operation_id"],
+                condition=models.Q(actif=True),
+                name="blocage_saisie_hapa_operation_actif_unique",
+            ),
+        ]
+
+
 class EvenementMortalitePerte(models.Model):
     class TypeEvenement(models.TextChoices):
         MORTALITE = "MORTALITE", "Mortalité"
         PERTE = "PERTE", "Perte"
 
     class Statut(models.TextChoices):
-        ACTIF = "ACTIF", "Actif"
-        ANNULE = "ANNULE", "Annulé"
+        VALIDE = "VALIDE", "Validé"
+        ANNULEE = "ANNULEE", "Annulé"
 
     bassin = models.ForeignKey(
         Bassin,
@@ -217,7 +241,7 @@ class EvenementMortalitePerte(models.Model):
         choices=TypeEvenement.choices,
     )
     quantite = models.PositiveIntegerField()
-    date_evenement = models.DateField()
+    date_evenement = models.DateTimeField(default=timezone.now)
     cause_mortalite = models.ForeignKey(
         CauseMortalite,
         on_delete=models.PROTECT,
@@ -233,6 +257,16 @@ class EvenementMortalitePerte(models.Model):
         blank=True,
     )
     justification = models.TextField(blank=True, default="")
+    observation = models.TextField(blank=True, default="")
+    motif_annulation = models.TextField(blank=True, default="")
+    annulee_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="evenements_mortalite_perte_annules",
+        null=True,
+        blank=True,
+    )
+    annulee_le = models.DateTimeField(null=True, blank=True)
     mouvement = models.OneToOneField(
         MouvementEffectif,
         on_delete=models.PROTECT,
@@ -243,17 +277,17 @@ class EvenementMortalitePerte(models.Model):
     statut = models.CharField(
         max_length=10,
         choices=Statut.choices,
-        default=Statut.ACTIF,
+        default=Statut.VALIDE,
     )
-    saisi_par = models.ForeignKey(
+    utilisateur = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
-        related_name="evenements_mortalite_perte",
+        related_name="evenements_mortalite_perte_crees",
     )
-    saisi_le = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-date_evenement", "-saisi_le", "-id"]
+        ordering = ["-date_evenement", "-id"]
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(quantite__gt=0),
@@ -275,11 +309,18 @@ class EvenementMortalitePerte(models.Model):
                 ),
                 name="evenement_mortalite_perte_referentiel_valide",
             ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(statut="ANNULEE")
+                    | models.Q(motif_annulation__gt="")
+                ),
+                name="evenement_mortalite_perte_annulation_motivee",
+            ),
         ]
         indexes = [
             models.Index(
-                fields=["bassin", "espece", "date_evenement"],
-                name="evt_mort_perte_periode_idx",
+                fields=["bassin", "hapa", "date_evenement"],
+                name="evt_mort_perte_hapa_date_idx",
             ),
         ]
         verbose_name = "Événement de mortalité/perte"
@@ -308,7 +349,6 @@ class EvenementMortalitePerte(models.Model):
 class SortieStock(models.Model):
     class TypeSortie(models.TextChoices):
         GROSSISSEMENT = "GROSSISSEMENT", "Grossissement"
-        VENTE = "VENTE", "Vente"
 
     class Statut(models.TextChoices):
         BROUILLON = "BROUILLON", "Brouillon"
@@ -318,35 +358,29 @@ class SortieStock(models.Model):
     type_sortie = models.CharField(
         max_length=20,
         choices=TypeSortie.choices,
+        default=TypeSortie.GROSSISSEMENT,
     )
-    bassin_source = models.ForeignKey(
-        Bassin,
+    lot = models.ForeignKey(
+        Lot,
         on_delete=models.PROTECT,
         related_name="sorties_stock",
     )
     bassin_destination = models.ForeignKey(
         Bassin,
         on_delete=models.PROTECT,
-        related_name="entrees_sortie_stock",
-        null=True,
-        blank=True,
-    )
-    hapa = models.ForeignKey(
-        Hapa,
-        on_delete=models.PROTECT,
-        related_name="sorties_stock",
-        null=True,
-        blank=True,
+        related_name="sorties_stock_destination",
     )
     espece = models.CharField(max_length=20, choices=Lot.Espece.choices)
-    quantite = models.PositiveIntegerField()
-    date_sortie = models.DateTimeField()
+    date_sortie = models.DateTimeField(default=timezone.now)
     statut = models.CharField(
         max_length=10,
         choices=Statut.choices,
         default=Statut.BROUILLON,
     )
     observation = models.TextField(blank=True)
+    effectif_sortant = models.PositiveIntegerField(null=True, blank=True)
+    effectif_entrant = models.PositiveIntegerField(null=True, blank=True)
+    justification_ecart = models.TextField(blank=True, default="")
     utilisateur = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -368,7 +402,7 @@ class SortieStock(models.Model):
         blank=True,
     )
     annulee_le = models.DateTimeField(null=True, blank=True)
-    motif_annulation = models.TextField(null=True, blank=True)
+    motif_annulation = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -376,72 +410,68 @@ class SortieStock(models.Model):
         ordering = ["-date_sortie", "-id"]
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(quantite__gt=0),
-                name="sortie_stock_quantite_positive",
+                condition=(
+                    models.Q(effectif_sortant__isnull=True)
+                    | models.Q(effectif_entrant__isnull=True)
+                    | models.Q(effectif_entrant__lte=models.F("effectif_sortant"))
+                ),
+                name="sortie_stock_entrant_lte_sortant",
             ),
             models.CheckConstraint(
                 condition=(
-                    models.Q(
-                        type_sortie="GROSSISSEMENT",
-                        bassin_destination__isnull=False,
-                    )
+                    ~models.Q(statut="VALIDEE")
                     | models.Q(
-                        type_sortie="VENTE",
-                        bassin_destination__isnull=True,
+                        effectif_sortant__isnull=False,
+                        effectif_entrant__isnull=False,
                     )
                 ),
-                name="sortie_stock_destination_type_valide",
-            ),
-            models.CheckConstraint(
-                condition=(
-                    models.Q(bassin_destination__isnull=True)
-                    | ~models.Q(bassin_destination=models.F("bassin_source"))
-                ),
-                name="sortie_stock_bassins_distincts",
+                name="sortie_stock_validee_effectifs_requis",
             ),
             models.CheckConstraint(
                 condition=(
                     ~models.Q(statut="ANNULEE")
-                    | models.Q(
-                        motif_annulation__isnull=False,
-                        motif_annulation__gt="",
-                    )
+                    | models.Q(motif_annulation__gt="")
                 ),
                 name="sortie_stock_annulation_motivee",
             ),
+            models.UniqueConstraint(
+                fields=["lot"],
+                condition=models.Q(statut__in=["BROUILLON", "VALIDEE"]),
+                name="sortie_stock_lot_active_unique",
+            ),
         ]
 
+    @property
+    def ecart_effectif(self):
+        if self.effectif_sortant is None or self.effectif_entrant is None:
+            return None
+        return self.effectif_entrant - self.effectif_sortant
+
     def __str__(self):
-        return f"{self.get_type_sortie_display()} / {self.bassin_source.reference} / {self.quantite}"
+        return f"{self.get_type_sortie_display()} / {self.lot.reference}"
 
 
-class SortieStockComposition(models.Model):
-    class Certitude(models.TextChoices):
-        EXACTE = "EXACTE", "Exacte"
-        ESTIMEE = "ESTIMEE", "Estimée"
-
+class SortieStockLigne(models.Model):
     sortie = models.ForeignKey(
         SortieStock,
-        on_delete=models.CASCADE,
-        related_name="composition",
-    )
-    lot_origine = models.ForeignKey(
-        Lot,
         on_delete=models.PROTECT,
-        related_name="compositions_sortie_stock",
-        null=True,
-        blank=True,
+        related_name="lignes",
+    )
+    hapa = models.ForeignKey(
+        Hapa,
+        on_delete=models.PROTECT,
+        related_name="lignes_sortie_stock",
     )
     quantite = models.PositiveIntegerField()
-    certitude = models.CharField(
-        max_length=10,
-        choices=Certitude.choices,
-    )
 
     class Meta:
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(quantite__gt=0),
-                name="sortie_stock_composition_quantite_positive",
+                name="sortie_stock_ligne_quantite_positive",
+            ),
+            models.UniqueConstraint(
+                fields=["sortie", "hapa"],
+                name="sortie_stock_ligne_hapa_unique",
             ),
         ]

@@ -1,4 +1,6 @@
 
+from django.utils import timezone
+
 from rest_framework import serializers
 
 from apps.bassins.models import Bassin, Hapa
@@ -9,6 +11,15 @@ from .services import (
     creer_mise_en_stock,
     modifier_mise_en_stock,
 )
+
+
+class MiseEnStockHapaSerializer(serializers.Serializer):
+    id_hapa = serializers.PrimaryKeyRelatedField(
+        source="hapa",
+        queryset=Hapa.objects.all(),
+    )
+    nom_hapa = serializers.CharField(source="hapa.nom", read_only=True)
+    effectif_entrant = serializers.IntegerField(min_value=1)
 
 
 class MiseEnStockSerializer(serializers.ModelSerializer):
@@ -23,13 +34,17 @@ class MiseEnStockSerializer(serializers.ModelSerializer):
         source="bassin",
         queryset=Bassin.objects.all(),
     )
-    id_hapa = serializers.PrimaryKeyRelatedField(
-        source="hapa",
-        queryset=Hapa.objects.all(),
+    finalite = serializers.ChoiceField(
+        choices=MiseEnStock.Finalite.choices,
         required=False,
-        allow_null=True,
     )
-    nom_hapa = serializers.CharField(source="hapa.nom", read_only=True, allow_null=True)
+    hapas = MiseEnStockHapaSerializer(
+        many=True,
+        source="lignes_hapas",
+        required=False,
+    )
+    effectif_entrant = serializers.IntegerField(required=False, min_value=1)
+    date_mise_en_stock = serializers.DateTimeField(required=False)
 
     reference_lot = serializers.CharField(
         source="lot.reference",
@@ -57,8 +72,8 @@ class MiseEnStockSerializer(serializers.ModelSerializer):
             "reference_lot",
             "id_bassin",
             "reference_bassin",
-            "id_hapa",
-            "nom_hapa",
+            "finalite",
+            "hapas",
             "effectif_entrant",
             "ecart_effectif",
             "date_mise_en_stock",
@@ -70,7 +85,6 @@ class MiseEnStockSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
-            "date_mise_en_stock",
             "id_user",
             "ecart_effectif",
             "created_at",
@@ -84,22 +98,48 @@ class MiseEnStockSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_date_mise_en_stock(self, value):
+        if timezone.localtime(value).date() > timezone.localdate():
+            raise serializers.ValidationError(
+                "La date de mise en stock ne peut pas être dans le futur."
+            )
+        return value
+
     def validate(self, attrs):
         """Valide le bassin et la justification avant l'enregistrement."""
+
+        if self.instance is None and not attrs.get("finalite"):
+            raise serializers.ValidationError({
+                "finalite": "La finalité est obligatoire à la création."
+            })
+        if self.instance is not None and "finalite" in attrs:
+            raise serializers.ValidationError({
+                "finalite": "La finalité ne peut pas être modifiée."
+            })
 
         lot = attrs.get("lot", getattr(self.instance, "lot", None))
         bassin = attrs.get(
             "bassin",
             getattr(self.instance, "bassin", None),
         )
-        effectif = attrs.get(
-            "effectif_entrant",
-            getattr(self.instance, "effectif_entrant", None),
+        hapas = attrs.get("lignes_hapas")
+        effectif = (
+            sum(ligne["effectif_entrant"] for ligne in hapas)
+            if hapas is not None
+            else attrs.get(
+                "effectif_entrant",
+                getattr(self.instance, "effectif_entrant", None),
+            )
         )
         justification = attrs.get(
             "justification_ecart",
             getattr(self.instance, "justification_ecart", ""),
         )
+
+        if self.instance is None and not hapas:
+            raise serializers.ValidationError({
+                "hapas": "Les hapas et leurs effectifs entrants sont obligatoires."
+            })
 
         if bassin:
             if bassin.statut != Bassin.Statut.ACTIF:
@@ -111,6 +151,20 @@ class MiseEnStockSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "id_bassin": (
                         "Le bassin doit être de catégorie STOCKS."
+                    )
+                })
+            if (
+                self.instance is None
+                and not Hapa.objects.filter(
+                    bassin=bassin,
+                    actif=True,
+                    statut=Hapa.Statut.ACTIF,
+                ).exists()
+            ):
+                raise serializers.ValidationError({
+                    "hapas": (
+                        "Aucun hapa actif dans le bassin de stock : "
+                        "créez d'abord des hapas."
                     )
                 })
 
@@ -133,6 +187,15 @@ class MiseEnStockSerializer(serializers.ModelSerializer):
                     "id_lot": (
                         "Le traitement du lot doit être clôturé "
                         "avant sa mise en stock."
+                    )
+                })
+            if (
+                traitement is not None
+                and not traitement.lignes_hapas.exists()
+            ):
+                raise serializers.ValidationError({
+                    "hapas": (
+                        "Traitement sans hapas : supprimez-le et recréez-le."
                     )
                 })
 
