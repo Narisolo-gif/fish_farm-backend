@@ -11,9 +11,10 @@ def creer_hapa(validated_data):
     if bassin.categorie not in {
         Bassin.Categorie.STOCKS,
         Bassin.Categorie.TRAITEMENT,
+         Bassin.Categorie.REPRODUCTION,
     }:
         raise ValidationError({
-            "bassin": "Le bassin du hapa doit être de catégorie STOCKS ou TRAITEMENT."
+            "bassin": "Le bassin du hapa doit être de catégorie STOCKS, TRAITEMENT ou REPRODUCTION."
         })
     donnees["bassin"] = bassin
     if "actif" in donnees:

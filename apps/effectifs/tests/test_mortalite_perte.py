@@ -263,14 +263,34 @@ class MortalitesPertesTests(TestCase):
                     )
                 self.assertIn("id_hapa", error.exception.detail)
 
-        for bassin in (self.reproduction, self.grossissement):
-            hapa = self._hapa(bassin, f"H-{bassin.pk}")
-            with self.assertRaises(ValidationError) as error:
-                enregistrer_evenement(
-                    self._event_data(bassin, hapa=hapa, cause=self.cause),
-                    self.user,
-                )
-            self.assertIn("id_hapa", error.exception.detail)
+        hapa_grossissement = self._hapa(self.grossissement, "H-GROSS")
+        with self.assertRaises(ValidationError) as error:
+            enregistrer_evenement(
+                self._event_data(
+                    self.grossissement,
+                    hapa=hapa_grossissement,
+                    cause=self.cause,
+                ),
+                self.user,
+            )
+        self.assertIn("id_hapa", error.exception.detail)
+
+    def test_hapa_facultatif_en_reproduction(self):
+        hapa = self._hapa(self.reproduction, "H-REPRO")
+        self._ajouter_effectif(self.reproduction, Lot.Espece.CARPE, 5, hapa=hapa)
+        self._ajouter_effectif(self.reproduction, Lot.Espece.CARPE, 5)
+
+        avec_hapa = enregistrer_evenement(
+            self._event_data(self.reproduction, hapa=hapa, cause=self.cause),
+            self.user,
+        )
+        sans_hapa = enregistrer_evenement(
+            self._event_data(self.reproduction, cause=self.cause),
+            self.user,
+        )
+
+        self.assertEqual(avec_hapa.hapa_id, hapa.pk)
+        self.assertIsNone(sans_hapa.hapa_id)
 
     def test_hapa_autre_bassin_ou_inactif_refuse(self):
         other_treatment = self._bassin(

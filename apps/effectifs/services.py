@@ -107,10 +107,8 @@ def _verifier_hapa(bassin, hapa, *, champ="id_hapa"):
         Bassin.Categorie.TRAITEMENT,
         Bassin.Categorie.STOCKS,
     }
-    hapa_interdit = bassin.categorie in {
-        Bassin.Categorie.REPRODUCTION,
-        Bassin.Categorie.GROSSISSEMENT,
-    }
+    # Un bassin de reproduction peut contenir des hapas ou non : le hapa y est facultatif.
+    hapa_interdit = bassin.categorie == Bassin.Categorie.GROSSISSEMENT
     if hapa is None:
         if hapa_obligatoire:
             raise ValidationError({

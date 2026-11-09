@@ -142,6 +142,9 @@ class ConsommationProvendeSerializer(serializers.ModelSerializer):
             "quantite_kg": {"min_value": 0},
             "observation": {"required": False, "allow_blank": True},
         }
+        # DRF transforme les UniqueConstraint en validateurs qui rendent `id_hapa`
+        # obligatoire ; l'unicité est déjà contrôlée par enregistrer_distribution.
+        validators = []
 
     def validate_date_distribution(self, value):
         if value is not None and timezone.is_naive(value):

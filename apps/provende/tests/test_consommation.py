@@ -247,7 +247,7 @@ class ConsommationProvendeTests(TestCase):
         self.assertEqual(duplicate.status_code, 400, duplicate.data)
         self.assertIn("date_distribution", duplicate.data)
 
-    def test_categories_exigent_ou_interdisent_le_hapa(self):
+    def test_hapa_obligatoire_en_traitement_et_stocks(self):
         treatment_without_hapa = self._bassin(
             "CONS-TRAIT-SANS",
             Bassin.Categorie.TRAITEMENT,
@@ -263,17 +263,60 @@ class ConsommationProvendeTests(TestCase):
             response = self._post(bassin=bassin, date_distribution=self._date(1))
             self.assertEqual(response.status_code, 400, response.data)
             self.assertIn("id_hapa", response.data)
+            self.assertIn("obligatoire", str(response.data["id_hapa"]))
 
-        for bassin in (self.reproduction, self.grossissement):
-            hapa = self._hapa(bassin, f"H-{bassin.pk}")
-            self._ajouter_effectif(bassin, quantity=5)
+    def test_hapa_facultatif_en_grossissement_sans_hapa(self):
+        self._ajouter_effectif(self.grossissement, quantity=5)
+
+        response = self._post(
+            bassin=self.grossissement,
+            date_distribution=self._date(),
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertIsNone(response.data["id_hapa"])
+
+    def test_hapa_facultatif_accepte_en_reproduction(self):
+        hapa = self._hapa(self.reproduction, "REPRO-A")
+        self._ajouter_effectif(self.reproduction, hapa, quantity=5)
+
+        response = self._post(
+            bassin=self.reproduction,
+            hapa=hapa,
+            date_distribution=self._date(),
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["id_hapa"], hapa.pk)
+
+    def test_hapa_facultatif_invalide_refuse(self):
+        self._ajouter_effectif(self.grossissement, quantity=5)
+        inactif = self._hapa(self.grossissement, "GROSS-INACTIF", actif=False)
+
+        for hapa in (self.treatment_hapa, inactif):
             response = self._post(
-                bassin=bassin,
+                bassin=self.grossissement,
                 hapa=hapa,
-                date_distribution=self._date(2),
+                date_distribution=self._date(),
             )
             self.assertEqual(response.status_code, 400, response.data)
             self.assertIn("id_hapa", response.data)
+
+    def test_jours_manquants_grossissement_sans_hapa(self):
+        self._ajouter_effectif(
+            self.grossissement,
+            quantity=5,
+            day=self.today - timedelta(days=1),
+        )
+        self._post(bassin=self.grossissement, date_distribution=self._date())
+
+        resultats = jours_manquants(
+            self.grossissement.pk,
+            self.today - timedelta(days=1),
+            self.today,
+        )
+
+        self.assertEqual(resultats, [self.today - timedelta(days=1)])
 
     def test_hapa_d_un_autre_bassin_ou_inactif_refuse(self):
         autre_bassin = self._bassin(

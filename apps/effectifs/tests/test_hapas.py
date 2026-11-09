@@ -172,18 +172,39 @@ class HapaTests(TestCase):
                 saisi_par=self.user,
             )
             self.assertIsNone(movement.hapa_id)
-            hapa = self._hapa(bassin, f"HAPA-{category}")
-            with self.assertRaises(ValidationError) as error:
-                enregistrer_mouvement(
-                    bassin=bassin,
-                    espece="CARPE",
-                    type_mouvement="ENTREE",
-                    quantite=1,
-                    date_evenement=self.today,
-                    saisi_par=self.user,
-                    hapa=hapa,
-                )
-            self.assertIn("id_hapa", error.exception.detail)
+
+        # Reproduction : hapa facultatif, donc accepté s'il est fourni.
+        reproduction = Bassin.objects.get(
+            reference=f"{Bassin.Categorie.REPRODUCTION}-SANS-HAPA"
+        )
+        hapa_reproduction = self._hapa(reproduction, "HAPA-REPRODUCTION")
+        movement = enregistrer_mouvement(
+            bassin=reproduction,
+            espece="CARPE",
+            type_mouvement="ENTREE",
+            quantite=1,
+            date_evenement=self.today,
+            saisi_par=self.user,
+            hapa=hapa_reproduction,
+        )
+        self.assertEqual(movement.hapa_id, hapa_reproduction.pk)
+
+        # Grossissement : hapa toujours interdit.
+        grossissement = Bassin.objects.get(
+            reference=f"{Bassin.Categorie.GROSSISSEMENT}-SANS-HAPA"
+        )
+        hapa_grossissement = self._hapa(grossissement, "HAPA-GROSSISSEMENT")
+        with self.assertRaises(ValidationError) as error:
+            enregistrer_mouvement(
+                bassin=grossissement,
+                espece="CARPE",
+                type_mouvement="ENTREE",
+                quantite=1,
+                date_evenement=self.today,
+                saisi_par=self.user,
+                hapa=hapa_grossissement,
+            )
+        self.assertIn("id_hapa", error.exception.detail)
 
     def test_mise_en_stock_refuse_hapa_d_un_autre_bassin(self):
         autre_bassin = self._bassin("STOCK-AUTRE")

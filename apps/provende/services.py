@@ -10,12 +10,47 @@ from rest_framework.exceptions import ValidationError
 
 from apps.bassins.models import Bassin, Hapa
 from apps.effectifs.calculs import effectifs_du_bassin, effectifs_par_hapa
-from apps.effectifs.services import _verifier_hapa
 from apps.effectifs.models import MouvementEffectif
 
 from .models import ConsommationProvende, Provende, TypeProvende
 
 MAX_DISTRIBUTIONS_PAR_JOUR = 3
+
+# Seuls ces bassins sont organisés en hapas ; ailleurs, la distribution peut cibler le bassin entier.
+CATEGORIES_HAPA_OBLIGATOIRE = {
+    Bassin.Categorie.TRAITEMENT,
+    Bassin.Categorie.STOCKS,
+}
+
+
+def _verifier_hapa_distribution(bassin, hapa):
+    """Valide la cible hapa d'une distribution et retourne le hapa verrouillé."""
+    if hapa is None:
+        if bassin.categorie not in CATEGORIES_HAPA_OBLIGATOIRE:
+            return None
+        if not Hapa.objects.filter(
+            bassin=bassin,
+            actif=True,
+            statut=Hapa.Statut.ACTIF,
+        ).exists():
+            raise ValidationError({
+                "id_hapa": "Aucun hapa actif dans ce bassin : créez d'abord des hapas."
+            })
+        raise ValidationError({
+            "id_hapa": "Un hapa est obligatoire pour ce bassin."
+        })
+
+    try:
+        hapa = Hapa.objects.select_for_update().get(pk=hapa.pk)
+    except Hapa.DoesNotExist as exc:
+        raise ValidationError({"id_hapa": "Hapa introuvable."}) from exc
+    if hapa.bassin_id != bassin.pk:
+        raise ValidationError({
+            "id_hapa": "Le hapa doit appartenir au bassin indiqué."
+        })
+    if not hapa.actif or hapa.statut != Hapa.Statut.ACTIF:
+        raise ValidationError({"id_hapa": "Le hapa sélectionné est inactif."})
+    return hapa
 
 
 @transaction.atomic
@@ -43,25 +78,7 @@ def enregistrer_distribution(validated_data, utilisateur):
         raise ValidationError({
             "id_bassin": "Le bassin sélectionné est inactif."
         })
-    hapa_obligatoire = bassin.categorie in {
-        Bassin.Categorie.TRAITEMENT,
-        Bassin.Categorie.STOCKS,
-    }
-    if (
-        hapa is None
-        and hapa_obligatoire
-        and not Hapa.objects.filter(
-            bassin=bassin,
-            actif=True,
-            statut=Hapa.Statut.ACTIF,
-        ).exists()
-    ):
-        raise ValidationError({
-            "id_hapa": "Aucun hapa actif dans ce bassin : créez d'abord des hapas."
-        })
-    _verifier_hapa(bassin, hapa, champ="id_hapa")
-    if hapa is not None:
-        hapa = Hapa.objects.select_for_update().get(pk=hapa.pk)
+    hapa = _verifier_hapa_distribution(bassin, hapa)
 
     date_distribution = validated_data.get("date_distribution") or timezone.now()
     if timezone.is_naive(date_distribution):
@@ -280,18 +297,8 @@ def jours_manquants(bassin_id, date_min: date, date_max: date, hapa_id=None):
         })
 
     bassin = Bassin.objects.get(pk=bassin_id)
-    hapa_obligatoire = bassin.categorie in {
-        Bassin.Categorie.TRAITEMENT,
-        Bassin.Categorie.STOCKS,
-    }
+    hapa_obligatoire = bassin.categorie in CATEGORIES_HAPA_OBLIGATOIRE
     if hapa_id is not None:
-        if not hapa_obligatoire and bassin.categorie in {
-            Bassin.Categorie.REPRODUCTION,
-            Bassin.Categorie.GROSSISSEMENT,
-        }:
-            raise ValidationError({
-                "hapa": "Un hapa est interdit pour cette catégorie de bassin."
-            })
         cible = Hapa.objects.filter(
             pk=hapa_id,
             bassin_id=bassin_id,
