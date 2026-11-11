@@ -245,6 +245,25 @@ class SortieStockTests(TestCase):
             ).exists()
         )
 
+    def test_liste_tolere_un_brouillon_devenu_invalide(self):
+        lot = self._mettre_en_stock("LOT-BROUILLON-A", {self.hapa_a: 6})
+        draft = self._creer_sortie(lot)
+        self.assertEqual(draft.status_code, 201, draft.data)
+        # Un autre lot arrive dans le hapa après la création du brouillon.
+        self._mettre_en_stock("LOT-BROUILLON-B", {self.hapa_a: 4})
+
+        liste = self.client.get(f"/api/v1/effectifs/sorties-stock/?lot={lot.pk}")
+        self.assertEqual(liste.status_code, 200, liste.data)
+        resultats = liste.data["results"] if isinstance(liste.data, dict) else liste.data
+        self.assertIsNone(resultats[0]["id_bassin_source"])
+        self.assertIsNone(resultats[0]["reference_bassin_source"])
+
+        preview = self.client.get(
+            f"/api/v1/effectifs/sorties-stock/{draft.data['id']}/apercu/"
+        )
+        self.assertEqual(preview.status_code, 400, preview.data)
+        self.assertIn("partage le hapa", str(preview.data["id_lot"]))
+
     def test_destination_invalide_et_lot_absent_sont_refuses(self):
         lot = self._mettre_en_stock("LOT-DESTINATION", {self.hapa_a: 5})
         response = self._creer_sortie(lot, destination=self.bassin_reproduction)

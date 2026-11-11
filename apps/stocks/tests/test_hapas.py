@@ -592,16 +592,29 @@ class MiseEnStockHapaTests(TestCase):
         self.assertIn("hapas", mismatch.exception.detail)
         self.assertIn("finalité Grossissement", str(mismatch.exception.detail))
 
-        lot_meme_finalite = self._lot(quantite=10)
+        # Un lot destiné au grossissement ne se mélange avec aucun autre lot.
+        with self.assertRaises(ValidationError) as melange:
+            self._creer_mise(
+                self._lot(quantite=10),
+                lignes=[(self.stock_hapa2, 10)],
+                finalite=MiseEnStock.Finalite.GROSSISSEMENT,
+            )
+        self.assertIn("hapas", melange.exception.detail)
+        self.assertIn("ne peut pas être mélangé", str(melange.exception.detail))
+
+        # Les lots destinés à la vente peuvent partager un hapa.
+        hapa_vente = self._hapa(self.stock, "STOCK-VENTE")
+        self._creer_mise(
+            self._lot(quantite=10),
+            lignes=[(hapa_vente, 10)],
+            finalite=MiseEnStock.Finalite.VENTE,
+        )
         meme_finalite = self._creer_mise(
-            lot_meme_finalite,
-            lignes=[(self.stock_hapa2, 10)],
-            finalite=MiseEnStock.Finalite.GROSSISSEMENT,
+            self._lot(quantite=10),
+            lignes=[(hapa_vente, 10)],
+            finalite=MiseEnStock.Finalite.VENTE,
         )
-        self.assertEqual(
-            meme_finalite.finalite,
-            MiseEnStock.Finalite.GROSSISSEMENT,
-        )
+        self.assertEqual(meme_finalite.finalite, MiseEnStock.Finalite.VENTE)
 
         hapa_legacy = self._hapa(self.stock, "STOCK-LEGACY")
         lot_legacy = self._lot(quantite=10)

@@ -39,23 +39,23 @@ class ParametreEnvironnementalViewSet(
 
     serializer_class = ParametreEnvironnementalSerializer
 
-    def get_permissions(self):
-        """
-        Détermine les permissions selon l'action.
-        """
+    # def get_permissions(self):
+    #     """
+    #     Détermine les permissions selon l'action.
+    #     """
 
-        if self.action in [
-            "list",
-            "retrieve",
-            "historique_bassin",
-            "derniere_mesure_bassin",
-            "dernieres_mesures",
-        ]:
-            return [
-                IsAdministrateurOuGestionnaire()
-            ]
+    #     if self.action in [
+    #         "list",
+    #         "retrieve",
+    #         "historique_bassin",
+    #         "derniere_mesure_bassin",
+    #         "dernieres_mesures",
+    #     ]:
+    #         return [
+    #             IsAdministrateurOuGestionnaire()
+    #         ]
 
-        return [IsAdministrateur()]
+    #     return [IsAdministrateur()]
 
     def get_queryset(self):
         """

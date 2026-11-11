@@ -276,6 +276,24 @@ def creer_mise_en_stock(validated_data, utilisateur):
                     f"{libelle_finalite}."
                 )
             })
+        # Un lot destiné au grossissement doit rester seul dans ses hapas :
+        # la sortie vers le grossissement transfère tout le contenu du hapa.
+        if (
+            finalite == MiseEnStock.Finalite.GROSSISSEMENT
+            and mouvement["lot_origine_id"] != lot.pk
+        ):
+            reference = (
+                Lot.objects.filter(pk=mouvement["lot_origine_id"])
+                .values_list("reference", flat=True)
+                .first()
+            )
+            raise ValidationError({
+                "hapas": (
+                    f"Le hapa {hapa.nom} contient déjà le lot {reference} : "
+                    "un lot destiné au grossissement ne peut pas être mélangé "
+                    "avec un autre lot."
+                )
+            })
 
     effectif = sum(ligne["effectif_entrant"] for ligne in lignes_hapas)
     if effectif_client is not None and effectif_client != effectif:

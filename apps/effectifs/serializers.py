@@ -200,10 +200,16 @@ class SortieStockSerializer(serializers.ModelSerializer):
         ligne = instance.lignes.select_related("hapa", "hapa__bassin").first()
         if ligne is not None:
             return ligne.hapa
-        lignes = calculer_lignes_sortie(
-            instance.lot,
-            timezone.localtime(instance.date_sortie).date(),
-        )
+        # Brouillon : la source est recalculée. Si le lot n'est plus sortable
+        # (hapa vidé, inactif, partagé…), on renvoie null au lieu de faire
+        # échouer toute la liste ; l'erreur reste levée à l'aperçu et à la validation.
+        try:
+            lignes = calculer_lignes_sortie(
+                instance.lot,
+                timezone.localtime(instance.date_sortie).date(),
+            )
+        except serializers.ValidationError:
+            return None
         return lignes[0]["hapa"] if lignes else None
 
     def get_id_bassin_source(self, instance):
