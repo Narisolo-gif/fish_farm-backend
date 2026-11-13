@@ -122,13 +122,21 @@ def modifier_lot_grossissement(lot_id, data):
                 )
             })
         lot_grossissement.pourcentage_groupe_pesee = pourcentage
+    if "poids_initial_g" in data:
+        poids = data["poids_initial_g"]
+        if poids is None or poids <= 0:
+            raise ValidationError({
+                "poids_initial_g": "Le poids initial doit être strictement positif."
+            })
+        lot_grossissement.poids_initial_g = poids
     if "observation" in data:
         lot_grossissement.observation = data["observation"]
-    lot_grossissement.save(update_fields=[
-        "pourcentage_groupe_pesee",
-        "observation",
-        "updated_at",
-    ])
+    champs = [
+        champ
+        for champ in ("pourcentage_groupe_pesee", "poids_initial_g", "observation")
+        if champ in data
+    ]
+    lot_grossissement.save(update_fields=[*champs, "updated_at"])
     return lot_grossissement
 
 

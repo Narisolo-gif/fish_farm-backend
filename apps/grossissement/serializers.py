@@ -4,6 +4,9 @@ from .models import LotGrossissement
 from .services import modifier_lot_grossissement
 
 
+CHAMPS_MODIFIABLES = {"observation", "pourcentage_groupe_pesee", "poids_initial_g"}
+
+
 class ClotureLotGrossissementSerializer(serializers.Serializer):
     motif = serializers.CharField(
         required=True,
@@ -77,12 +80,20 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             field for field in fields
-            if field not in {"observation", "pourcentage_groupe_pesee"}
+            if field not in CHAMPS_MODIFIABLES
         ]
         extra_kwargs = {
             "observation": {"required": False, "allow_blank": True},
             "pourcentage_groupe_pesee": {"required": False},
+            "poids_initial_g": {"required": False},
         }
+
+    def validate_poids_initial_g(self, value):
+        if value is None or value <= 0:
+            raise serializers.ValidationError(
+                "Le poids initial doit être strictement positif."
+            )
+        return value
 
     def validate_pourcentage_groupe_pesee(self, value):
         if value <= 0 or value > 100:
@@ -92,8 +103,7 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        champs_modifiables = {"observation", "pourcentage_groupe_pesee"}
-        champs_interdits = set(self.initial_data) - champs_modifiables
+        champs_interdits = set(self.initial_data) - CHAMPS_MODIFIABLES
         if champs_interdits:
             raise serializers.ValidationError({
                 champ: "Ce champ est en lecture seule."

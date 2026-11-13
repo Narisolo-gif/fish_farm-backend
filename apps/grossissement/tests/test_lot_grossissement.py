@@ -550,6 +550,29 @@ class LotGrossissementTests(TestCase):
             verifier_capacite_bassin(self.bassin_destination, Lot.Espece.CARPE)
         self.assertIn("deux lots", str(ctx.exception.detail["id_bassin_destination"]))
 
+    def test_patch_poids_initial(self):
+        _, _, sortie_id, _ = self._sortie_validee("LOT-POIDS-INITIAL", 10)
+        gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
+        url = f"/api/v1/grossissement/lots-grossissement/{gross.pk}/"
+
+        saisi = self.client.patch(url, {"poids_initial_g": "12.50"}, format="json")
+        nul = self.client.patch(url, {"poids_initial_g": "0"}, format="json")
+
+        self.assertEqual(saisi.status_code, 200, saisi.data)
+        self.assertEqual(saisi.data["poids_initial_g"], "12.50")
+        self.assertEqual(nul.status_code, 400, nul.data)
+        self.assertIn("poids_initial_g", nul.data)
+
+        cloturer_lot_grossissement(
+            gross.pk,
+            motif="Fin du cycle",
+            poids_final_g=Decimal("250"),
+            utilisateur=self.user,
+        )
+        clos = self.client.patch(url, {"poids_initial_g": "13"}, format="json")
+        self.assertEqual(clos.status_code, 400, clos.data)
+        self.assertIn("statut", clos.data)
+
     def test_patch_modifie_champs_autorises_et_refuse_champs_figes(self):
         _, _, sortie_id, _ = self._sortie_validee("LOT-PATCH", 10)
         gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
