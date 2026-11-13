@@ -5,10 +5,11 @@ from apps.effectifs.signals import (
     sortie_stock_avant_annulation,
     sortie_stock_validee,
 )
+from apps.bassins.models import Bassin
 from apps.lots.models import Lot
 
 from .models import LotGrossissement
-from .services import lot_a_historique
+from .services import lot_a_historique, verifier_capacite_bassin
 
 
 @receiver(
@@ -21,10 +22,12 @@ def creer_lot_apres_sortie_validee(sender, *, sortie, utilisateur, **kwargs):
         raise ValidationError({
             "id_lot": "Le lot d'origine doit être au stade EN_STOCK."
         })
+    bassin = Bassin.objects.select_for_update().get(pk=sortie.bassin_destination_id)
+    verifier_capacite_bassin(bassin, sortie.espece)
     LotGrossissement.objects.create(
         lot_origine=lot,
         sortie_stock=sortie,
-        bassin=sortie.bassin_destination,
+        bassin=bassin,
         espece=sortie.espece,
         date_mise_en_place=sortie.date_sortie,
         effectif_initial=sortie.effectif_entrant,

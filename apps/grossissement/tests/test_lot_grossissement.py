@@ -10,10 +10,15 @@ from rest_framework.test import APIClient
 from apps.bassins.models import Bassin, Hapa
 from apps.core.models import Role
 from apps.ecloserie.models import Eclosion
-from apps.effectifs.models import MouvementEffectif
+from rest_framework.exceptions import ValidationError
+
+from apps.effectifs.models import MouvementEffectif, SortieStock
 from apps.effectifs.services import effectif_vivant, enregistrer_mouvement
 from apps.grossissement.models import LotGrossissement
-from apps.grossissement.services import cloturer_lot_grossissement
+from apps.grossissement.services import (
+    cloturer_lot_grossissement,
+    verifier_capacite_bassin,
+)
 from apps.lots.models import Lot
 from apps.provende.models import Provende, TypeProvende
 from apps.reproduction.models import Ponte, Reproduction
@@ -60,7 +65,7 @@ class LotGrossissementTests(TestCase):
             statut=Hapa.Statut.ACTIF,
         )
 
-    def _creer_lot(self, reference, *, parcours=None):
+    def _creer_lot(self, reference, *, parcours=None, espece=Lot.Espece.CARPE):
         bassin_reproduction = self._bassin(
             f"REP-{reference}",
             Bassin.Categorie.REPRODUCTION,
@@ -68,7 +73,7 @@ class LotGrossissementTests(TestCase):
         reproduction = Reproduction.objects.create(
             reference=f"REP-{reference}",
             bassin=bassin_reproduction,
-            espece=Lot.Espece.CARPE,
+            espece=espece,
             date_ajout=self.today,
             quantite_male=1,
             quantite_femelle=1,
@@ -89,7 +94,7 @@ class LotGrossissementTests(TestCase):
             reference=reference,
             eclosion=eclosion,
             date_creation=timezone.now(),
-            espece=Lot.Espece.CARPE,
+            espece=espece,
             utilisateur_createur=self.user,
             quantite_initiale=20,
             parcours_production=(
@@ -97,7 +102,16 @@ class LotGrossissementTests(TestCase):
             ),
         )
 
-    def _mettre_en_stock(self, reference, quantite, *, traiter=False, il_y_a_jours=0):
+    def _mettre_en_stock(
+        self,
+        reference,
+        quantite,
+        *,
+        traiter=False,
+        il_y_a_jours=0,
+        espece=Lot.Espece.CARPE,
+        hapa=None,
+    ):
         lot = self._creer_lot(
             reference,
             parcours=(
@@ -105,6 +119,7 @@ class LotGrossissementTests(TestCase):
                 if traiter
                 else Lot.ParcoursProduction.SANS_TRAITEMENT
             ),
+            espece=espece,
         )
         if traiter:
             bassin_traitement = self._bassin(
@@ -145,7 +160,7 @@ class LotGrossissementTests(TestCase):
                 "justification_ecart": "Écart de test",
                 "date_mise_en_stock": timezone.now() - timedelta(days=il_y_a_jours),
                 "lignes_hapas": [{
-                    "hapa": self.hapa_stock,
+                    "hapa": hapa or self.hapa_stock,
                     "effectif_entrant": quantite,
                 }],
             },
@@ -153,10 +168,10 @@ class LotGrossissementTests(TestCase):
         )
         return lot, mise_en_stock
 
-    def _creer_sortie(self, lot, *, il_y_a_jours=0):
+    def _creer_sortie(self, lot, *, il_y_a_jours=0, destination=None):
         data = {
             "id_lot": lot.pk,
-            "id_bassin_destination": self.bassin_destination.pk,
+            "id_bassin_destination": (destination or self.bassin_destination).pk,
         }
         if il_y_a_jours:
             data["date_sortie"] = (
@@ -190,6 +205,7 @@ class LotGrossissementTests(TestCase):
         traiter=False,
         entree=None,
         il_y_a_jours=0,
+        destination=None,
     ):
         lot, mise_en_stock = self._mettre_en_stock(
             reference,
@@ -197,7 +213,11 @@ class LotGrossissementTests(TestCase):
             traiter=traiter,
             il_y_a_jours=il_y_a_jours + 1 if il_y_a_jours else 0,
         )
-        draft = self._creer_sortie(lot, il_y_a_jours=il_y_a_jours)
+        draft = self._creer_sortie(
+            lot,
+            il_y_a_jours=il_y_a_jours,
+            destination=destination,
+        )
         self.assertEqual(draft.status_code, 201, draft.data)
         data = {}
         if entree is not None:
@@ -276,7 +296,11 @@ class LotGrossissementTests(TestCase):
         self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
         self.assertEqual(Lot.objects.get(pk=lot_a.pk).stade, Lot.Stade.EN_GROSSISSEMENT)
 
-        lot_b, _, sortie_b, _ = self._sortie_validee("LOT-CLOTURE-ANNULATION", 10)
+        lot_b, _, sortie_b, _ = self._sortie_validee(
+            "LOT-CLOTURE-ANNULATION",
+            10,
+            destination=self._bassin("GROSS-DEST-B", Bassin.Categorie.GROSSISSEMENT),
+        )
         gross_b = LotGrossissement.objects.get(sortie_stock_id=sortie_b)
         cloturer_lot_grossissement(
             gross_b.pk,
@@ -442,6 +466,90 @@ class LotGrossissementTests(TestCase):
         self.assertEqual(gross.statut, LotGrossissement.Statut.ACTIF)
         self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
 
+    def _sortie_brouillon(self, reference, *, espece=Lot.Espece.CARPE, hapa=None):
+        lot, _ = self._mettre_en_stock(reference, 10, espece=espece, hapa=hapa)
+        draft = self._creer_sortie(lot)
+        self.assertEqual(draft.status_code, 201, draft.data)
+        return lot, draft.data["id"]
+
+    def test_creation_refuse_meme_espece_dans_le_bassin(self):
+        self._sortie_validee("LOT-CARPE-1", 10)
+        lot, sortie_id = self._sortie_brouillon(
+            "LOT-CARPE-2",
+            hapa=self._hapa(self.bassin_stock, "STOCK-B"),
+        )
+        count_mouvements = MouvementEffectif.objects.count()
+
+        refused = self._valider(sortie_id)
+
+        self.assertEqual(refused.status_code, 400, refused.data)
+        self.assertIn("id_bassin_destination", refused.data)
+        self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
+        self.assertEqual(
+            SortieStock.objects.get(pk=sortie_id).statut,
+            SortieStock.Statut.BROUILLON,
+        )
+        self.assertEqual(Lot.objects.get(pk=lot.pk).stade, Lot.Stade.EN_STOCK)
+
+    def test_creation_accepte_deux_especes_differentes(self):
+        self._sortie_validee("LOT-MIXTE-CARPE", 10)
+        _, sortie_id = self._sortie_brouillon(
+            "LOT-MIXTE-TILAPIA",
+            espece=Lot.Espece.TILAPIA,
+            hapa=self._hapa(self.bassin_stock, "STOCK-T"),
+        )
+
+        validated = self._valider(sortie_id)
+
+        self.assertEqual(validated.status_code, 200, validated.data)
+        self.assertEqual(
+            LotGrossissement.objects.filter(
+                bassin=self.bassin_destination,
+                statut=LotGrossissement.Statut.ACTIF,
+            ).count(),
+            2,
+        )
+
+    def test_creation_accepte_meme_espece_apres_cloture(self):
+        _, _, premiere, _ = self._sortie_validee("LOT-AVANT-CLOTURE", 10)
+        cloturer_lot_grossissement(
+            LotGrossissement.objects.get(sortie_stock_id=premiere).pk,
+            motif="Fin du cycle",
+            poids_final_g=Decimal("250"),
+            utilisateur=self.user,
+        )
+        _, sortie_id = self._sortie_brouillon(
+            "LOT-APRES-CLOTURE",
+            hapa=self._hapa(self.bassin_stock, "STOCK-C"),
+        )
+
+        validated = self._valider(sortie_id)
+
+        self.assertEqual(validated.status_code, 200, validated.data)
+
+    def test_creation_refuse_bassin_avec_hapa_actif(self):
+        _, sortie_id = self._sortie_brouillon("LOT-HAPA-GROSS")
+        Hapa.objects.create(
+            bassin=self.bassin_destination,
+            nom="GROSS-HAPA",
+            statut=Hapa.Statut.ACTIF,
+        )
+
+        refused = self._valider(sortie_id)
+
+        self.assertEqual(refused.status_code, 400, refused.data)
+        self.assertIn("hapa", str(refused.data["id_bassin_destination"]))
+
+    def test_capacite_refuse_un_troisieme_lot(self):
+        for reference in ("LOT-CAP-1", "LOT-CAP-2"):
+            self._sortie_validee(reference, 10)
+            LotGrossissement.objects.filter(
+                lot_origine__reference=reference
+            ).update(espece=Lot.Espece.TILAPIA if reference.endswith("1") else "AUTRE")
+        with self.assertRaises(ValidationError) as ctx:
+            verifier_capacite_bassin(self.bassin_destination, Lot.Espece.CARPE)
+        self.assertIn("deux lots", str(ctx.exception.detail["id_bassin_destination"]))
+
     def test_patch_modifie_champs_autorises_et_refuse_champs_figes(self):
         _, _, sortie_id, _ = self._sortie_validee("LOT-PATCH", 10)
         gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
@@ -504,6 +612,7 @@ class LotGrossissementTests(TestCase):
         lot_sans, _, sortie_sans, _ = self._sortie_validee(
             "LOT-ORIGINE-SANS-TRAITEMENT",
             8,
+            destination=self._bassin("GROSS-DEST-B", Bassin.Categorie.GROSSISSEMENT),
         )
 
         origine_traitee = self.client.get(

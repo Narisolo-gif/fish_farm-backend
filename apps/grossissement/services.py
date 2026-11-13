@@ -2,13 +2,16 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
 
-from apps.bassins.models import Bassin
+from apps.bassins.models import Bassin, Hapa
 from apps.effectifs.calculs import effectif_vivant
 from apps.effectifs.models import MouvementEffectif
 from apps.effectifs.services import enregistrer_mouvement_operation
 from apps.lots.models import Lot
 
 from .models import LotGrossissement
+
+
+MAX_LOTS_ACTIFS_PAR_BASSIN = 2
 
 
 @transaction.atomic
@@ -132,3 +135,28 @@ def modifier_lot_grossissement(lot_id, data):
 def lot_a_historique(lot):
     # TODO : inclure les pesées et les répartitions.
     return False
+
+def verifier_capacite_bassin(bassin, espece):
+    """Contrôle d'accueil d'un nouveau lot ; le bassin doit être verrouillé par l'appelant."""
+    if bassin.hapas.filter(statut=Hapa.Statut.ACTIF).exists():
+        raise ValidationError({
+            "id_bassin_destination": (
+                "Le bassin de grossissement ne doit contenir aucun hapa actif."
+            )
+        })
+    lots_actifs = LotGrossissement.objects.filter(
+        bassin=bassin,
+        statut=LotGrossissement.Statut.ACTIF,
+    )
+    if lots_actifs.count() >= MAX_LOTS_ACTIFS_PAR_BASSIN:
+        raise ValidationError({
+            "id_bassin_destination": (
+                "Le bassin contient déjà deux lots de grossissement en cours."
+            )
+        })
+    if lots_actifs.filter(espece=espece).exists():
+        raise ValidationError({
+            "id_bassin_destination": (
+                "Le bassin contient déjà un lot en cours de la même espèce."
+            )
+        })
