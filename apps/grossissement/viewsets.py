@@ -103,9 +103,13 @@ class LotGrossissementViewSet(viewsets.ModelViewSet):
     def cloturer(self, request, pk=None):
         serializer = ClotureLotGrossissementSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        donnees = serializer.validated_data
         lot = cloturer_lot_grossissement(
             self.get_object().pk,
-            serializer.validated_data["motif"],
+            motif=donnees["motif"],
+            poids_final_g=donnees["poids_final_g"],
+            date_cloture=donnees.get("date_cloture"),
+            utilisateur=request.user,
         )
         return Response(self.get_serializer(lot).data, status=status.HTTP_200_OK)
 

@@ -11,7 +11,7 @@ from apps.bassins.models import Bassin, Hapa
 from apps.core.models import Role
 from apps.ecloserie.models import Eclosion
 from apps.effectifs.models import MouvementEffectif
-from apps.effectifs.services import effectif_vivant
+from apps.effectifs.services import effectif_vivant, enregistrer_mouvement
 from apps.grossissement.models import LotGrossissement
 from apps.grossissement.services import cloturer_lot_grossissement
 from apps.lots.models import Lot
@@ -97,7 +97,7 @@ class LotGrossissementTests(TestCase):
             ),
         )
 
-    def _mettre_en_stock(self, reference, quantite, *, traiter=False):
+    def _mettre_en_stock(self, reference, quantite, *, traiter=False, il_y_a_jours=0):
         lot = self._creer_lot(
             reference,
             parcours=(
@@ -143,7 +143,7 @@ class LotGrossissementTests(TestCase):
                 "finalite": "GROSSISSEMENT",
                 "effectif_entrant": quantite,
                 "justification_ecart": "Écart de test",
-                "date_mise_en_stock": timezone.now(),
+                "date_mise_en_stock": timezone.now() - timedelta(days=il_y_a_jours),
                 "lignes_hapas": [{
                     "hapa": self.hapa_stock,
                     "effectif_entrant": quantite,
@@ -153,13 +153,18 @@ class LotGrossissementTests(TestCase):
         )
         return lot, mise_en_stock
 
-    def _creer_sortie(self, lot):
+    def _creer_sortie(self, lot, *, il_y_a_jours=0):
+        data = {
+            "id_lot": lot.pk,
+            "id_bassin_destination": self.bassin_destination.pk,
+        }
+        if il_y_a_jours:
+            data["date_sortie"] = (
+                timezone.now() - timedelta(days=il_y_a_jours)
+            ).isoformat()
         return self.client.post(
             "/api/v1/effectifs/sorties-stock/",
-            {
-                "id_lot": lot.pk,
-                "id_bassin_destination": self.bassin_destination.pk,
-            },
+            data,
             format="json",
         )
 
@@ -177,13 +182,22 @@ class LotGrossissementTests(TestCase):
             format="json",
         )
 
-    def _sortie_validee(self, reference, quantite=10, *, traiter=False, entree=None):
+    def _sortie_validee(
+        self,
+        reference,
+        quantite=10,
+        *,
+        traiter=False,
+        entree=None,
+        il_y_a_jours=0,
+    ):
         lot, mise_en_stock = self._mettre_en_stock(
             reference,
             quantite,
             traiter=traiter,
+            il_y_a_jours=il_y_a_jours + 1 if il_y_a_jours else 0,
         )
-        draft = self._creer_sortie(lot)
+        draft = self._creer_sortie(lot, il_y_a_jours=il_y_a_jours)
         self.assertEqual(draft.status_code, 201, draft.data)
         data = {}
         if entree is not None:
@@ -264,7 +278,12 @@ class LotGrossissementTests(TestCase):
 
         lot_b, _, sortie_b, _ = self._sortie_validee("LOT-CLOTURE-ANNULATION", 10)
         gross_b = LotGrossissement.objects.get(sortie_stock_id=sortie_b)
-        cloturer_lot_grossissement(gross_b.pk, "Fin du cycle")
+        cloturer_lot_grossissement(
+            gross_b.pk,
+            motif="Fin du cycle",
+            poids_final_g=Decimal("250"),
+            utilisateur=self.user,
+        )
         count_mouvements = MouvementEffectif.objects.count()
         refused_closed = self._annuler(sortie_b)
         self.assertEqual(refused_closed.status_code, 400, refused_closed.data)
@@ -293,15 +312,135 @@ class LotGrossissementTests(TestCase):
         gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
         url = f"/api/v1/grossissement/lots-grossissement/{gross.pk}/cloturer/"
 
-        sans_motif = self.client.post(url, {"motif": "  "}, format="json")
-        cloture = self.client.post(url, {"motif": "Fin du cycle"}, format="json")
-        double = self.client.post(url, {"motif": "Encore"}, format="json")
+        sans_motif = self.client.post(
+            url, {"motif": "  ", "poids_final_g": "250.00"}, format="json"
+        )
+        cloture = self.client.post(
+            url, {"motif": "Fin du cycle", "poids_final_g": "250.00"}, format="json"
+        )
+        double = self.client.post(
+            url, {"motif": "Encore", "poids_final_g": "250.00"}, format="json"
+        )
 
         self.assertEqual(sans_motif.status_code, 400, sans_motif.data)
         self.assertEqual(cloture.status_code, 200, cloture.data)
         self.assertEqual(cloture.data["statut"], LotGrossissement.Statut.CLOTURE)
         self.assertEqual(cloture.data["date_cloture"], self.today.isoformat())
         self.assertEqual(double.status_code, 400, double.data)
+
+    def _url_cloture(self, gross):
+        return f"/api/v1/grossissement/lots-grossissement/{gross.pk}/cloturer/"
+
+    def _mortalite(self, quantite, date_evenement):
+        return enregistrer_mouvement(
+            bassin=self.bassin_destination,
+            espece=Lot.Espece.CARPE,
+            type_mouvement=MouvementEffectif.TypeMouvement.MORTALITE,
+            quantite=quantite,
+            date_evenement=date_evenement,
+            saisi_par=self.user,
+        )
+
+    def test_cloture_exige_poids_final_positif(self):
+        _, _, sortie_id, _ = self._sortie_validee("LOT-POIDS-FINAL", 10)
+        gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
+
+        for data in ({"motif": "Fin"}, {"motif": "Fin", "poids_final_g": "0"}):
+            with self.subTest(data=data):
+                refused = self.client.post(self._url_cloture(gross), data, format="json")
+                self.assertEqual(refused.status_code, 400, refused.data)
+                self.assertIn("poids_final_g", refused.data)
+        gross.refresh_from_db()
+        self.assertEqual(gross.statut, LotGrossissement.Statut.ACTIF)
+
+    def test_cloture_evacue_effectif_et_cloture_le_lot_origine(self):
+        lot, _, sortie_id, _ = self._sortie_validee("LOT-EVACUATION", 10)
+        gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
+        self._mortalite(2, self.today)
+
+        cloture = self.client.post(
+            self._url_cloture(gross),
+            {"motif": "Fin du cycle", "poids_final_g": "250.00"},
+            format="json",
+        )
+
+        self.assertEqual(cloture.status_code, 200, cloture.data)
+        self.assertEqual(cloture.data["effectif_final"], 8)
+        self.assertEqual(cloture.data["poids_final_g"], "250.00")
+        self.assertTrue(
+            MouvementEffectif.objects.filter(
+                bassin=self.bassin_destination,
+                type_mouvement=MouvementEffectif.TypeMouvement.SORTIE,
+                quantite=8,
+                lot_origine=lot,
+            ).exists()
+        )
+        self.assertEqual(
+            effectif_vivant(self.bassin_destination.pk, Lot.Espece.CARPE),
+            0,
+        )
+        self.assertEqual(Lot.objects.get(pk=lot.pk).stade, Lot.Stade.CLOTUREE)
+
+    def test_cloture_refuse_date_future_ou_avant_mise_en_place(self):
+        _, _, sortie_id, _ = self._sortie_validee("LOT-DATE-CLOTURE", 10)
+        gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
+        mise_en_place = timezone.localtime(gross.date_mise_en_place).date()
+        count_mouvements = MouvementEffectif.objects.count()
+
+        for date_cloture in (
+            self.today + timedelta(days=1),
+            mise_en_place - timedelta(days=1),
+        ):
+            with self.subTest(date_cloture=date_cloture):
+                refused = self.client.post(
+                    self._url_cloture(gross),
+                    {
+                        "motif": "Fin",
+                        "poids_final_g": "250",
+                        "date_cloture": date_cloture.isoformat(),
+                    },
+                    format="json",
+                )
+                self.assertEqual(refused.status_code, 400, refused.data)
+                self.assertIn("date_cloture", refused.data)
+        self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
+
+    def test_cloture_effectif_nul_sans_mouvement_sortie(self):
+        _, _, sortie_id, _ = self._sortie_validee("LOT-VIDE", 10)
+        gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
+        self._mortalite(10, self.today)
+        count_mouvements = MouvementEffectif.objects.count()
+
+        cloture = self.client.post(
+            self._url_cloture(gross),
+            {"motif": "Lot perdu", "poids_final_g": "120"},
+            format="json",
+        )
+
+        self.assertEqual(cloture.status_code, 200, cloture.data)
+        self.assertEqual(cloture.data["effectif_final"], 0)
+        self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
+
+    def test_cloture_avant_mortalites_ulterieures_refusee(self):
+        _, _, sortie_id, _ = self._sortie_validee("LOT-RETRO", 10, il_y_a_jours=5)
+        gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
+        self._mortalite(2, self.today - timedelta(days=1))
+        count_mouvements = MouvementEffectif.objects.count()
+
+        refused = self.client.post(
+            self._url_cloture(gross),
+            {
+                "motif": "Fin",
+                "poids_final_g": "250",
+                "date_cloture": (self.today - timedelta(days=3)).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(refused.status_code, 400, refused.data)
+        gross.refresh_from_db()
+        self.assertEqual(gross.statut, LotGrossissement.Statut.ACTIF)
+        self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
 
     def test_patch_modifie_champs_autorises_et_refuse_champs_figes(self):
         _, _, sortie_id, _ = self._sortie_validee("LOT-PATCH", 10)

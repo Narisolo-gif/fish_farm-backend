@@ -10,6 +10,19 @@ class ClotureLotGrossissementSerializer(serializers.Serializer):
         allow_blank=False,
         trim_whitespace=True,
     )
+    poids_final_g = serializers.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        required=True,
+    )
+    date_cloture = serializers.DateField(required=False)
+
+    def validate_poids_final_g(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(
+                "Le poids final doit être strictement positif."
+            )
+        return value
 
 
 class LotGrossissementSerializer(serializers.ModelSerializer):
