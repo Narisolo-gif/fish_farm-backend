@@ -142,6 +142,7 @@ class LotGrossissementTests(TestCase):
                 "bassin": self.bassin_stock,
                 "finalite": "GROSSISSEMENT",
                 "effectif_entrant": quantite,
+                "justification_ecart": "Écart de test",
                 "date_mise_en_stock": timezone.now(),
                 "lignes_hapas": [{
                     "hapa": self.hapa_stock,
