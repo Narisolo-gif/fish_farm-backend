@@ -52,6 +52,8 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
             "pourcentage_groupe_pesee",
             "statut",
             "date_cloture",
+            "effectif_final",
+            "poids_final_g",
             "motif_cloture",
             "observation",
             "age_jours",

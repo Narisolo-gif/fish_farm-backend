@@ -62,6 +62,14 @@ class LotGrossissement(models.Model):
         default=Statut.ACTIF,
     )
     date_cloture = models.DateField(null=True, blank=True)
+    # Effectif vivant au jour de la clôture, lu dans le registre.
+    effectif_final = models.PositiveIntegerField(null=True, blank=True)
+    poids_final_g = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
     motif_cloture = models.TextField(blank=True, default="")
     observation = models.TextField(blank=True, default="")
     utilisateur = models.ForeignKey(
@@ -88,6 +96,13 @@ class LotGrossissement(models.Model):
                     | models.Q(poids_initial_g__gt=0)
                 ),
                 name="lot_gross_poids_initial_positif",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(poids_final_g__isnull=True)
+                    | models.Q(poids_final_g__gt=0)
+                ),
+                name="lot_gross_poids_final_positif",
             ),
             models.CheckConstraint(
                 condition=(
