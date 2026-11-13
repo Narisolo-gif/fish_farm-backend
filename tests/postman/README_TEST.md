@@ -61,5 +61,10 @@ Les soldes sont lus dans le registre et récapitulés dans la console Postman/Ne
 - Un événement de mortalité ou une distribution sans hapa est accepté en bassin ayant du poisson, malgré les refus attendus dans le scénario. Les assertions sont conservées; si l'API accepte, le test annule ensuite l'enregistrement inattendu.
 - Aucun endpoint santé dédié n'existe dans les URLs consultées; la préparation vérifie la disponibilité par une lecture authentifiée réelle.
 - Le dossier final attend une seule ligne active de grossissement après clôture de C; l'API `?statut=ACTIF` permet de la vérifier.
+- La clôture d'un lot de grossissement exige `poids_final_g` et enregistre un mouvement `SORTIE` de l'effectif vivant : le solde final GRO attendu est donc 0.
+- La règle « au plus deux lots d'espèces différentes par bassin » n'a pas de requête dédiée : le scénario n'a pas de second lot CARPE sortable vers GRO pendant que C est actif. Elle est couverte par les tests Django de `apps.grossissement`.
+- Les scripts de test sont entourés d'un bloc `{ … }` : sans cela, newman 6 refuse `let data` (conflit avec la variable globale héritée `data` du sandbox).
+- Avec `ALLOWED_HOSTS=[]`, Django refuse l'hôte `host.docker.internal` : lancer newman depuis la machine hôte (`npx newman@6.1.3 run … --env-var "base_url=http://localhost:8000"`).
+- Constaté le 2026-11-14 sur base vide : des échecs antérieurs (01.12, 05.03, 06.11, 09.x…) empêchent la création de `lot_gross_c`, et toutes les requêtes du lot C du dossier 10 échouent en cascade.
 
 Les modules environnement, pesée/répartition et toute route non présente dans les URLs réelles sont ignorés.

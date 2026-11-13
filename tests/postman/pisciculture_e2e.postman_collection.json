@@ -492,11 +492,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Jeton d'accès retourné\", function () { pm.expect(data).to.have.property('access'); });",
                   "pm.test(\"Jeton stocké\", function () { pm.collectionVariables.set('token_admin', data.access); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -517,10 +519,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Liste réelle des bassins\", function () { pm.expect(Array.isArray(data)).to.eql(true); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -558,11 +562,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Jeton gestionnaire\", function () { pm.expect(data).to.have.property('access'); });",
                   "pm.test(\"Jeton stocké\", function () { pm.collectionVariables.set('token_gestionnaire', data.access); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -600,11 +606,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Jeton employé\", function () { pm.expect(data).to.have.property('access'); });",
                   "pm.test(\"Jeton stocké\", function () { pm.collectionVariables.set('token_employe', data.access); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -625,10 +633,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Les trois rôles métier sont présents\", function () { const labels = data.map(x => x.libelle); pm.expect(labels).to.include.members(['Administrateur','Gestionnaire','Employé']); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -682,12 +692,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Catégorie créée\", function () { pm.expect(data.categorie).to.eql(\"REPRODUCTION\"); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"bassin_rep\", String(data.id)); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"bassin_rep\", String(data.id));",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -722,12 +734,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Catégorie créée\", function () { pm.expect(data.categorie).to.eql(\"TRAITEMENT\"); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"bassin_trt\", String(data.id)); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"bassin_trt\", String(data.id));",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -762,12 +776,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Catégorie créée\", function () { pm.expect(data.categorie).to.eql(\"STOCKS\"); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"bassin_stk\", String(data.id)); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"bassin_stk\", String(data.id));",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -802,12 +818,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Catégorie créée\", function () { pm.expect(data.categorie).to.eql(\"STOCKS\"); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"bassin_stk_vide\", String(data.id)); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"bassin_stk_vide\", String(data.id));",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -842,12 +860,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Catégorie créée\", function () { pm.expect(data.categorie).to.eql(\"GROSSISSEMENT\"); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"bassin_gro\", String(data.id)); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"bassin_gro\", String(data.id));",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -882,11 +902,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Hapa actif\", function () { pm.expect(data.actif).to.eql(true); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"hapa_trt_a\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -921,11 +943,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Hapa actif\", function () { pm.expect(data.actif).to.eql(true); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"hapa_trt_b\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -960,11 +984,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Hapa actif\", function () { pm.expect(data.actif).to.eql(true); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"hapa_stk_1\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -999,11 +1025,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Hapa actif\", function () { pm.expect(data.actif).to.eql(true); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"hapa_stk_2\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1038,11 +1066,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Hapa actif\", function () { pm.expect(data.actif).to.eql(true); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"hapa_stk_3\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1077,11 +1107,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Hapa actif\", function () { pm.expect(data.actif).to.eql(true); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"hapa_stk_4\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1116,10 +1148,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur bassin\", function () { pm.expect(data).to.have.property(\"bassin\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1154,10 +1188,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur bassin\", function () { pm.expect(data).to.have.property(\"bassin\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1178,11 +1214,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Types TRAITEMENT et CROISSANCE disponibles\", function () { const types = data.map(x => x.type); pm.expect(types).to.include.members(['TRAITEMENT','CROISSANCE']); });",
                   "pm.test(\"IDs de types mémorisés\", function () { pm.collectionVariables.set('type_traitement', String(data.find(x => x.type === 'TRAITEMENT').id)); pm.collectionVariables.set('type_croissance', String(data.find(x => x.type === 'CROISSANCE').id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1217,11 +1255,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Type correct\", function () { pm.expect(data.type_provende_libelle).to.eql('Traitement'); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"provende_trt\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1256,11 +1296,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Type correct\", function () { pm.expect(data.type_provende_libelle).to.eql('Croissance'); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"provende_gro\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1281,10 +1323,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Cause Inconnue initialisée\", function () { const item = data.find(x => x.libelle === 'Inconnue'); pm.expect(item, 'Cause Inconnue').to.exist; pm.collectionVariables.set('cause_inconnue', String(item.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1305,10 +1349,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Catégorie Autre initialisée\", function () { const item = data.find(x => x.libelle === 'Autre'); pm.expect(item, 'Catégorie Autre').to.exist; pm.collectionVariables.set('categorie_autre', String(item.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1368,11 +1414,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Espèce\", function () { pm.expect(data.espece).to.eql('CARPE'); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"reproduction_a\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1407,11 +1455,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Ponte liée à la reproduction active\", function () { pm.expect(data).to.have.property('reproduction'); });",
                   "pm.test(\"ID ponte stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"ponte_a\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1446,11 +1496,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Éclosion liée à sa ponte\", function () { pm.expect(data.reference_ponte).to.include(\"PONTE-A-\"); });",
                   "pm.test(\"ID éclosion stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"eclosion_a\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1485,11 +1537,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Ponte liée à la reproduction active\", function () { pm.expect(data).to.have.property('reproduction'); });",
                   "pm.test(\"ID ponte stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"ponte_b\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1524,11 +1578,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Éclosion liée à sa ponte\", function () { pm.expect(data.reference_ponte).to.include(\"PONTE-B-\"); });",
                   "pm.test(\"ID éclosion stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"eclosion_b\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1563,11 +1619,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Ponte liée à la reproduction active\", function () { pm.expect(data).to.have.property('reproduction'); });",
                   "pm.test(\"ID ponte stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"ponte_c\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1602,11 +1660,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Éclosion liée à sa ponte\", function () { pm.expect(data.reference_ponte).to.include(\"PONTE-C-\"); });",
                   "pm.test(\"ID éclosion stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"eclosion_c\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1641,11 +1701,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Ponte liée à la reproduction active\", function () { pm.expect(data).to.have.property('reproduction'); });",
                   "pm.test(\"ID ponte stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"ponte_d\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1680,11 +1742,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Éclosion liée à sa ponte\", function () { pm.expect(data.reference_ponte).to.include(\"PONTE-D-\"); });",
                   "pm.test(\"ID éclosion stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"eclosion_d\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1719,10 +1783,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur reference_ponte\", function () { pm.expect(data).to.have.property(\"reference_ponte\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1779,12 +1845,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Effectif issu de l'éclosion\", function () { pm.expect(data.quantite_initiale).to.eql(10000); });",
                   "pm.test(\"Stade initial\", function () { pm.expect(data.stade).to.eql('CREEE'); });",
                   "pm.test(\"ID lot stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"lot_a\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1819,12 +1887,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Effectif issu de l'éclosion\", function () { pm.expect(data.quantite_initiale).to.eql(2000); });",
                   "pm.test(\"Stade initial\", function () { pm.expect(data.stade).to.eql('CREEE'); });",
                   "pm.test(\"ID lot stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"lot_b\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1859,12 +1929,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Effectif issu de l'éclosion\", function () { pm.expect(data.quantite_initiale).to.eql(1000); });",
                   "pm.test(\"Stade initial\", function () { pm.expect(data.stade).to.eql('CREEE'); });",
                   "pm.test(\"ID lot stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"lot_c\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1899,12 +1971,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Effectif issu de l'éclosion\", function () { pm.expect(data.quantite_initiale).to.eql(50); });",
                   "pm.test(\"Stade initial\", function () { pm.expect(data.stade).to.eql('CREEE'); });",
                   "pm.test(\"ID lot stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"lot_d\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -1939,10 +2013,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur id_eclosion\", function () { pm.expect(data).to.have.property(\"id_eclosion\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2011,10 +2087,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur hapas\", function () { pm.expect(data).to.have.property(\"hapas\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2049,10 +2127,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur hapas\", function () { pm.expect(data).to.have.property(\"hapas\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2087,10 +2167,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur hapas\", function () { pm.expect(data).to.have.property(\"hapas\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2125,10 +2207,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur id_lot\", function () { pm.expect(data).to.have.property(\"id_lot\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2163,12 +2247,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Traitement en cours\", function () { pm.expect(data.statut).to.eql('EN_COURS'); });",
                   "pm.test(\"Deux lignes\", function () { pm.expect(data.hapas).to.have.length(2); });",
                   "pm.test(\"ID traitement stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"traitement_a\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2189,10 +2275,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Deux effectifs initialisés\", function () { pm.expect(data).to.have.length(2); pm.expect(data.reduce((s,x)=>s+x.effectif_actuel,0)).to.eql(10000); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2227,11 +2315,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Distribution validée\", function () { pm.expect(data.statut).to.eql('VALIDE'); });",
                   "pm.test(\"ID distribution stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"cons_trt_a_1\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2266,11 +2356,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Distribution validée\", function () { pm.expect(data.statut).to.eql('VALIDE'); });",
                   "pm.test(\"ID distribution stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"cons_trt_a_2\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2305,11 +2397,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Distribution validée\", function () { pm.expect(data.statut).to.eql('VALIDE'); });",
                   "pm.test(\"ID distribution stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"cons_trt_a_3\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2344,10 +2438,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur date_distribution\", function () { pm.expect(data).to.have.property(\"date_distribution\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2382,10 +2478,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"cons_trt_b\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2420,10 +2518,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur date_distribution\", function () { pm.expect(data).to.have.property(\"date_distribution\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2458,10 +2558,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur date_distribution\", function () { pm.expect(data).to.have.property(\"date_distribution\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2496,11 +2598,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur attendue sur id_hapa\", function () { pm.expect(data).to.have.property('id_hapa'); });",
                   "pm.test(\"Conserver l'ID si l'API accepte malgré l'attendu\", function () { if (pm.response.code === 201) pm.collectionVariables.set('cons_sans_hapa', String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2544,10 +2648,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Distribution de test annulée\", function () { pm.expect(data.statut).to.eql('ANNULEE'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2582,11 +2688,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Événement validé sans hapa\", function () { pm.expect(data.id_hapa).to.eql(null); pm.expect(data.statut).to.eql('VALIDE'); });",
                   "pm.test(\"ID événement\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"event_rep\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2621,10 +2729,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur id_hapa\", function () { pm.expect(data).to.have.property(\"id_hapa\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2659,11 +2769,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur attendue sur id_hapa\", function () { pm.expect(data).to.have.property('id_hapa'); });",
                   "pm.test(\"Conserver l'ID si l'API accepte malgré l'attendu\", function () { if (pm.response.code === 201) pm.collectionVariables.set('event_sans_hapa', String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2707,10 +2819,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Événement de test annulé\", function () { pm.expect(data.statut).to.eql('ANNULEE'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2745,11 +2859,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Mortalité enregistrée\", function () { pm.expect(data.quantite).to.eql(120); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"event_mort_trt\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2784,11 +2900,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Perte enregistrée\", function () { pm.expect(data.quantite).to.eql(30); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"event_perte_trt\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2823,10 +2941,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur justification\", function () { pm.expect(data).to.have.property(\"justification\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2861,10 +2981,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur id_cause\", function () { pm.expect(data).to.have.property(\"id_cause\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2899,10 +3021,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur quantite\", function () { pm.expect(data).to.have.property(\"quantite\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2937,10 +3061,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur date_evenement\", function () { pm.expect(data).to.have.property(\"date_evenement\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -2975,10 +3101,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Événement créé\", function () { pm.expect(data).to.have.property('id'); pm.collectionVariables.set('event_annule_trt', String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3013,10 +3141,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Événement annulé\", function () { pm.expect(data.statut).to.eql('ANNULEE'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3037,10 +3167,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Totaux du journal\", function () { const m=Object.fromEntries(data.par_type.map(x=>[x.type_evenement,x.total])); pm.expect(m.MORTALITE).to.eql(120); pm.expect(m.PERTE).to.eql(30); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3061,10 +3193,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Journal quotidien retourné\", function () { pm.expect(Array.isArray(data)).to.eql(true); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3085,10 +3219,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Jours manquants retournés\", function () { pm.expect(Array.isArray(data)).to.eql(true); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3146,11 +3282,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Traitement clôturé avec l'effectif attendu\", function () { pm.expect(data.statut).to.eql('CLOTUREE'); pm.expect(data.effectif_final).to.eql(9850); });",
                   "pm.test(\"Final par hapa\", function () { const m = Object.fromEntries(data.hapas.map(x => [x.id_hapa, x.effectif_final])); pm.expect(m[Number(pm.collectionVariables.get('hapa_trt_a'))]).to.eql(5880); pm.expect(m[Number(pm.collectionVariables.get('hapa_trt_b'))]).to.eql(3970); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3185,10 +3323,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur detail\", function () { pm.expect(data).to.have.property(\"detail\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3223,10 +3363,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur de validation\", function () { pm.expect(data).to.have.property('detail'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3261,10 +3403,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur id_hapa\", function () { pm.expect(data).to.have.property(\"id_hapa\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3299,11 +3443,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Distribution autorisée\", function () { pm.expect(data.statut).to.eql('VALIDE'); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"cons_trt_apres_cloture\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3370,10 +3516,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur finalite\", function () { pm.expect(data).to.have.property(\"finalite\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3408,10 +3556,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur hapas\", function () { pm.expect(data).to.have.property(\"hapas\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3446,10 +3596,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur hapas\", function () { pm.expect(data).to.have.property(\"hapas\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3484,10 +3636,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur hapas\", function () { pm.expect(data).to.have.property(\"hapas\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3522,10 +3676,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur hapas\", function () { pm.expect(data).to.have.property(\"hapas\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3560,10 +3716,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur justification_ecart\", function () { pm.expect(data).to.have.property(\"justification_ecart\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3598,10 +3756,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur effectif_entrant\", function () { pm.expect(data).to.have.property(\"effectif_entrant\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3636,12 +3796,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Entrant et écart\", function () { pm.expect(data.effectif_entrant).to.eql(9800); pm.expect(data.ecart_effectif).to.eql(-50); });",
                   "pm.test(\"Finalité et hapas\", function () { pm.expect(data.finalite).to.eql('GROSSISSEMENT'); pm.expect(data.hapas).to.have.length(2); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"mise_en_stock_a\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3662,10 +3824,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Deux sorties du traitement et deux entrées au stock\", function () { const rows=data.filter(x=>x.lot_origine===Number(pm.collectionVariables.get('lot_a'))); pm.expect(rows.filter(x=>x.type_mouvement==='SORTIE' && x.bassin===Number(pm.collectionVariables.get('bassin_trt')))).to.have.length(2); pm.expect(rows.filter(x=>x.type_mouvement==='ENTREE' && x.bassin===Number(pm.collectionVariables.get('bassin_stk')))).to.have.length(2); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3700,10 +3864,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur hapas\", function () { pm.expect(data).to.have.property(\"hapas\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3738,10 +3904,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur effectif_entrant\", function () { pm.expect(data).to.have.property(\"effectif_entrant\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3776,11 +3944,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Effectif et écart nuls\", function () { pm.expect(data.effectif_entrant).to.eql(2000); pm.expect(data.ecart_effectif).to.eql(0); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"mise_en_stock_b\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3815,10 +3985,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur justification_ecart\", function () { pm.expect(data).to.have.property(\"justification_ecart\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3853,11 +4025,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Hapa STK_4 reçoit un lot de finalité VENTE\", function () { pm.expect(data.finalite).to.eql('VENTE'); pm.expect(data.effectif_entrant).to.eql(50); });",
                   "pm.test(\"Mise en stock D stockée\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"mise_en_stock_d\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3878,10 +4052,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Mouvement d'entrée identifié\", function () { const m=data.find(x=>x.type_mouvement==='ENTREE' && x.lot_origine===Number(pm.collectionVariables.get('lot_d')) && x.id_hapa===Number(pm.collectionVariables.get('hapa_stk_4'))); pm.expect(m).to.exist; pm.collectionVariables.set('mouvement_entree_d',String(m.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3916,10 +4092,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Mouvement annulé\", function () { pm.expect(data.type_mouvement).to.eql('ANNULATION'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3954,11 +4132,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Hapa vide accepte GROSSISSEMENT après VENTE\", function () { pm.expect(data.effectif_entrant).to.eql(1000); pm.expect(data.finalite).to.eql('GROSSISSEMENT'); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"mise_en_stock_c\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -3979,10 +4159,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Solde initial du stock\", function () { pm.expect(data.effectif_vivant).to.eql(12800); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4003,10 +4185,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Détail des entrées en stock\", function () { const m=Object.fromEntries(data.effectifs.map(x=>[x.id_hapa,x.effectif])); pm.expect(m[Number(pm.collectionVariables.get('hapa_stk_1'))]).to.eql(5000); pm.expect(m[Number(pm.collectionVariables.get('hapa_stk_2'))]).to.eql(4800); pm.expect(m[Number(pm.collectionVariables.get('hapa_stk_3'))]).to.eql(2000); pm.expect(m[Number(pm.collectionVariables.get('hapa_stk_4'))]).to.eql(1000); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4073,11 +4257,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Événement validé\", function () { pm.expect(data.quantite).to.eql(20); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"event_mort_stk\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4112,11 +4298,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Événement validé\", function () { pm.expect(data.quantite).to.eql(10); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"event_perte_stk\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4151,10 +4339,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur quantite\", function () { pm.expect(data).to.have.property(\"quantite\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4189,10 +4379,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur id_hapa\", function () { pm.expect(data).to.have.property(\"id_hapa\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4227,11 +4419,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Distribution validée\", function () { pm.expect(data.statut).to.eql('VALIDE'); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"cons_stk_1\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4266,11 +4460,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Distribution validée\", function () { pm.expect(data.statut).to.eql('VALIDE'); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"cons_stk_2\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4305,11 +4501,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Distribution validée\", function () { pm.expect(data.statut).to.eql('VALIDE'); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"cons_stk_3\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4344,10 +4542,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur date_distribution\", function () { pm.expect(data).to.have.property(\"date_distribution\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4368,10 +4568,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Les mouvements sont une liste\", function () { pm.expect(Array.isArray(data)).to.eql(true); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4392,10 +4594,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Tous les mouvements retournés sont des entrées (filtre attendu)\", function () { pm.expect(data.every(x => x.type_mouvement === 'ENTREE')).to.eql(true); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4416,10 +4620,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Solde net du stock\", function () { pm.expect(data.effectif_vivant).to.eql(12770); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4440,10 +4646,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Soldes STK_1 et STK_2\", function () { const m=Object.fromEntries(data.effectifs.map(x=>[x.id_hapa,x.effectif])); pm.expect(m[Number(pm.collectionVariables.get('hapa_stk_1'))]).to.eql(4980); pm.expect(m[Number(pm.collectionVariables.get('hapa_stk_2'))]).to.eql(4790); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4464,10 +4672,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Totaux retournés\", function () { pm.expect(Array.isArray(data)).to.eql(true); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4488,10 +4698,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Jours manquants retournés\", function () { pm.expect(Array.isArray(data)).to.eql(true); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4554,10 +4766,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur id_lot\", function () { pm.expect(data).to.have.property(\"id_lot\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4592,10 +4806,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur id_bassin_destination\", function () { pm.expect(data).to.have.property(\"id_bassin_destination\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4630,10 +4846,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur date_sortie\", function () { pm.expect(data).to.have.property(\"date_sortie\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4668,11 +4886,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Brouillon créé\", function () { pm.expect(data.statut).to.eql('BROUILLON'); });",
                   "pm.test(\"ID sortie stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"sortie_a\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4707,10 +4927,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur id_lot\", function () { pm.expect(data).to.have.property(\"id_lot\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4731,11 +4953,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Prélèvement calculé depuis le registre\", function () { pm.expect(data.effectif_sortant).to.eql(9770); pm.expect(data.lignes).to.have.length(2); });",
                   "pm.test(\"Quantités après journal\", function () { const m=Object.fromEntries(data.lignes.map(x=>[x.id_hapa,x.quantite])); pm.expect(m[Number(pm.collectionVariables.get('hapa_stk_1'))]).to.eql(4980); pm.expect(m[Number(pm.collectionVariables.get('hapa_stk_2'))]).to.eql(4790); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4770,10 +4994,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Observation modifiée\", function () { pm.expect(data.observation).to.include('Brouillon modifié'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4808,10 +5034,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur effectif_entrant\", function () { pm.expect(data).to.have.property(\"effectif_entrant\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4846,10 +5074,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur justification_ecart\", function () { pm.expect(data).to.have.property(\"justification_ecart\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4894,10 +5124,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Accès refusé\", function () { pm.expect(data).to.have.property('detail'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4942,11 +5174,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Sortie validée et écart calculé\", function () { pm.expect(data.statut).to.eql('VALIDEE'); pm.expect(data.effectif_sortant).to.eql(9770); pm.expect(data.effectif_entrant).to.eql(9760); pm.expect(data.ecart_effectif).to.eql(-10); });",
                   "pm.test(\"Deux lignes de sortie\", function () { pm.expect(data.lignes).to.have.length(2); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -4981,10 +5215,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur statut\", function () { pm.expect(data).to.have.property(\"statut\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5019,10 +5255,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur statut\", function () { pm.expect(data).to.have.property(\"statut\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5043,10 +5281,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Lot au stade EN_GROSSISSEMENT\", function () { pm.expect(data.stade).to.eql('EN_GROSSISSEMENT'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5067,11 +5307,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Lot A créé automatiquement\", function () { const rows=Array.isArray(data)?data:data.results; const lot=rows.find(x=>x.id_sortie_stock===Number(pm.collectionVariables.get('sortie_a'))); pm.expect(lot).to.exist; pm.collectionVariables.set('lot_gross_a', String(lot.id)); pm.expect(lot.effectif_initial).to.eql(9760); pm.expect(lot.statut).to.eql('ACTIF'); pm.expect(lot.poids_initial_g).to.eql(null); });",
                   "pm.test(\"Code, âge, étape et prochaine échéance\", function () { const rows=Array.isArray(data)?data:data.results; const lot=rows.find(x=>x.id_sortie_stock===Number(pm.collectionVariables.get('sortie_a'))); pm.expect(lot.code).to.match(/^GR-\\d{4}-\\d{4,}$/); pm.expect(lot.age_jours).to.eql(0); pm.expect(lot.etape_courante).to.eql(1); pm.expect(lot.prochaine_echeance_pesee).to.eql(pm.collectionVariables.get('date_jplus_30')); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5092,10 +5334,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Traitement, stock et sortie exposés\", function () { pm.expect(data.traitement.effectif_final).to.eql(9850); pm.expect(data.mise_en_stock.finalite).to.eql('GROSSISSEMENT'); pm.expect(data.mise_en_stock.ecart_effectif).to.eql(-50); pm.expect(data.sortie_stock.ecart_effectif).to.eql(-10); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5130,10 +5374,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 405\", function () { pm.response.to.have.status(405); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Création interdite\", function () { pm.expect(data).to.have.property('detail'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5168,10 +5414,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur id_lot\", function () { pm.expect(data).to.have.property(\"id_lot\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5229,11 +5477,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Brouillon C créé\", function () { pm.expect(data.statut).to.eql('BROUILLON'); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"sortie_c\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5278,10 +5528,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Accès refusé\", function () { pm.expect(data).to.have.property('detail'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5326,10 +5578,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Accès refusé\", function () { pm.expect(data).to.have.property('detail'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5374,10 +5628,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Lot C transféré\", function () { pm.expect(data.statut).to.eql('VALIDEE'); pm.expect(data.effectif_sortant).to.eql(1000); pm.expect(data.ecart_effectif).to.eql(0); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5398,10 +5654,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Deux lots présents\", function () { pm.expect(data.effectif_vivant).to.eql(10760); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5422,10 +5680,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Lot grossi de C retenu\", function () { const rows=Array.isArray(data)?data:data.results; const item=rows.find(x=>x.id_sortie_stock===Number(pm.collectionVariables.get('sortie_c'))); pm.expect(item).to.exist; pm.collectionVariables.set('lot_gross_c',String(item.id)); pm.collectionVariables.set('lot_gross_c_ancien',String(item.id)); pm.collectionVariables.set('lot_gross_c_ancien_code',item.code); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5460,10 +5720,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur motif\", function () { pm.expect(data).to.have.property(\"motif\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5498,11 +5760,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Sortie annulée\", function () { pm.expect(data.statut).to.eql('ANNULEE'); });",
                   "pm.test(\"Lot de grossissement supprimé\", function () { pm.collectionVariables.set('lot_gross_c_supprime', pm.collectionVariables.get('lot_gross_c_ancien') || ''); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5523,10 +5787,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Retour au stade EN_STOCK\", function () { pm.expect(data.stade).to.eql('EN_STOCK'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5547,10 +5813,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Stock restauré\", function () { pm.expect(data.effectif_vivant).to.eql(12770); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5585,10 +5853,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur statut\", function () { pm.expect(data).to.have.property(\"statut\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5623,10 +5893,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Brouillon recréé\", function () { pm.expect(data.statut).to.eql('BROUILLON'); pm.collectionVariables.set('sortie_c_nouvelle', String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5661,10 +5933,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Nouvelle sortie validée\", function () { pm.expect(data.statut).to.eql('VALIDEE'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5685,10 +5959,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Nouveau lot C créé avec un code distinct\", function () { const rows=Array.isArray(data)?data:data.results; const oldCode=pm.collectionVariables.get('lot_gross_c_ancien_code'); const newest=rows.find(x=>x.id_sortie_stock===Number(pm.collectionVariables.get('sortie_c_nouvelle'))); pm.expect(newest).to.exist; pm.collectionVariables.set('lot_gross_c',String(newest.id)); pm.expect(newest.effectif_initial).to.eql(1000); if(oldCode) pm.expect(newest.code).not.to.eql(oldCode); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5755,11 +6031,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Mortality sans hapa enregistrée\", function () { pm.expect(data.id_hapa).to.eql(null); pm.expect(data.quantite).to.eql(25); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"event_mort_gro\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5794,10 +6072,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur id_hapa\", function () { pm.expect(data).to.have.property(\"id_hapa\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5832,11 +6112,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Perte justifiée\", function () { pm.expect(data.justification).to.eql('Écart après comptage au grossissement'); });",
                   "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"event_perte_gro\", String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5871,10 +6153,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Distribution validée sans hapa\", function () { pm.expect(data.statut).to.eql('VALIDE'); pm.expect(data.id_hapa).to.eql(null); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5909,10 +6193,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Distribution validée sans hapa\", function () { pm.expect(data.statut).to.eql('VALIDE'); pm.expect(data.id_hapa).to.eql(null); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5947,10 +6233,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Distribution validée sans hapa\", function () { pm.expect(data.statut).to.eql('VALIDE'); pm.expect(data.id_hapa).to.eql(null); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -5985,10 +6273,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur date_distribution\", function () { pm.expect(data).to.have.property(\"date_distribution\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6009,10 +6299,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Solde final grossissement\", function () { pm.expect(data.effectif_vivant).to.eql(10730); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6047,10 +6339,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Champs autorisés modifiés\", function () { pm.expect(data.observation).to.include('Suivi E2E'); pm.expect(data.pourcentage_groupe_pesee).to.eql('25.00'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6085,10 +6379,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur id_bassin\", function () { pm.expect(data).to.have.property(\"id_bassin\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6123,10 +6419,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur effectif_initial\", function () { pm.expect(data).to.have.property(\"effectif_initial\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6161,10 +6459,92 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur pourcentage_groupe_pesee\", function () { pm.expect(data).to.have.property(\"pourcentage_groupe_pesee\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "10.12.1 Saisir poids initial du lot C",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{lot_gross_c}}/",
+            "description": "Vérifie 10.13 refuser clôture sans motif.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"poids_initial_g\": \"15.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Poids initial enregistré\", function () { pm.expect(data.poids_initial_g).to.eql('15.00'); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "10.12.2 Refuser clôture sans poids final",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{lot_gross_c}}/cloturer/",
+            "description": "Vérifie 10.13 refuser clôture sans motif.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motif\": \"Fin du test E2E\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Erreur métier sur poids_final_g\", function () { pm.expect(data).to.have.property(\"poids_final_g\"); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6185,7 +6565,7 @@
             "description": "Vérifie 10.13 refuser clôture sans motif.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"motif\": \"  \"\n}",
+              "raw": "{\n  \"motif\": \"  \",\n  \"poids_final_g\": \"250.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6199,10 +6579,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur motif\", function () { pm.expect(data).to.have.property(\"motif\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6223,7 +6605,7 @@
             "description": "Vérifie 10.14 clôturer le lot grossi c.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"motif\": \"Fin du test E2E\"\n}",
+              "raw": "{\n  \"motif\": \"Fin du test E2E\",\n  \"poids_final_g\": \"250.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6237,10 +6619,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Lot clôturé\", function () { pm.expect(data.statut).to.eql('CLOTURE'); pm.expect(data.date_cloture).to.eql(pm.collectionVariables.get('date_today')); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "pm.test(\"Poids et effectif finaux\", function () { pm.expect(data.poids_final_g).to.eql('250.00'); pm.expect(data.effectif_final).to.eql(10730); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6261,7 +6646,7 @@
             "description": "Vérifie 10.15 refuser double clôture.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"motif\": \"Seconde clôture\"\n}",
+              "raw": "{\n  \"motif\": \"Seconde clôture\",\n  \"poids_final_g\": \"250.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6275,10 +6660,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Erreur métier sur statut\", function () { pm.expect(data).to.have.property(\"statut\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6299,10 +6686,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Lot A reste le seul actif\", function () { const rows=Array.isArray(data)?data:data.results; pm.expect(rows).to.have.length(1); pm.expect(rows[0].id).to.eql(Number(pm.collectionVariables.get('lot_gross_a'))); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6348,10 +6737,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 401\", function () { pm.response.to.have.status(401); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Authentification requise\", function () { pm.expect(data).to.have.property('detail'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6396,10 +6787,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Création autorisée\", function () { pm.expect(data.statut).to.eql('VALIDE'); pm.collectionVariables.set('event_employe',String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6444,10 +6837,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Annulation interdite\", function () { pm.expect(data).to.have.property('detail'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6482,10 +6877,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Référentiel propre après vérification\", function () { pm.expect(data.statut).to.eql('ANNULEE'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6528,10 +6925,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Solde attendu TRT_A\", function () { const row=data.effectifs.find(x=>x.id_hapa===Number(pm.collectionVariables.get('hapa_trt_a'))); const value=row ? row.effectif : 0; pm.expect(value).to.eql(0); pm.collectionVariables.set('final_trt_a',String(value)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6552,10 +6951,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Solde attendu STK_1\", function () { pm.expect(data.effectif_vivant).to.eql(0); pm.collectionVariables.set('final_stk_1',String(data.effectif_vivant)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6576,10 +6977,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Solde attendu TRT_B\", function () { const row=data.effectifs.find(x=>x.id_hapa===Number(pm.collectionVariables.get('hapa_trt_b'))); const value=row ? row.effectif : 0; pm.expect(value).to.eql(0); pm.collectionVariables.set('final_trt_b',String(value)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6600,10 +7003,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Solde attendu STK_2\", function () { pm.expect(data.effectif_vivant).to.eql(0); pm.collectionVariables.set('final_stk_2',String(data.effectif_vivant)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6624,10 +7029,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Solde attendu STK_3\", function () { pm.expect(data.effectif_vivant).to.eql(2000); pm.collectionVariables.set('final_stk_3',String(data.effectif_vivant)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6648,10 +7055,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Solde attendu STK_4\", function () { pm.expect(data.effectif_vivant).to.eql(0); pm.collectionVariables.set('final_stk_4',String(data.effectif_vivant)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6672,10 +7081,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Solde attendu GRO\", function () { pm.expect(data.effectif_vivant).to.eql(10730); pm.collectionVariables.set('final_gro',String(data.effectif_vivant)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "pm.test(\"Solde attendu GRO\", function () { pm.expect(data.effectif_vivant).to.eql(0); pm.collectionVariables.set('final_gro',String(data.effectif_vivant)); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
@@ -6696,10 +7107,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Aucun solde final négatif\", function () { const names=['final_trt_a','final_trt_b','final_stk_1','final_stk_2','final_stk_3','final_stk_4','final_gro']; const values=Object.fromEntries(names.map(k=>[k,Number(pm.collectionVariables.get(k))])); pm.expect(Object.values(values).every(v=>v>=0)).to.eql(true); console.log('Soldes finaux (lus / attendus):', JSON.stringify({TRT_A:[values.final_trt_a,0],TRT_B:[values.final_trt_b,0],STK_1:[values.final_stk_1,0],STK_2:[values.final_stk_2,0],STK_3:[values.final_stk_3,2000],STK_4:[values.final_stk_4,0],GRO:[values.final_gro,10730]})); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));"
+                  "pm.test(\"Aucun solde final négatif\", function () { const names=['final_trt_a','final_trt_b','final_stk_1','final_stk_2','final_stk_3','final_stk_4','final_gro']; const values=Object.fromEntries(names.map(k=>[k,Number(pm.collectionVariables.get(k))])); pm.expect(Object.values(values).every(v=>v>=0)).to.eql(true); console.log('Soldes finaux (lus / attendus):', JSON.stringify({TRT_A:[values.final_trt_a,0],TRT_B:[values.final_trt_b,0],STK_1:[values.final_stk_1,0],STK_2:[values.final_stk_2,0],STK_3:[values.final_stk_3,2000],STK_4:[values.final_stk_4,0],GRO:[values.final_gro,0]})); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
                 ]
               }
             }
