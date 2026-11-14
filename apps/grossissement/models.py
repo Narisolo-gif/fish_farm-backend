@@ -171,3 +171,102 @@ class LotGrossissement(models.Model):
 
     def __str__(self):
         return self.code or f"Lot de grossissement {self.pk}"
+
+class Pesee(models.Model):
+    """Événement de pesée sur échantillon d'un bassin de grossissement."""
+
+    bassin = models.ForeignKey(
+        Bassin,
+        on_delete=models.PROTECT,
+        related_name="pesees",
+    )
+    date = models.DateField()
+    utilisateur = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="pesees_saisies",
+    )
+    observation = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+        indexes = [
+            models.Index(fields=["bassin", "date"], name="pesee_bassin_date_idx"),
+        ]
+
+    def __str__(self):
+        return f"Pesée {self.bassin} du {self.date}"
+
+
+class PeseeLot(models.Model):
+    """Échantillon pesé d'un lot ; le poids moyen est calculé par le service."""
+
+    pesee = models.ForeignKey(
+        Pesee,
+        on_delete=models.CASCADE,
+        related_name="lignes",
+    )
+    lot_grossissement = models.ForeignKey(
+        LotGrossissement,
+        on_delete=models.PROTECT,
+        related_name="lignes_pesee",
+    )
+    pourcentage_echantillon = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=10,
+    )
+    # Effectif vivant lu dans le registre à la date de la pesée, copié pour trace.
+    effectif_vivant = models.PositiveIntegerField()
+    taille_echantillon_cible = models.PositiveIntegerField()
+    nombre_poissons_peses = models.PositiveIntegerField()
+    poids_total_g = models.DecimalField(max_digits=12, decimal_places=2)
+    poids_moyen = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pesee", "lot_grossissement"],
+                name="pesee_lot_unique",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(pourcentage_echantillon__gt=0)
+                    & models.Q(pourcentage_echantillon__lte=100)
+                ),
+                name="pesee_lot_pourcentage_valide",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(effectif_vivant__gt=0),
+                name="pesee_lot_effectif_positif",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(taille_echantillon_cible__gte=1),
+                name="pesee_lot_cible_positive",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(nombre_poissons_peses__gt=0)
+                    & models.Q(nombre_poissons_peses__lte=models.F("effectif_vivant"))
+                ),
+                name="pesee_lot_nombre_valide",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(poids_total_g__gt=0),
+                name="pesee_lot_poids_total_positif",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(poids_moyen__gt=0),
+                name="pesee_lot_poids_moyen_positif",
+            ),
+        ]
+
+    @property
+    def echantillon_conforme(self):
+        return self.nombre_poissons_peses >= self.taille_echantillon_cible
+
+    def __str__(self):
+        return f"{self.lot_grossissement} - {self.pesee.date}"

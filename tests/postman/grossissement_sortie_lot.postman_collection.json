@@ -1,0 +1,4745 @@
+{
+  "info": {
+    "_postman_id": "ae485815-f2a0-5d08-bda4-8240f4b7f52c",
+    "name": "Grossissement - validation de sortie et création du lot",
+    "description": "Test autonome : valide une sortie de stock et vérifie la création du lot de grossissement et les règles du bassin (espèces, clôture, date de mise en place). Crée ses propres données (suffixe run_id) ; exécuter les dossiers dans l'ordre.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{gr_token_admin}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [],
+  "item": [
+    {
+      "name": "00 Préparation",
+      "item": [
+        {
+          "name": "00.01 Connexion administrateur et initialisation",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const t0 = new Date(Date.now() - 5 * 60 * 1000);",
+                  "const pad = (n) => String(n).padStart(2, '0');",
+                  "const dateOnly = (offset) => { const d = new Date(Date.UTC(t0.getUTCFullYear(), t0.getUTCMonth(), t0.getUTCDate() - offset)); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };",
+                  "pm.collectionVariables.set('gr_run_id', `GR-${t0.getUTCFullYear()}${pad(t0.getUTCMonth()+1)}${pad(t0.getUTCDate())}-${pad(t0.getUTCHours())}${pad(t0.getUTCMinutes())}-${Math.random().toString(36).slice(2,6).toUpperCase()}`);",
+                  "for (const n of [3, 5, 7, 8, 9, 10]) pm.collectionVariables.set(`gr_date_jminus_${n}`, dateOnly(n));",
+                  "pm.collectionVariables.set('gr_date_today', dateOnly(0));",
+                  "pm.collectionVariables.set('gr_date_sortie_jminus_3', `${dateOnly(3)}T12:00:00.000Z`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Jeton reçu\", function () { pm.expect(data).to.have.property(\"access\"); });",
+                  "if (data.access !== undefined) pm.collectionVariables.set(\"gr_token_admin\", String(data.access));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{admin_username}}\",\n  \"password\": \"{{admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "00.02 Connexion employé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "if (data.access !== undefined) pm.collectionVariables.set(\"gr_token_employe\", String(data.access));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{employee_username}}\",\n  \"password\": \"{{employee_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Référentiels",
+      "item": [
+        {
+          "name": "01.01 Créer bassin REP-CARPE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Catégorie REPRODUCTION\", function () { pm.expect(data.categorie).to.eql(\"REPRODUCTION\"); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_bassin_rep_carpe\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"REP-CARPE-{{gr_run_id}}\",\n  \"categorie\": \"REPRODUCTION\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "01.02 Créer bassin REP-TILAPIA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Catégorie REPRODUCTION\", function () { pm.expect(data.categorie).to.eql(\"REPRODUCTION\"); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_bassin_rep_tilapia\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"REP-TILAPIA-{{gr_run_id}}\",\n  \"categorie\": \"REPRODUCTION\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "01.03 Créer bassin STK",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Catégorie STOCKS\", function () { pm.expect(data.categorie).to.eql(\"STOCKS\"); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_bassin_stk\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"STK-{{gr_run_id}}\",\n  \"categorie\": \"STOCKS\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "01.04 Créer bassin GRO",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Catégorie GROSSISSEMENT\", function () { pm.expect(data.categorie).to.eql(\"GROSSISSEMENT\"); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_bassin_gro\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"GRO-{{gr_run_id}}\",\n  \"categorie\": \"GROSSISSEMENT\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "01.05 Créer hapa STK_A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_hapa_stk_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/hapas/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{gr_bassin_stk}}\",\n  \"nom\": \"STK_A-{{gr_run_id}}\",\n  \"actif\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "01.06 Créer hapa STK_B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_hapa_stk_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/hapas/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{gr_bassin_stk}}\",\n  \"nom\": \"STK_B-{{gr_run_id}}\",\n  \"actif\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "01.07 Créer hapa STK_C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_hapa_stk_c\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/hapas/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{gr_bassin_stk}}\",\n  \"nom\": \"STK_C-{{gr_run_id}}\",\n  \"actif\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "01.08 Créer hapa STK_T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_hapa_stk_t\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/hapas/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{gr_bassin_stk}}\",\n  \"nom\": \"STK_T-{{gr_run_id}}\",\n  \"actif\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Lots en stock",
+      "item": [
+        {
+          "name": "02.01 Créer reproduction carpe",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_reproduction_carpe\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/reproductions/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"REPRO-CARPE-{{gr_run_id}}\",\n  \"bassin\": \"{{gr_bassin_rep_carpe}}\",\n  \"espece\": \"CARPE\",\n  \"date_ajout\": \"{{gr_date_jminus_10}}\",\n  \"quantite_male\": 5,\n  \"quantite_femelle\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.02 Créer reproduction tilapia",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_reproduction_tilapia\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/reproductions/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"REPRO-TILAPIA-{{gr_run_id}}\",\n  \"bassin\": \"{{gr_bassin_rep_tilapia}}\",\n  \"espece\": \"TILAPIA\",\n  \"date_ajout\": \"{{gr_date_jminus_10}}\",\n  \"quantite_male\": 5,\n  \"quantite_femelle\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.03 Créer ponte A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_ponte_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/pontes/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PONTE-A-{{gr_run_id}}\",\n  \"bassin\": \"{{gr_bassin_rep_carpe}}\",\n  \"date_ponte\": \"{{gr_date_jminus_9}}\",\n  \"quantite_oeuf_obtenu\": \"1000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.04 Créer éclosion A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_eclosion_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ecloserie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"ECLOSION-A-{{gr_run_id}}\",\n  \"reference_ponte\": \"PONTE-A-{{gr_run_id}}\",\n  \"date_eclosion\": \"{{gr_date_jminus_8}}\",\n  \"quantite_oeufs_eclos\": \"1000.00\",\n  \"quantite_alevins_obtenu\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.05 Créer lot A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Effectif issu de l'éclosion\", function () { pm.expect(data.quantite_initiale).to.eql(100); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_lot_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"LOT-A-{{gr_run_id}}\",\n  \"id_eclosion\": \"{{gr_eclosion_a}}\",\n  \"date_creation\": \"{{gr_date_jminus_7}}T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.06 Créer ponte B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_ponte_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/pontes/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PONTE-B-{{gr_run_id}}\",\n  \"bassin\": \"{{gr_bassin_rep_carpe}}\",\n  \"date_ponte\": \"{{gr_date_jminus_9}}\",\n  \"quantite_oeuf_obtenu\": \"1000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.07 Créer éclosion B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_eclosion_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ecloserie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"ECLOSION-B-{{gr_run_id}}\",\n  \"reference_ponte\": \"PONTE-B-{{gr_run_id}}\",\n  \"date_eclosion\": \"{{gr_date_jminus_8}}\",\n  \"quantite_oeufs_eclos\": \"1000.00\",\n  \"quantite_alevins_obtenu\": 80\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.08 Créer lot B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Effectif issu de l'éclosion\", function () { pm.expect(data.quantite_initiale).to.eql(80); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_lot_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"LOT-B-{{gr_run_id}}\",\n  \"id_eclosion\": \"{{gr_eclosion_b}}\",\n  \"date_creation\": \"{{gr_date_jminus_7}}T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.09 Créer ponte C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_ponte_c\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/pontes/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PONTE-C-{{gr_run_id}}\",\n  \"bassin\": \"{{gr_bassin_rep_carpe}}\",\n  \"date_ponte\": \"{{gr_date_jminus_9}}\",\n  \"quantite_oeuf_obtenu\": \"1000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.10 Créer éclosion C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_eclosion_c\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ecloserie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"ECLOSION-C-{{gr_run_id}}\",\n  \"reference_ponte\": \"PONTE-C-{{gr_run_id}}\",\n  \"date_eclosion\": \"{{gr_date_jminus_8}}\",\n  \"quantite_oeufs_eclos\": \"1000.00\",\n  \"quantite_alevins_obtenu\": 60\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.11 Créer lot C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Effectif issu de l'éclosion\", function () { pm.expect(data.quantite_initiale).to.eql(60); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_lot_c\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"LOT-C-{{gr_run_id}}\",\n  \"id_eclosion\": \"{{gr_eclosion_c}}\",\n  \"date_creation\": \"{{gr_date_jminus_7}}T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.12 Créer ponte T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_ponte_t\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/pontes/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PONTE-T-{{gr_run_id}}\",\n  \"bassin\": \"{{gr_bassin_rep_tilapia}}\",\n  \"date_ponte\": \"{{gr_date_jminus_9}}\",\n  \"quantite_oeuf_obtenu\": \"1000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.13 Créer éclosion T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_eclosion_t\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ecloserie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"ECLOSION-T-{{gr_run_id}}\",\n  \"reference_ponte\": \"PONTE-T-{{gr_run_id}}\",\n  \"date_eclosion\": \"{{gr_date_jminus_8}}\",\n  \"quantite_oeufs_eclos\": \"1000.00\",\n  \"quantite_alevins_obtenu\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.14 Créer lot T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Effectif issu de l'éclosion\", function () { pm.expect(data.quantite_initiale).to.eql(50); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_lot_t\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"LOT-T-{{gr_run_id}}\",\n  \"id_eclosion\": \"{{gr_eclosion_t}}\",\n  \"date_creation\": \"{{gr_date_jminus_7}}T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.15 Mettre lot A en stock (finalité GROSSISSEMENT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_mise_en_stock_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/stocks/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{gr_lot_a}}\",\n  \"id_bassin\": \"{{gr_bassin_stk}}\",\n  \"finalite\": \"GROSSISSEMENT\",\n  \"date_mise_en_stock\": \"{{gr_date_jminus_5}}T12:00:00Z\",\n  \"hapas\": [\n    {\n      \"id_hapa\": \"{{gr_hapa_stk_a}}\",\n      \"effectif_entrant\": 100\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.16 Mettre lot B en stock (finalité GROSSISSEMENT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_mise_en_stock_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/stocks/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{gr_lot_b}}\",\n  \"id_bassin\": \"{{gr_bassin_stk}}\",\n  \"finalite\": \"GROSSISSEMENT\",\n  \"date_mise_en_stock\": \"{{gr_date_jminus_5}}T12:00:00Z\",\n  \"hapas\": [\n    {\n      \"id_hapa\": \"{{gr_hapa_stk_b}}\",\n      \"effectif_entrant\": 80\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.17 Mettre lot C en stock (finalité GROSSISSEMENT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_mise_en_stock_c\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/stocks/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{gr_lot_c}}\",\n  \"id_bassin\": \"{{gr_bassin_stk}}\",\n  \"finalite\": \"GROSSISSEMENT\",\n  \"date_mise_en_stock\": \"{{gr_date_jminus_5}}T12:00:00Z\",\n  \"hapas\": [\n    {\n      \"id_hapa\": \"{{gr_hapa_stk_c}}\",\n      \"effectif_entrant\": 60\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.18 Mettre lot T en stock (finalité GROSSISSEMENT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_mise_en_stock_t\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/stocks/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{gr_lot_t}}\",\n  \"id_bassin\": \"{{gr_bassin_stk}}\",\n  \"finalite\": \"GROSSISSEMENT\",\n  \"date_mise_en_stock\": \"{{gr_date_jminus_5}}T12:00:00Z\",\n  \"hapas\": [\n    {\n      \"id_hapa\": \"{{gr_hapa_stk_t}}\",\n      \"effectif_entrant\": 50\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Validation et création du lot de grossissement",
+      "item": [
+        {
+          "name": "03.01 Créer brouillon de sortie du lot A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Brouillon créé\", function () { pm.expect(data.statut).to.eql(\"BROUILLON\"); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_sortie_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{gr_lot_a}}\",\n  \"id_bassin_destination\": \"{{gr_bassin_gro}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "03.02 Refuser la validation par un employé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{gr_sortie_a}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{gr_token_employe}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "03.03 Valider la sortie du lot A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Sortie validée\", function () { pm.expect(data.statut).to.eql(\"VALIDEE\"); pm.expect(data.effectif_sortant).to.eql(100); pm.expect(data.effectif_entrant).to.eql(100); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{gr_sortie_a}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "03.04 Refuser une double validation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur statut\", function () { pm.expect(data).to.have.property(\"statut\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{gr_sortie_a}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "03.05 Vérifier le stade du lot A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Stade EN_GROSSISSEMENT\", function () { pm.expect(data.stade).to.eql(\"EN_GROSSISSEMENT\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/{{gr_lot_a}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "03.06 Vérifier le lot de grossissement créé pour A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const rows = Array.isArray(data) ? data : (data.results || []);",
+                  "const lot = rows[0] || {};",
+                  "pm.test(\"Un seul lot créé\", function () { pm.expect(rows).to.have.length(1); });",
+                  "pm.test(\"Lot ACTIF, effectif, espèce et bassin\", function () { pm.expect(lot.statut).to.eql(\"ACTIF\"); pm.expect(lot.effectif_initial).to.eql(100); pm.expect(lot.espece).to.eql(\"CARPE\"); pm.expect(lot.id_bassin).to.eql(Number(pm.collectionVariables.get(\"gr_bassin_gro\"))); pm.expect(lot.id_sortie_stock).to.eql(Number(pm.collectionVariables.get(\"gr_sortie_a\"))); });",
+                  "pm.test(\"Code au format GR-AAAA-NNNN\", function () { pm.expect(lot.code).to.match(/^GR-\\d{4}-\\d{4,}$/); });",
+                  "pm.test(\"Poids initial à saisir, pas de clôture\", function () { pm.expect(lot.poids_initial_g).to.eql(null); pm.expect(lot.effectif_final).to.eql(null); });",
+                  "if (lot.id !== undefined) pm.collectionVariables.set(\"gr_lot_gross_a\", String(lot.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?lot_origine={{gr_lot_a}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "03.07 Vérifier le solde CARPE du bassin GRO",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Solde CARPE = 100\", function () { pm.expect(data.effectif_vivant).to.eql(100); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/solde/?bassin={{gr_bassin_gro}}&espece=CARPE",
+            "description": ""
+          }
+        },
+        {
+          "name": "03.08 Refuser la création manuelle d'un lot de grossissement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 405\", function () { pm.response.to.have.status(405); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot_origine\": \"{{gr_lot_a}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Règles du bassin de grossissement",
+      "item": [
+        {
+          "name": "04.01 Créer brouillon de sortie du lot B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Brouillon créé\", function () { pm.expect(data.statut).to.eql(\"BROUILLON\"); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_sortie_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{gr_lot_b}}\",\n  \"id_bassin_destination\": \"{{gr_bassin_gro}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "04.02 Refuser un second lot CARPE dans le bassin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur id_bassin_destination\", function () { pm.expect(data).to.have.property(\"id_bassin_destination\"); });",
+                  "pm.test(\"Message explicite\", function () { pm.expect(JSON.stringify(data)).to.include(\"même espèce\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{gr_sortie_b}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "04.03 Vérifier que la sortie du lot B reste BROUILLON",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Sortie BROUILLON\", function () { pm.expect(data.statut).to.eql(\"BROUILLON\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{gr_sortie_b}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "04.04 Vérifier le stade du lot B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Stade EN_STOCK\", function () { pm.expect(data.stade).to.eql(\"EN_STOCK\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/{{gr_lot_b}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "04.05 Vérifier le solde CARPE du bassin GRO",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Solde CARPE = 100\", function () { pm.expect(data.effectif_vivant).to.eql(100); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/solde/?bassin={{gr_bassin_gro}}&espece=CARPE",
+            "description": ""
+          }
+        },
+        {
+          "name": "04.06 Créer brouillon de sortie du lot T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Brouillon créé\", function () { pm.expect(data.statut).to.eql(\"BROUILLON\"); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_sortie_t\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{gr_lot_t}}\",\n  \"id_bassin_destination\": \"{{gr_bassin_gro}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "04.07 Accepter un lot TILAPIA à côté du lot CARPE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Sortie validée\", function () { pm.expect(data.statut).to.eql(\"VALIDEE\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{gr_sortie_t}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "04.08 Vérifier le lot de grossissement créé pour T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const rows = Array.isArray(data) ? data : (data.results || []);",
+                  "const lot = rows[0] || {};",
+                  "pm.test(\"Un seul lot créé\", function () { pm.expect(rows).to.have.length(1); });",
+                  "pm.test(\"Lot ACTIF, effectif, espèce et bassin\", function () { pm.expect(lot.statut).to.eql(\"ACTIF\"); pm.expect(lot.effectif_initial).to.eql(50); pm.expect(lot.espece).to.eql(\"TILAPIA\"); pm.expect(lot.id_bassin).to.eql(Number(pm.collectionVariables.get(\"gr_bassin_gro\"))); pm.expect(lot.id_sortie_stock).to.eql(Number(pm.collectionVariables.get(\"gr_sortie_t\"))); });",
+                  "pm.test(\"Code au format GR-AAAA-NNNN\", function () { pm.expect(lot.code).to.match(/^GR-\\d{4}-\\d{4,}$/); });",
+                  "pm.test(\"Poids initial à saisir, pas de clôture\", function () { pm.expect(lot.poids_initial_g).to.eql(null); pm.expect(lot.effectif_final).to.eql(null); });",
+                  "if (lot.id !== undefined) pm.collectionVariables.set(\"gr_lot_gross_t\", String(lot.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?lot_origine={{gr_lot_t}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "04.09 Vérifier deux lots actifs dans le bassin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const rows = Array.isArray(data) ? data : (data.results || []);",
+                  "pm.test(\"Deux lots actifs\", function () { pm.expect(rows).to.have.length(2); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?bassin={{gr_bassin_gro}}&statut=ACTIF",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Nouveau lot de même espèce après clôture",
+      "item": [
+        {
+          "name": "05.01 Clôturer le lot de grossissement A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Lot clôturé et évacué\", function () { pm.expect(data.statut).to.eql(\"CLOTURE\"); pm.expect(data.effectif_final).to.eql(100); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{gr_lot_gross_a}}/cloturer/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motif\": \"Fin du cycle de test\",\n  \"poids_final_g\": \"250.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "05.02 Vérifier le solde CARPE du bassin GRO",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Solde CARPE = 0\", function () { pm.expect(data.effectif_vivant).to.eql(0); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/solde/?bassin={{gr_bassin_gro}}&espece=CARPE",
+            "description": ""
+          }
+        },
+        {
+          "name": "05.03 Créer brouillon de sortie du lot C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Brouillon créé\", function () { pm.expect(data.statut).to.eql(\"BROUILLON\"); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"gr_sortie_c\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{gr_lot_c}}\",\n  \"id_bassin_destination\": \"{{gr_bassin_gro}}\",\n  \"date_sortie\": \"{{gr_date_sortie_jminus_3}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "05.04 Refuser une mise en place antérieure à la clôture du lot A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur date_sortie\", function () { pm.expect(data).to.have.property(\"date_sortie\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{gr_sortie_c}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "05.05 Vérifier que la sortie du lot C reste BROUILLON",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Sortie BROUILLON\", function () { pm.expect(data.statut).to.eql(\"BROUILLON\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{gr_sortie_c}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "05.06 Accepter le lot B (même espèce) après la clôture de A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Sortie validée\", function () { pm.expect(data.statut).to.eql(\"VALIDEE\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{gr_sortie_b}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "05.07 Vérifier le lot de grossissement créé pour B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const rows = Array.isArray(data) ? data : (data.results || []);",
+                  "const lot = rows[0] || {};",
+                  "pm.test(\"Un seul lot créé\", function () { pm.expect(rows).to.have.length(1); });",
+                  "pm.test(\"Lot ACTIF, effectif, espèce et bassin\", function () { pm.expect(lot.statut).to.eql(\"ACTIF\"); pm.expect(lot.effectif_initial).to.eql(80); pm.expect(lot.espece).to.eql(\"CARPE\"); pm.expect(lot.id_bassin).to.eql(Number(pm.collectionVariables.get(\"gr_bassin_gro\"))); pm.expect(lot.id_sortie_stock).to.eql(Number(pm.collectionVariables.get(\"gr_sortie_b\"))); });",
+                  "pm.test(\"Code au format GR-AAAA-NNNN\", function () { pm.expect(lot.code).to.match(/^GR-\\d{4}-\\d{4,}$/); });",
+                  "pm.test(\"Poids initial à saisir, pas de clôture\", function () { pm.expect(lot.poids_initial_g).to.eql(null); pm.expect(lot.effectif_final).to.eql(null); });",
+                  "if (lot.id !== undefined) pm.collectionVariables.set(\"gr_lot_gross_b\", String(lot.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?lot_origine={{gr_lot_b}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "05.08 Vérifier le solde CARPE du bassin GRO",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Solde CARPE = 80\", function () { pm.expect(data.effectif_vivant).to.eql(80); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/solde/?bassin={{gr_bassin_gro}}&espece=CARPE",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Pesées",
+      "description": "Dossier autonome : crée ses bassins, ses lots et leur effectif, puis teste la pesée sur échantillon.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{ps_token_admin}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "06.01 Connexion administrateur et dates",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const t0 = new Date(Date.now() - 5 * 60 * 1000);",
+                  "const pad = (n) => String(n).padStart(2, '0');",
+                  "const dateOnly = (offset) => { const d = new Date(Date.UTC(t0.getUTCFullYear(), t0.getUTCMonth(), t0.getUTCDate() - offset)); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };",
+                  "pm.collectionVariables.set('ps_run_id', `PS-${t0.getUTCFullYear()}${pad(t0.getUTCMonth()+1)}${pad(t0.getUTCDate())}-${pad(t0.getUTCHours())}${pad(t0.getUTCMinutes())}-${Math.random().toString(36).slice(2,6).toUpperCase()}`);",
+                  "for (const n of [2, 3, 5, 10, 15, 20, 22, 25, 30, 40, 45, 50, 57, 58, 59, 60]) pm.collectionVariables.set(`ps_j${n}`, dateOnly(n));",
+                  "pm.collectionVariables.set('ps_j0', dateOnly(0));",
+                  "pm.collectionVariables.set('ps_jplus1', dateOnly(-1));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "if (data.access !== undefined) pm.collectionVariables.set(\"ps_token_admin\", String(data.access));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{admin_username}}\",\n  \"password\": \"{{admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "06.02 Connexion gestionnaire",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "if (data.access !== undefined) pm.collectionVariables.set(\"ps_token_gestionnaire\", String(data.access));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{manager_username}}\",\n  \"password\": \"{{manager_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "06.03 Connexion employé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "if (data.access !== undefined) pm.collectionVariables.set(\"ps_token_employe\", String(data.access));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{employee_username}}\",\n  \"password\": \"{{employee_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "06.04 Créer bassin PS-REP-CARPE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_bassin_rep_carpe\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-REP-CARPE-{{ps_run_id}}\",\n  \"categorie\": \"REPRODUCTION\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.05 Créer bassin PS-REP-TILAPIA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_bassin_rep_tilapia\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-REP-TILAPIA-{{ps_run_id}}\",\n  \"categorie\": \"REPRODUCTION\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.06 Créer bassin PS-STK",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_bassin_stk\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-STK-{{ps_run_id}}\",\n  \"categorie\": \"STOCKS\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.07 Créer bassin PS-GRO1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_bassin_gro1\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-GRO1-{{ps_run_id}}\",\n  \"categorie\": \"GROSSISSEMENT\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.08 Créer bassin PS-GRO2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_bassin_gro2\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-GRO2-{{ps_run_id}}\",\n  \"categorie\": \"GROSSISSEMENT\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.09 Créer bassin PS-GRO3",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_bassin_gro3\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-GRO3-{{ps_run_id}}\",\n  \"categorie\": \"GROSSISSEMENT\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.10 Créer hapa PS_A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_hapa_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/hapas/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{ps_bassin_stk}}\",\n  \"nom\": \"PS_A-{{ps_run_id}}\",\n  \"actif\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.11 Créer hapa PS_B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_hapa_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/hapas/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{ps_bassin_stk}}\",\n  \"nom\": \"PS_B-{{ps_run_id}}\",\n  \"actif\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.12 Créer hapa PS_T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_hapa_t\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/hapas/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{ps_bassin_stk}}\",\n  \"nom\": \"PS_T-{{ps_run_id}}\",\n  \"actif\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.13 Créer reproduction CARPE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/reproductions/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-REPRO-CARPE-{{ps_run_id}}\",\n  \"bassin\": \"{{ps_bassin_rep_carpe}}\",\n  \"espece\": \"CARPE\",\n  \"date_ajout\": \"{{ps_j60}}\",\n  \"quantite_male\": 5,\n  \"quantite_femelle\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.14 Créer reproduction TILAPIA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/reproductions/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-REPRO-TILAPIA-{{ps_run_id}}\",\n  \"bassin\": \"{{ps_bassin_rep_tilapia}}\",\n  \"espece\": \"TILAPIA\",\n  \"date_ajout\": \"{{ps_j60}}\",\n  \"quantite_male\": 5,\n  \"quantite_femelle\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.15 Créer ponte A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/pontes/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-PONTE-A-{{ps_run_id}}\",\n  \"bassin\": \"{{ps_bassin_rep_carpe}}\",\n  \"date_ponte\": \"{{ps_j59}}\",\n  \"quantite_oeuf_obtenu\": \"5000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.16 Créer éclosion A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_eclosion_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ecloserie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-ECLOSION-A-{{ps_run_id}}\",\n  \"reference_ponte\": \"PS-PONTE-A-{{ps_run_id}}\",\n  \"date_eclosion\": \"{{ps_j58}}\",\n  \"quantite_oeufs_eclos\": \"5000.00\",\n  \"quantite_alevins_obtenu\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.17 Créer lot A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_lot_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-LOT-A-{{ps_run_id}}\",\n  \"id_eclosion\": \"{{ps_eclosion_a}}\",\n  \"date_creation\": \"{{ps_j57}}T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.18 Mettre lot A en stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/stocks/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ps_lot_a}}\",\n  \"id_bassin\": \"{{ps_bassin_stk}}\",\n  \"finalite\": \"GROSSISSEMENT\",\n  \"date_mise_en_stock\": \"{{ps_j50}}T12:00:00Z\",\n  \"hapas\": [\n    {\n      \"id_hapa\": \"{{ps_hapa_a}}\",\n      \"effectif_entrant\": 1000\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.19 Créer brouillon de sortie du lot A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_sortie_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ps_lot_a}}\",\n  \"id_bassin_destination\": \"{{ps_bassin_gro1}}\",\n  \"date_sortie\": \"{{ps_j40}}T12:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.20 Valider la sortie du lot A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Effectif entrant 1000\", function () { pm.expect(data.effectif_entrant).to.eql(1000); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{ps_sortie_a}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.21 Retenir le lot de grossissement A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const lot = Array.isArray(data) ? data[0] : (data.results || [])[0];",
+                  "pm.test(\"Lot de grossissement actif\", function () { pm.expect(lot.statut).to.eql(\"ACTIF\"); });",
+                  "pm.collectionVariables.set(\"ps_lot_gross_a\", String(lot.id));",
+                  "pm.collectionVariables.set(\"ps_code_a\", String(lot.code));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?lot_origine={{ps_lot_a}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "06.22 Créer ponte B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/pontes/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-PONTE-B-{{ps_run_id}}\",\n  \"bassin\": \"{{ps_bassin_rep_carpe}}\",\n  \"date_ponte\": \"{{ps_j59}}\",\n  \"quantite_oeuf_obtenu\": \"5000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.23 Créer éclosion B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_eclosion_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ecloserie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-ECLOSION-B-{{ps_run_id}}\",\n  \"reference_ponte\": \"PS-PONTE-B-{{ps_run_id}}\",\n  \"date_eclosion\": \"{{ps_j58}}\",\n  \"quantite_oeufs_eclos\": \"5000.00\",\n  \"quantite_alevins_obtenu\": 200\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.24 Créer lot B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_lot_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-LOT-B-{{ps_run_id}}\",\n  \"id_eclosion\": \"{{ps_eclosion_b}}\",\n  \"date_creation\": \"{{ps_j57}}T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.25 Mettre lot B en stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/stocks/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ps_lot_b}}\",\n  \"id_bassin\": \"{{ps_bassin_stk}}\",\n  \"finalite\": \"GROSSISSEMENT\",\n  \"date_mise_en_stock\": \"{{ps_j50}}T12:00:00Z\",\n  \"hapas\": [\n    {\n      \"id_hapa\": \"{{ps_hapa_b}}\",\n      \"effectif_entrant\": 200\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.26 Créer brouillon de sortie du lot B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_sortie_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ps_lot_b}}\",\n  \"id_bassin_destination\": \"{{ps_bassin_gro2}}\",\n  \"date_sortie\": \"{{ps_j40}}T12:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.27 Valider la sortie du lot B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Effectif entrant 200\", function () { pm.expect(data.effectif_entrant).to.eql(200); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{ps_sortie_b}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.28 Retenir le lot de grossissement B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const lot = Array.isArray(data) ? data[0] : (data.results || [])[0];",
+                  "pm.test(\"Lot de grossissement actif\", function () { pm.expect(lot.statut).to.eql(\"ACTIF\"); });",
+                  "pm.collectionVariables.set(\"ps_lot_gross_b\", String(lot.id));",
+                  "pm.collectionVariables.set(\"ps_code_b\", String(lot.code));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?lot_origine={{ps_lot_b}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "06.29 Créer ponte T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/pontes/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-PONTE-T-{{ps_run_id}}\",\n  \"bassin\": \"{{ps_bassin_rep_tilapia}}\",\n  \"date_ponte\": \"{{ps_j59}}\",\n  \"quantite_oeuf_obtenu\": \"5000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.30 Créer éclosion T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_eclosion_t\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ecloserie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-ECLOSION-T-{{ps_run_id}}\",\n  \"reference_ponte\": \"PS-PONTE-T-{{ps_run_id}}\",\n  \"date_eclosion\": \"{{ps_j58}}\",\n  \"quantite_oeufs_eclos\": \"5000.00\",\n  \"quantite_alevins_obtenu\": 500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.31 Créer lot T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_lot_t\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"PS-LOT-T-{{ps_run_id}}\",\n  \"id_eclosion\": \"{{ps_eclosion_t}}\",\n  \"date_creation\": \"{{ps_j57}}T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.32 Mettre lot T en stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/stocks/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ps_lot_t}}\",\n  \"id_bassin\": \"{{ps_bassin_stk}}\",\n  \"finalite\": \"GROSSISSEMENT\",\n  \"date_mise_en_stock\": \"{{ps_j50}}T12:00:00Z\",\n  \"hapas\": [\n    {\n      \"id_hapa\": \"{{ps_hapa_t}}\",\n      \"effectif_entrant\": 500\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.33 Créer brouillon de sortie du lot T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_sortie_t\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ps_lot_t}}\",\n  \"id_bassin_destination\": \"{{ps_bassin_gro1}}\",\n  \"date_sortie\": \"{{ps_j40}}T12:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.34 Valider la sortie du lot T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Effectif entrant 500\", function () { pm.expect(data.effectif_entrant).to.eql(500); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{ps_sortie_t}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.35 Retenir le lot de grossissement T",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const lot = Array.isArray(data) ? data[0] : (data.results || [])[0];",
+                  "pm.test(\"Lot de grossissement actif\", function () { pm.expect(lot.statut).to.eql(\"ACTIF\"); });",
+                  "pm.collectionVariables.set(\"ps_lot_gross_t\", String(lot.id));",
+                  "pm.collectionVariables.set(\"ps_code_t\", String(lot.code));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?lot_origine={{ps_lot_t}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "06.36 Pesée valide de A seul (25.375 → 25.38 g)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_pesee_1\", String(data.id));",
+                  "const l = data.lignes[0];",
+                  "pm.test(\"Une ligne pour le lot A\", function () { pm.expect(data.lignes.length).to.eql(1); pm.expect(l.id_lot_grossissement).to.eql(Number(pm.collectionVariables.get(\"ps_lot_gross_a\"))); pm.expect(l.reference_lot).to.eql(pm.collectionVariables.get(\"ps_code_a\")); });",
+                  "pm.test(\"Pourcentage par défaut du lot\", function () { pm.expect(l.pourcentage_echantillon).to.eql(\"10.00\"); });",
+                  "pm.test(\"Effectif vivant copié du registre\", function () { pm.expect(l.effectif_vivant).to.eql(1000); });",
+                  "pm.test(\"Cible = ceil(1000 × 10 %) = 100\", function () { pm.expect(l.taille_echantillon_cible).to.eql(100); });",
+                  "pm.test(\"Poids moyen = 2537.50 / 100 arrondi = 25.38\", function () { pm.expect(l.poids_moyen).to.eql(\"25.38\"); });",
+                  "pm.test(\"Échantillon conforme\", function () { pm.expect(l.echantillon_conforme).to.eql(true); });",
+                  "pm.test(\"Bassin et utilisateur posés\", function () { pm.expect(data.id_bassin).to.eql(Number(pm.collectionVariables.get(\"ps_bassin_gro1\"))); pm.expect(data.reference_bassin).to.include(\"PS-GRO1\"); pm.expect(data.id_user).to.be.a(\"number\"); });",
+                  "pm.test(\"Confirmation non renvoyée\", function () { pm.expect(data).to.not.have.property(\"confirmer_echantillon_non_conforme\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j30}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"2537.50\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.37 Pesée valide de A et T dans le même bassin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_pesee_2\", String(data.id));",
+                  "const parLot = Object.fromEntries(data.lignes.map(l => [String(l.id_lot_grossissement), l]));",
+                  "const a = parLot[pm.collectionVariables.get(\"ps_lot_gross_a\")], t = parLot[pm.collectionVariables.get(\"ps_lot_gross_t\")];",
+                  "pm.test(\"Deux lignes\", function () { pm.expect(data.lignes.length).to.eql(2); pm.expect(a).to.exist; pm.expect(t).to.exist; });",
+                  "pm.test(\"Lot A : 30.00 g\", function () { pm.expect(a.poids_moyen).to.eql(\"30.00\"); pm.expect(a.effectif_vivant).to.eql(1000); });",
+                  "pm.test(\"Lot T : 500 vivants, cible 20 % = 100, 15.00 g\", function () { pm.expect(t.effectif_vivant).to.eql(500); pm.expect(t.taille_echantillon_cible).to.eql(100); pm.expect(t.poids_moyen).to.eql(\"15.00\"); pm.expect(t.echantillon_conforme).to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j25}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"pourcentage_echantillon\": 10,\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"3000.00\"\n    },\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_t}}\",\n      \"pourcentage_echantillon\": 20,\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"1500.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.38 Refuser un échantillon inférieur à la cible sans confirmation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur echantillon_non_conforme\", function () { pm.expect(data).to.have.property(\"echantillon_non_conforme\"); });",
+                  "pm.test(\"Lignes non conformes détaillées\", function () { const l = data.lignes_non_conformes[0]; pm.expect(data.lignes_non_conformes.length).to.eql(1); pm.expect(l.id_lot_grossissement).to.eql(Number(pm.collectionVariables.get(\"ps_lot_gross_a\"))); pm.expect(l.reference_lot).to.eql(pm.collectionVariables.get(\"ps_code_a\")); pm.expect(l.nombre_poissons_peses).to.eql(80); pm.expect(l.taille_echantillon_cible).to.eql(100); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j20}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 80,\n      \"poids_total_g\": \"2800.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.39 Accepter le même échantillon avec confirmation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_pesee_3\", String(data.id));",
+                  "pm.test(\"Échantillon non conforme enregistré\", function () { const l = data.lignes[0]; pm.expect(l.echantillon_conforme).to.eql(false); pm.expect(l.poids_moyen).to.eql(\"35.00\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j20}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 80,\n      \"poids_total_g\": \"2800.00\"\n    }\n  ],\n  \"confirmer_echantillon_non_conforme\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.40 Refuser plus de poissons pesés que de vivants, même confirmé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur nombre_poissons_peses\", function () { pm.expect(data).to.have.property(\"nombre_poissons_peses\"); });",
+                  "pm.test(\"Le lot est cité\", function () { pm.expect(String(data.nombre_poissons_peses)).to.include(pm.collectionVariables.get(\"ps_code_a\")); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"observation\": \"\",\n  \"confirmer_echantillon_non_conforme\": true,\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 1001,\n      \"poids_total_g\": \"40000.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.41 Refuser une date antérieure à l'entrée du lot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur date\", function () { pm.expect(data).to.have.property(\"date\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j45}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"2000.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.42 Refuser une date future",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur date\", function () { pm.expect(data).to.have.property(\"date\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_jplus1}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.43 Refuser une date égale à la dernière pesée du lot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur date\", function () { pm.expect(data).to.have.property(\"date\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j20}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.44 Refuser une date antérieure à la dernière pesée du lot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur date\", function () { pm.expect(data).to.have.property(\"date\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j22}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.45 Refuser un lot qui n'appartient pas au bassin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur id_lot_grossissement\", function () { pm.expect(data).to.have.property(\"id_lot_grossissement\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_b}}\",\n      \"nombre_poissons_peses\": 20,\n      \"poids_total_g\": \"600.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.46 Refuser un lot en double dans la même pesée",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur lignes\", function () { pm.expect(data).to.have.property(\"lignes\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    },\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.47 Refuser un bassin de catégorie STOCKS",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur id_bassin\", function () { pm.expect(data).to.have.property(\"id_bassin\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_stk}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.48 Passer le bassin GRO3 à INACTIF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Bassin inactif\", function () { pm.expect(data.statut).to.eql(\"INACTIF\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/{{ps_bassin_gro3}}/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"statut\": \"INACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.49 Refuser un bassin inactif",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur id_bassin\", function () { pm.expect(data).to.have.property(\"id_bassin\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro3}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.50 Refuser toute la pesée si un lot est invalide",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur id_lot_grossissement\", function () { pm.expect(data).to.have.property(\"id_lot_grossissement\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    },\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_b}}\",\n      \"nombre_poissons_peses\": 20,\n      \"poids_total_g\": \"600.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.51 Vérifier qu'aucune ligne n'a été enregistrée",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const liste = Array.isArray(data) ? data : (data.results || []);",
+                  "pm.test(\"Toujours trois pesées pour A\", function () { pm.expect(liste.length).to.eql(3); });",
+                  "pm.test(\"Aucune pesée à J-15\", function () { pm.expect(liste.map(p => p.date)).to.not.include(pm.collectionVariables.get(\"ps_j15\")); });",
+                  "pm.test(\"Tri par date décroissante\", function () { pm.expect(liste.map(p => p.date)).to.eql([pm.collectionVariables.get(\"ps_j20\"), pm.collectionVariables.get(\"ps_j25\"), pm.collectionVariables.get(\"ps_j30\")]); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/?lot={{ps_lot_gross_a}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "06.52 Filtrer par bassin et période",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const liste = Array.isArray(data) ? data : (data.results || []);",
+                  "pm.test(\"Deux pesées entre J-25 et J-20\", function () { pm.expect(liste.map(p => p.id)).to.eql([Number(pm.collectionVariables.get(\"ps_pesee_3\")), Number(pm.collectionVariables.get(\"ps_pesee_2\"))]); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/?bassin={{ps_bassin_gro1}}&date_min={{ps_j25}}&date_max={{ps_j20}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "06.53 Refuser la suppression d'une pesée qui n'est pas la dernière",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur detail\", function () { pm.expect(data).to.have.property(\"detail\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_2}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "06.54 Supprimer la dernière pesée du lot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 204\", function () { pm.response.to.have.status(204); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_3}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "06.55 Vérifier la suppression",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_3}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "06.56 Modifier la dernière pesée (gestionnaire) : poids moyen recalculé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const parLot = Object.fromEntries(data.lignes.map(l => [String(l.id_lot_grossissement), l]));",
+                  "pm.test(\"A recalculé à 31.00 g\", function () { pm.expect(parLot[pm.collectionVariables.get(\"ps_lot_gross_a\")].poids_moyen).to.eql(\"31.00\"); });",
+                  "pm.test(\"T inchangé\", function () { pm.expect(parLot[pm.collectionVariables.get(\"ps_lot_gross_t\")].poids_moyen).to.eql(\"15.00\"); });",
+                  "pm.test(\"Observation modifiée\", function () { pm.expect(data.observation).to.eql(\"Correction du poids total\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_2}}/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"observation\": \"Correction du poids total\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"poids_total_g\": \"3100.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ps_token_gestionnaire}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "06.57 Refuser une modification non conforme sans confirmation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur echantillon_non_conforme\", function () { pm.expect(data).to.have.property(\"echantillon_non_conforme\"); });",
+                  "pm.test(\"Cible 100 rappelée\", function () { pm.expect(data.lignes_non_conformes[0].taille_echantillon_cible).to.eql(100); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_2}}/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 50\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.58 Refuser la modification de la date",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur date\", function () { pm.expect(data).to.have.property(\"date\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_2}}/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{ps_j22}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.59 Refuser un champ calculé en entrée",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur lignes\", function () { pm.expect(data).to.have.property(\"lignes\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_2}}/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"poids_moyen\": \"99.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.60 Vérifier que la pesée est inchangée",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const a = data.lignes.find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ps_lot_gross_a\"));",
+                  "pm.test(\"100 poissons, 31.00 g\", function () { pm.expect(a.nombre_poissons_peses).to.eql(100); pm.expect(a.poids_moyen).to.eql(\"31.00\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_2}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "06.61 Employé : créer une pesée",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_pesee_emp\", String(data.id));",
+                  "pm.test(\"45.00 g\", function () { pm.expect(data.lignes[0].poids_moyen).to.eql(\"45.00\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j10}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4500.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ps_token_employe}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "06.62 Employé : lire la liste",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/?lot={{ps_lot_gross_a}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ps_token_employe}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "06.63 Employé : modification refusée",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_emp}}/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"observation\": \"Tentative\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ps_token_employe}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "06.64 Employé : suppression refusée",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_emp}}/",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ps_token_employe}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "06.65 Non connecté : liste refusée",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "06.66 Lire la cause de mortalité Inconnue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const liste = Array.isArray(data) ? data : (data.results || []);",
+                  "const cause = liste.find(x => x.libelle === \"Inconnue\");",
+                  "pm.test(\"Cause Inconnue présente\", function () { pm.expect(cause).to.exist; });",
+                  "if (cause) pm.collectionVariables.set(\"ps_cause_inconnue\", String(cause.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/causes-mortalite/?actif=true",
+            "description": ""
+          }
+        },
+        {
+          "name": "06.67 Mortalité de tout le lot B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/evenements-mortalite-perte/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type_evenement\": \"MORTALITE\",\n  \"id_bassin\": \"{{ps_bassin_gro2}}\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 200,\n  \"date_evenement\": \"{{ps_j5}}\",\n  \"id_cause\": \"{{ps_cause_inconnue}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.68 Refuser la pesée d'un lot à effectif vivant nul",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur effectif_vivant\", function () { pm.expect(data).to.have.property(\"effectif_vivant\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro2}}\",\n  \"date\": \"{{ps_j3}}\",\n  \"observation\": \"\",\n  \"confirmer_echantillon_non_conforme\": true,\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_b}}\",\n      \"nombre_poissons_peses\": 10,\n      \"poids_total_g\": \"300.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.69 Clôturer le lot B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Lot clôturé\", function () { pm.expect(data.statut).to.eql(\"CLOTURE\"); pm.expect(data.effectif_final).to.eql(0); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{ps_lot_gross_b}}/cloturer/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motif\": \"Lot entièrement perdu\",\n  \"poids_final_g\": \"30.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.70 Refuser la pesée d'un lot clôturé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur id_lot_grossissement\", function () { pm.expect(data).to.have.property(\"id_lot_grossissement\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro2}}\",\n  \"date\": \"{{ps_j2}}\",\n  \"observation\": \"\",\n  \"confirmer_echantillon_non_conforme\": true,\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_b}}\",\n      \"nombre_poissons_peses\": 10,\n      \"poids_total_g\": \"300.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.71 Refuser l'annulation de la sortie d'un lot déjà pesé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{ps_sortie_a}}/annuler/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motif\": \"Test historique de pesée\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06.72 Vérifier que le lot A reste actif",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Lot A actif\", function () { pm.expect(data.statut).to.eql(\"ACTIF\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{ps_lot_gross_a}}/",
+            "description": ""
+          }
+        }
+      ]
+    }
+  ]
+}

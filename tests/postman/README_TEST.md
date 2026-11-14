@@ -67,4 +67,14 @@ Les soldes sont lus dans le registre et récapitulés dans la console Postman/Ne
 - Avec `ALLOWED_HOSTS=[]`, Django refuse l'hôte `host.docker.internal` : lancer newman depuis la machine hôte (`npx newman@6.1.3 run … --env-var "base_url=http://localhost:8000"`).
 - Constaté le 2026-11-14 sur base vide : des échecs antérieurs (01.12, 05.03, 06.11, 09.x…) empêchent la création de `lot_gross_c`, et toutes les requêtes du lot C du dossier 10 échouent en cascade.
 
-Les modules environnement, pesée/répartition et toute route non présente dans les URLs réelles sont ignorés.
+Les modules environnement, pesée/répartition et toute route non présente dans les URLs réelles sont ignorés dans la collection E2E.
+
+## Pesées (collection grossissement)
+
+La pesée sur échantillon est testée dans le dossier **06 Pesées** de `grossissement_sortie_lot.postman_collection.json`. Ce dossier est autonome : il crée ses bassins, ses lots et leur effectif, avec des références uniques par exécution. On peut donc le lancer seul ou après les dossiers 00 à 05 :
+
+```powershell
+npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "06 Pesées"
+```
+
+Valeur à vérifier à la main : le lot A compte 1 000 poissons ; à 10 %, la cible est de 100 poissons ; 100 poissons pour 2 537,50 g donnent 25,375 g, soit **25,38 g** après arrondi.
