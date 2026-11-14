@@ -144,7 +144,7 @@ def lot_a_historique(lot):
     # TODO : inclure les pesées et les répartitions.
     return False
 
-def verifier_capacite_bassin(bassin, espece):
+def verifier_capacite_bassin(bassin, espece, date_mise_en_place=None):
     """Contrôle d'accueil d'un nouveau lot ; le bassin doit être verrouillé par l'appelant."""
     if bassin.hapas.filter(statut=Hapa.Statut.ACTIF).exists():
         raise ValidationError({
@@ -166,5 +166,18 @@ def verifier_capacite_bassin(bassin, espece):
         raise ValidationError({
             "id_bassin_destination": (
                 "Le bassin contient déjà un lot en cours de la même espèce."
+            )
+        })
+    # Bassin + espèce identifient le lot : un nouveau lot ne peut pas s'intercaler
+    # avant des mouvements d'un lot précédent de même espèce (clôture comprise).
+    if date_mise_en_place is not None and MouvementEffectif.objects.filter(
+        bassin=bassin,
+        espece=espece,
+        date_evenement__gt=date_mise_en_place,
+    ).exists():
+        raise ValidationError({
+            "date_sortie": (
+                "Des mouvements de cette espèce existent dans le bassin après "
+                "cette date : la mise en place ne peut pas être antérieure."
             )
         })

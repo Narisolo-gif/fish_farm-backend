@@ -13,7 +13,11 @@ from apps.ecloserie.models import Eclosion
 from rest_framework.exceptions import ValidationError
 
 from apps.effectifs.models import MouvementEffectif, SortieStock
-from apps.effectifs.services import effectif_vivant, enregistrer_mouvement
+from apps.effectifs.services import (
+    annuler_mouvement,
+    effectif_vivant,
+    enregistrer_mouvement,
+)
 from apps.grossissement.models import LotGrossissement
 from apps.grossissement.services import (
     cloturer_lot_grossissement,
@@ -526,6 +530,61 @@ class LotGrossissementTests(TestCase):
         validated = self._valider(sortie_id)
 
         self.assertEqual(validated.status_code, 200, validated.data)
+
+    def test_creation_refuse_mise_en_place_anterieure_a_la_cloture(self):
+        _, _, premiere, _ = self._sortie_validee("LOT-CLOS-AUJOURDHUI", 10)
+        cloturer_lot_grossissement(
+            LotGrossissement.objects.get(sortie_stock_id=premiere).pk,
+            motif="Fin du cycle",
+            poids_final_g=Decimal("250"),
+            utilisateur=self.user,
+        )
+        lot, _ = self._mettre_en_stock(
+            "LOT-ANTIDATE",
+            10,
+            il_y_a_jours=4,
+            hapa=self._hapa(self.bassin_stock, "STOCK-D"),
+        )
+        draft = self._creer_sortie(lot, il_y_a_jours=3)
+        self.assertEqual(draft.status_code, 201, draft.data)
+        count_mouvements = MouvementEffectif.objects.count()
+
+        refused = self._valider(draft.data["id"])
+
+        self.assertEqual(refused.status_code, 400, refused.data)
+        self.assertIn("date_sortie", refused.data)
+        self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
+
+    def test_annulation_mouvement_refusee_apres_cloture(self):
+        _, _, sortie_id, _ = self._sortie_validee("LOT-FIGE", 10)
+        gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
+        mortalite = self._mortalite(2, self.today)
+        cloturer_lot_grossissement(
+            gross.pk,
+            motif="Fin du cycle",
+            poids_final_g=Decimal("250"),
+            utilisateur=self.user,
+        )
+        evacuation = MouvementEffectif.objects.get(
+            bassin=self.bassin_destination,
+            type_mouvement=MouvementEffectif.TypeMouvement.SORTIE,
+        )
+        count_mouvements = MouvementEffectif.objects.count()
+
+        for mouvement in (mortalite, evacuation):
+            with self.subTest(type=mouvement.type_mouvement):
+                with self.assertRaises(ValidationError) as ctx:
+                    annuler_mouvement(
+                        mouvement.pk,
+                        motif_annulation="Erreur de saisie",
+                        saisi_par=self.user,
+                    )
+                self.assertIn("clôturé", str(ctx.exception.detail))
+        self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
+        self.assertEqual(
+            effectif_vivant(self.bassin_destination.pk, Lot.Espece.CARPE),
+            0,
+        )
 
     def test_creation_refuse_bassin_avec_hapa_actif(self):
         _, sortie_id = self._sortie_brouillon("LOT-HAPA-GROSS")

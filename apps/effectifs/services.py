@@ -275,6 +275,14 @@ def annuler_mouvement(mouvement_id: int, *, motif_annulation: str, saisi_par, da
     # Utilise le même verrou que les créations afin de protéger le solde du bassin.
     Bassin.objects.select_for_update().get(pk=mouvement.bassin_id)
 
+    from .signals import mouvement_avant_annulation
+
+    mouvement_avant_annulation.send(
+        sender=MouvementEffectif,
+        mouvement=mouvement,
+        date_annulation=date_annulation,
+    )
+
     sens_annulation = -mouvement.sens
     _verifier_disponibilite_cumulee(
         mouvement.bassin_id,

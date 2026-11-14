@@ -1,7 +1,9 @@
 from django.dispatch import receiver
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.effectifs.signals import (
+    mouvement_avant_annulation,
     sortie_stock_avant_annulation,
     sortie_stock_validee,
 )
@@ -23,7 +25,11 @@ def creer_lot_apres_sortie_validee(sender, *, sortie, utilisateur, **kwargs):
             "id_lot": "Le lot d'origine doit être au stade EN_STOCK."
         })
     bassin = Bassin.objects.select_for_update().get(pk=sortie.bassin_destination_id)
-    verifier_capacite_bassin(bassin, sortie.espece)
+    verifier_capacite_bassin(
+        bassin,
+        sortie.espece,
+        timezone.localtime(sortie.date_sortie).date(),
+    )
     LotGrossissement.objects.create(
         lot_origine=lot,
         sortie_stock=sortie,
@@ -66,3 +72,26 @@ def supprimer_lot_avant_annulation(sender, *, sortie, utilisateur, **kwargs):
     lot_grossissement.delete()
     lot.stade = Lot.Stade.EN_STOCK
     lot.save(update_fields=["stade", "updated_at"])
+
+
+@receiver(
+    mouvement_avant_annulation,
+    dispatch_uid="grossissement.figer_mouvements_lot_cloture",
+)
+def refuser_annulation_lot_cloture(sender, *, mouvement, date_annulation, **kwargs):
+    # Bassin + espèce identifient le lot : après la clôture, le registre de la
+    # période du lot est figé, sinon des poissons « reviendraient » sans lot.
+    for date_reference in {mouvement.date_evenement, date_annulation}:
+        if LotGrossissement.objects.filter(
+            bassin_id=mouvement.bassin_id,
+            espece=mouvement.espece,
+            statut=LotGrossissement.Statut.CLOTURE,
+            date_mise_en_place__date__lte=date_reference,
+            date_cloture__gte=date_reference,
+        ).exists():
+            raise ValidationError({
+                "detail": (
+                    "Ce mouvement appartient à un lot de grossissement clôturé : "
+                    "il ne peut plus être annulé."
+                )
+            })
