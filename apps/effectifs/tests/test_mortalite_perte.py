@@ -412,6 +412,8 @@ class MortalitesPertesTests(TestCase):
             {
                 "lot": lot,
                 "bassin": self.stock,
+                # La finalité est devenue obligatoire à la mise en stock.
+                "finalite": "GROSSISSEMENT",
                 "lignes_hapas": [
                     {"hapa": self.stock_hapa, "effectif_entrant": 5},
                     {"hapa": self.stock_hapa2, "effectif_entrant": 5},

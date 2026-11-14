@@ -270,3 +270,48 @@ class PeseeLot(models.Model):
 
     def __str__(self):
         return f"{self.lot_grossissement} - {self.pesee.date}"
+
+
+class IndicateurLot(models.Model):
+    """Instantané des indicateurs d'un lot à une pesée, recalculé par le service."""
+
+    pesee_lot = models.OneToOneField(
+        PeseeLot,
+        on_delete=models.CASCADE,
+        related_name="indicateur",
+    )
+    effectif_vivant = models.PositiveIntegerField()
+    poids_moyen = models.DecimalField(max_digits=10, decimal_places=2)
+    biomasse_kg = models.DecimalField(max_digits=12, decimal_places=3)
+    gmq_periode = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True
+    )
+    gmq_cumule = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True
+    )
+    provende_periode_kg = models.DecimalField(
+        max_digits=12, decimal_places=3, default=0
+    )
+    ic_periode = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True
+    )
+    ic_cumule = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True
+    )
+    jour_de_cycle = models.PositiveIntegerField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(provende_periode_kg__gte=0),
+                name="indicateur_lot_provende_positive",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(biomasse_kg__gte=0),
+                name="indicateur_lot_biomasse_positive",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Indicateurs {self.pesee_lot}"

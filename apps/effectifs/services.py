@@ -885,13 +885,15 @@ def modifier_sortie(sortie_id, validated_data):
     return sortie
 
 
-def _apres_validation_grossissement(sortie):
+def _apres_validation_grossissement(sortie, poids_initial_g=None):
     from .signals import sortie_stock_validee
 
+    # Le poids est transmis tel quel : sa règle vit chez le récepteur.
     sortie_stock_validee.send(
         sender=SortieStock,
         sortie=sortie,
         utilisateur=sortie.validee_par,
+        poids_initial_g=poids_initial_g,
     )
 
 
@@ -912,6 +914,7 @@ def valider_sortie(
     justification_ecart="",
     *,
     utilisateur,
+    poids_initial_g=None,
 ):
     sortie = SortieStock.objects.select_for_update().get(pk=sortie_id)
     if sortie.statut != SortieStock.Statut.BROUILLON:
@@ -1002,7 +1005,7 @@ def valider_sortie(
     sortie.validee_par = utilisateur
     sortie.validee_le = timezone.now()
     sortie.save()
-    _apres_validation_grossissement(sortie)
+    _apres_validation_grossissement(sortie, poids_initial_g)
     return sortie
 
 

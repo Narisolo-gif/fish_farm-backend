@@ -135,9 +135,10 @@ class SortieStockTests(TestCase):
         )
 
     def _valider(self, sortie_id, data=None):
+        # Le lot de grossissement créé à la validation exige un poids initial.
         return self.client.post(
             f"/api/v1/effectifs/sorties-stock/{sortie_id}/valider/",
-            data or {},
+            {"poids_initial_g": "20.00", **(data or {})},
             format="json",
         )
 

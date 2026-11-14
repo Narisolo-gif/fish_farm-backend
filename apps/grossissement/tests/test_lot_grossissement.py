@@ -21,6 +21,7 @@ from apps.effectifs.services import (
 from apps.grossissement.models import LotGrossissement
 from apps.grossissement.services import (
     cloturer_lot_grossissement,
+    creer_pesee,
     verifier_capacite_bassin,
 )
 from apps.lots.models import Lot
@@ -188,9 +189,10 @@ class LotGrossissementTests(TestCase):
         )
 
     def _valider(self, sortie_id, data=None):
+        # Le poids initial est obligatoire à la création du lot de grossissement.
         return self.client.post(
             f"/api/v1/effectifs/sorties-stock/{sortie_id}/valider/",
-            data or {},
+            {"poids_initial_g": "20.00", **(data or {})},
             format="json",
         )
 
@@ -243,7 +245,8 @@ class LotGrossissementTests(TestCase):
         self.assertEqual(grossissement.espece, lot.espece)
         self.assertEqual(grossissement.effectif_initial, 10)
         self.assertEqual(grossissement.statut, LotGrossissement.Statut.ACTIF)
-        self.assertIsNone(grossissement.poids_initial_g)
+        # Le poids initial est saisi à la validation de la sortie (obligatoire).
+        self.assertEqual(grossissement.poids_initial_g, Decimal("20.00"))
         lot.refresh_from_db()
         self.assertEqual(lot.stade, Lot.Stade.EN_GROSSISSEMENT)
 
@@ -289,14 +292,50 @@ class LotGrossissementTests(TestCase):
             10,
         )
 
-    def test_annulation_refuse_poids_initial_ou_lot_cloture_sans_changement(self):
+    def test_validation_sans_poids_initial_refusee_sans_effet(self):
+        lot, _ = self._mettre_en_stock("LOT-SANS-POIDS", 10)
+        draft = self._creer_sortie(lot)
+        count_mouvements = MouvementEffectif.objects.count()
+        for data in ({}, {"poids_initial_g": None}):
+            refused = self.client.post(
+                f"/api/v1/effectifs/sorties-stock/{draft.data['id']}/valider/",
+                data,
+                format="json",
+            )
+            self.assertEqual(refused.status_code, 400, refused.data)
+            self.assertIn("poids_initial_g", refused.data)
+        nul = self._valider(draft.data["id"], {"poids_initial_g": "0"})
+        self.assertEqual(nul.status_code, 400, nul.data)
+        self.assertIn("poids_initial_g", nul.data)
+        self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
+        self.assertFalse(LotGrossissement.objects.filter(lot_origine=lot).exists())
+        self.assertEqual(
+            SortieStock.objects.get(pk=draft.data["id"]).statut,
+            SortieStock.Statut.BROUILLON,
+        )
+        self.assertEqual(Lot.objects.get(pk=lot.pk).stade, Lot.Stade.EN_STOCK)
+
+    def test_validation_enregistre_le_poids_initial(self):
+        _, _, sortie_id, _ = self._sortie_validee("LOT-POIDS-SAISI", 10)
+        gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
+        self.assertEqual(gross.poids_initial_g, Decimal("20.00"))
+
+    def test_annulation_refuse_historique_ou_lot_cloture_sans_changement(self):
         lot_a, _, sortie_a, _ = self._sortie_validee("LOT-POIDS", 10)
         gross_a = LotGrossissement.objects.get(sortie_stock_id=sortie_a)
-        gross_a.poids_initial_g = Decimal("12.50")
-        gross_a.save(update_fields=["poids_initial_g"])
+        creer_pesee(
+            bassin_id=gross_a.bassin_id,
+            date_pesee=timezone.localdate(),
+            lignes=[{
+                "id_lot_grossissement": gross_a.pk,
+                "nombre_poissons_peses": 1,
+                "poids_total_g": Decimal("25.00"),
+            }],
+            utilisateur=self.user,
+        )
         count_mouvements = MouvementEffectif.objects.count()
-        refused_weight = self._annuler(sortie_a)
-        self.assertEqual(refused_weight.status_code, 400, refused_weight.data)
+        refused_history = self._annuler(sortie_a)
+        self.assertEqual(refused_history.status_code, 400, refused_history.data)
         self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
         self.assertEqual(Lot.objects.get(pk=lot_a.pk).stade, Lot.Stade.EN_GROSSISSEMENT)
 

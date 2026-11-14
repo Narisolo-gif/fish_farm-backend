@@ -1,6 +1,10 @@
+from bisect import bisect_right
+from collections import defaultdict
+from datetime import datetime, time, timedelta
 from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 
 from django.db import transaction
+from django.db.models import ExpressionWrapper, F, IntegerField, Sum
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
 
@@ -9,8 +13,10 @@ from apps.effectifs.calculs import effectif_vivant
 from apps.effectifs.models import MouvementEffectif
 from apps.effectifs.services import enregistrer_mouvement_operation
 from apps.lots.models import Lot
+from apps.provende.models import ConsommationProvende
 
-from .models import LotGrossissement, Pesee, PeseeLot
+from .calculs import LotCalcul, PeseeCalcul, allouer_provende, calculer_instantanes
+from .models import IndicateurLot, LotGrossissement, Pesee, PeseeLot
 
 
 MAX_LOTS_ACTIFS_PAR_BASSIN = 2
@@ -107,12 +113,16 @@ def cloturer_lot_grossissement(
 
 @transaction.atomic
 def modifier_lot_grossissement(lot_id, data):
-    try:
-        lot_grossissement = LotGrossissement.objects.select_for_update().get(
-            pk=lot_id
-        )
-    except LotGrossissement.DoesNotExist as exc:
-        raise NotFound("Lot de grossissement introuvable.") from exc
+    bassin_id = (
+        LotGrossissement.objects.filter(pk=lot_id)
+        .values_list("bassin_id", flat=True)
+        .first()
+    )
+    if bassin_id is None:
+        raise NotFound("Lot de grossissement introuvable.")
+    # Même ordre de verrous que les pesées : bassin, puis lot.
+    Bassin.objects.select_for_update().get(pk=bassin_id)
+    lot_grossissement = LotGrossissement.objects.select_for_update().get(pk=lot_id)
     if lot_grossissement.statut != LotGrossissement.Statut.ACTIF:
         raise ValidationError({"statut": "Seul un lot actif peut être modifié."})
     if "pourcentage_groupe_pesee" in data:
@@ -139,6 +149,9 @@ def modifier_lot_grossissement(lot_id, data):
         if champ in data
     ]
     lot_grossissement.save(update_fields=[*champs, "updated_at"])
+    if "poids_initial_g" in data:
+        # Le point de départ change : GMQ, IC et répartition sont à recalculer.
+        recalculer_indicateurs_bassin(lot_grossissement.bassin_id)
     return lot_grossissement
 
 
@@ -406,6 +419,7 @@ def creer_pesee(
         PeseeLot(pesee=pesee, lot_grossissement=lot, **valeurs)
         for lot, valeurs in lignes_calculees
     ])
+    recalculer_indicateurs_bassin(bassin.pk)
     return pesee
 
 
@@ -493,6 +507,7 @@ def modifier_pesee(pesee_id, donnees, *, confirmer=False):
     if "observation" in donnees:
         pesee.observation = donnees["observation"] or ""
     pesee.save(update_fields=["observation", "updated_at"])
+    recalculer_indicateurs_bassin(pesee.bassin_id)
     return pesee
 
 
@@ -500,4 +515,120 @@ def modifier_pesee(pesee_id, donnees, *, confirmer=False):
 def supprimer_pesee(pesee_id):
     pesee, lignes = _verrouiller_pesee(pesee_id)
     _verifier_pesee_modifiable(pesee, lignes)
+    bassin_id = pesee.bassin_id
+    # Les instantanés de la pesée disparaissent avec ses lignes (CASCADE).
     pesee.delete()
+    recalculer_indicateurs_bassin(bassin_id)
+
+
+# --- Indicateurs -------------------------------------------------------------
+
+def _debut_jour(jour):
+    return timezone.make_aware(
+        datetime.combine(jour, time.min),
+        timezone.get_current_timezone(),
+    )
+
+
+def _effectifs_a_la_date(bassin_id, lots, date_max):
+    """Effectif vivant par lot et par jour, calculé en mémoire.
+
+    Même règle que `effectifs.calculs.effectif_vivant` : Σ(sens × quantité)
+    des mouvements du bassin et de l'espèce datés au plus tard du jour. Une
+    seule requête pour toute la période.
+    """
+    especes = {lot.pk: lot.espece for lot in lots}
+    variations = (
+        MouvementEffectif.objects.filter(
+            bassin_id=bassin_id,
+            espece__in=set(especes.values()),
+            date_evenement__lte=date_max,
+        )
+        .annotate(
+            contribution=ExpressionWrapper(
+                F("sens") * F("quantite"),
+                output_field=IntegerField(),
+            )
+        )
+        .values("espece", "date_evenement")
+        .annotate(variation=Sum("contribution"))
+        .order_by("espece", "date_evenement")
+    )
+    dates = defaultdict(list)
+    cumuls = defaultdict(list)
+    for ligne in variations:
+        espece = ligne["espece"]
+        precedent = cumuls[espece][-1] if cumuls[espece] else 0
+        dates[espece].append(ligne["date_evenement"])
+        cumuls[espece].append(precedent + (ligne["variation"] or 0))
+
+    def effectif_a(lot_id, jour):
+        espece = especes[lot_id]
+        rang = bisect_right(dates[espece], jour)
+        return cumuls[espece][rang - 1] if rang else 0
+
+    return effectif_a
+
+
+def recalculer_indicateurs_bassin(bassin_id):
+    """Recalcule les instantanés de tous les lots pesés du bassin (idempotent).
+
+    Tout le bassin est recalculé : la part de provende d'un lot dépend des
+    poids et des effectifs des autres lots présents.
+    """
+    lots = list(LotGrossissement.objects.filter(bassin_id=bassin_id))
+    lignes = list(
+        PeseeLot.objects.filter(lot_grossissement__bassin_id=bassin_id)
+        .select_related("pesee")
+    )
+    if not lignes:
+        return
+
+    pesees_par_lot = defaultdict(list)
+    for ligne in lignes:
+        pesees_par_lot[ligne.lot_grossissement_id].append(
+            PeseeCalcul(
+                id=ligne.pk,
+                date=ligne.pesee.date,
+                effectif_vivant=ligne.effectif_vivant,
+                poids_moyen=ligne.poids_moyen,
+            )
+        )
+    lots_calcul = [
+        LotCalcul(
+            id=lot.pk,
+            date_entree=_date_entree(lot),
+            effectif_initial=lot.effectif_initial,
+            poids_initial=lot.poids_initial_g,
+            date_cloture=lot.date_cloture,
+            pesees=pesees_par_lot.get(lot.pk, []),
+        )
+        for lot in lots
+    ]
+
+    date_min = min(lot.date_entree for lot in lots_calcul)
+    date_max = max(ligne.pesee.date for ligne in lignes)
+    quantites_par_jour = defaultdict(Decimal)
+    distributions = ConsommationProvende.objects.filter(
+        bassin_id=bassin_id,
+        statut=ConsommationProvende.Statut.VALIDE,
+        date_distribution__gte=_debut_jour(date_min),
+        date_distribution__lt=_debut_jour(date_max + timedelta(days=1)),
+    ).values_list("date_distribution", "quantite_kg")
+    for date_distribution, quantite_kg in distributions:
+        quantites_par_jour[timezone.localtime(date_distribution).date()] += quantite_kg
+
+    allocations = allouer_provende(
+        quantites_par_jour,
+        lots_calcul,
+        _effectifs_a_la_date(bassin_id, lots, date_max),
+    )
+    for lot in lots_calcul:
+        if not lot.pesees:
+            continue
+        for instantane in calculer_instantanes(lot, allocations[lot.id]):
+            pesee_lot_id = instantane.pop("pesee_id")
+            IndicateurLot.objects.update_or_create(
+                pesee_lot_id=pesee_lot_id,
+                defaults=instantane,
+            )

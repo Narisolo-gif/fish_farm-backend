@@ -422,6 +422,7 @@ class SortieStockViewSet(viewsets.ModelViewSet):
                 "justification_ecart",
                 "",
             ),
+            poids_initial_g=serializer.validated_data.get("poids_initial_g"),
         )
         return Response(self.get_serializer(sortie).data)
 

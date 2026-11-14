@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import LotGrossissement, Pesee, PeseeLot
+from .models import IndicateurLot, LotGrossissement, Pesee, PeseeLot
 from .services import modifier_lot_grossissement
 
 
@@ -268,6 +268,23 @@ class PeseeEcritureSerializer(serializers.Serializer):
         return attrs
 
 
+class IndicateurLotSerializer(serializers.ModelSerializer):
+    """Instantané en lecture seule ; les valeurs non calculables valent null."""
+
+    class Meta:
+        model = IndicateurLot
+        fields = [
+            "biomasse_kg",
+            "gmq_periode",
+            "gmq_cumule",
+            "provende_periode_kg",
+            "ic_periode",
+            "ic_cumule",
+            "jour_de_cycle",
+        ]
+        read_only_fields = fields
+
+
 class PeseeLotSerializer(serializers.ModelSerializer):
     id_lot_grossissement = serializers.IntegerField(
         source="lot_grossissement_id",
@@ -278,6 +295,7 @@ class PeseeLotSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     echantillon_conforme = serializers.BooleanField(read_only=True)
+    indicateurs = serializers.SerializerMethodField()
 
     class Meta:
         model = PeseeLot
@@ -292,8 +310,16 @@ class PeseeLotSerializer(serializers.ModelSerializer):
             "poids_total_g",
             "poids_moyen",
             "echantillon_conforme",
+            "indicateurs",
         ]
         read_only_fields = fields
+
+    def get_indicateurs(self, obj):
+        try:
+            indicateur = obj.indicateur
+        except IndicateurLot.DoesNotExist:
+            return None
+        return IndicateurLotSerializer(indicateur).data
 
 
 class PeseeSerializer(serializers.ModelSerializer):

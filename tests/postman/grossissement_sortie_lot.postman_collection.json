@@ -1196,7 +1196,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1244,7 +1244,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1282,7 +1282,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1495,7 +1495,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1659,7 +1659,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1873,7 +1873,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1940,7 +1940,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2800,7 +2800,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3058,7 +3058,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3316,7 +3316,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4737,6 +4737,2792 @@
             ],
             "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{ps_lot_gross_a}}/",
             "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Indicateurs",
+      "description": "Dossier autonome à dates fixes (cycle de 2026) : crée ses bassins, ses lots, leurs mortalités et la provende, puis vérifie les instantanés d'indicateurs de chaque pesée.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{ix_token_admin}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "07.01 Connexion administrateur",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pad = (n) => String(n).padStart(2, '0');",
+                  "const t0 = new Date();",
+                  "pm.collectionVariables.set('ix_run_id', `IX-${t0.getUTCFullYear()}${pad(t0.getUTCMonth()+1)}${pad(t0.getUTCDate())}-${pad(t0.getUTCHours())}${pad(t0.getUTCMinutes())}-${Math.random().toString(36).slice(2,6).toUpperCase()}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "if (data.access !== undefined) pm.collectionVariables.set(\"ix_token_admin\", String(data.access));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{admin_username}}\",\n  \"password\": \"{{admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "07.02 Créer bassin IX-REP-CARPE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_bassin_rep_carpe\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-REP-CARPE-{{ix_run_id}}\",\n  \"categorie\": \"REPRODUCTION\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.03 Créer bassin IX-REP-TILAPIA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_bassin_rep_tilapia\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-REP-TILAPIA-{{ix_run_id}}\",\n  \"categorie\": \"REPRODUCTION\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.04 Créer bassin IX-STK",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_bassin_stk\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-STK-{{ix_run_id}}\",\n  \"categorie\": \"STOCKS\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.05 Créer bassin IX-IND1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_bassin_ind1\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-IND1-{{ix_run_id}}\",\n  \"categorie\": \"GROSSISSEMENT\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.06 Créer bassin IX-IND2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_bassin_ind2\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-IND2-{{ix_run_id}}\",\n  \"categorie\": \"GROSSISSEMENT\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.07 Créer bassin IX-IND3",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_bassin_ind3\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-IND3-{{ix_run_id}}\",\n  \"categorie\": \"GROSSISSEMENT\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.08 Lire les types de provende",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const liste = Array.isArray(data) ? data : (data.results || []);",
+                  "const type = liste.find(x => x.type === \"CROISSANCE\");",
+                  "pm.test(\"Type CROISSANCE disponible\", function () { pm.expect(type).to.exist; });",
+                  "if (type) pm.collectionVariables.set(\"ix_type_croissance\", String(type.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/types/",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.09 Créer la provende de croissance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_provende\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type_provende\": \"{{ix_type_croissance}}\",\n  \"reference\": \"IX-PROV-{{ix_run_id}}\",\n  \"date_creation\": \"2025-12-01\",\n  \"remarques\": \"Indicateurs {{ix_run_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.10 Lire la cause de mortalité Inconnue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const liste = Array.isArray(data) ? data : (data.results || []);",
+                  "const cause = liste.find(x => x.libelle === \"Inconnue\");",
+                  "pm.test(\"Cause Inconnue présente\", function () { pm.expect(cause).to.exist; });",
+                  "if (cause) pm.collectionVariables.set(\"ix_cause_inconnue\", String(cause.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/causes-mortalite/?actif=true",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.11 Créer reproduction CARPE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/reproductions/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-REPRO-CARPE-{{ix_run_id}}\",\n  \"bassin\": \"{{ix_bassin_rep_carpe}}\",\n  \"espece\": \"CARPE\",\n  \"date_ajout\": \"2025-12-01\",\n  \"quantite_male\": 5,\n  \"quantite_femelle\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.12 Créer reproduction TILAPIA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/reproductions/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-REPRO-TILAPIA-{{ix_run_id}}\",\n  \"bassin\": \"{{ix_bassin_rep_tilapia}}\",\n  \"espece\": \"TILAPIA\",\n  \"date_ajout\": \"2025-12-01\",\n  \"quantite_male\": 5,\n  \"quantite_femelle\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.13 Créer hapa de stock S1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_hapa_s1\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/hapas/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{ix_bassin_stk}}\",\n  \"nom\": \"IX_S1-{{ix_run_id}}\",\n  \"actif\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.14 Créer ponte S1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/pontes/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-PONTE-S1-{{ix_run_id}}\",\n  \"bassin\": \"{{ix_bassin_rep_carpe}}\",\n  \"date_ponte\": \"2025-12-02\",\n  \"quantite_oeuf_obtenu\": \"5000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.15 Créer éclosion S1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_eclosion_s1\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ecloserie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-ECLOSION-S1-{{ix_run_id}}\",\n  \"reference_ponte\": \"IX-PONTE-S1-{{ix_run_id}}\",\n  \"date_eclosion\": \"2025-12-03\",\n  \"quantite_oeufs_eclos\": \"5000.00\",\n  \"quantite_alevins_obtenu\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.16 Créer lot S1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_lot_s1\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-LOT-S1-{{ix_run_id}}\",\n  \"id_eclosion\": \"{{ix_eclosion_s1}}\",\n  \"date_creation\": \"2025-12-04T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.17 Mettre lot S1 en stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/stocks/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ix_lot_s1}}\",\n  \"id_bassin\": \"{{ix_bassin_stk}}\",\n  \"finalite\": \"GROSSISSEMENT\",\n  \"date_mise_en_stock\": \"2025-12-10T12:00:00Z\",\n  \"hapas\": [\n    {\n      \"id_hapa\": \"{{ix_hapa_s1}}\",\n      \"effectif_entrant\": 1000\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.18 Créer brouillon de sortie du lot S1 (entrée le 2026-01-01)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_sortie_s1\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ix_lot_s1}}\",\n  \"id_bassin_destination\": \"{{ix_bassin_ind1}}\",\n  \"date_sortie\": \"2026-01-01T12:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.19 Refuser la validation sans poids initial",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur poids_initial_g\", function () { pm.expect(data).to.have.property(\"poids_initial_g\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{ix_sortie_s1}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.20 Vérifier que la sortie reste en brouillon",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Sortie BROUILLON\", function () { pm.expect(data.statut).to.eql(\"BROUILLON\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{ix_sortie_s1}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.21 Valider la sortie du lot S1 avec son poids initial",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Effectif entrant 1000\", function () { pm.expect(data.effectif_entrant).to.eql(1000); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{ix_sortie_s1}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.22 Retenir le lot de grossissement S1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const lot = (Array.isArray(data) ? data : (data.results || []))[0] || {};",
+                  "pm.test(\"Poids initial 20.00 enregistré à la création\", function () { pm.expect(lot.poids_initial_g).to.eql(\"20.00\"); pm.expect(lot.effectif_initial).to.eql(1000); });",
+                  "pm.collectionVariables.set(\"ix_lot_gross_s1\", String(lot.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?lot_origine={{ix_lot_s1}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.23 Créer hapa de stock A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_hapa_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/hapas/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{ix_bassin_stk}}\",\n  \"nom\": \"IX_A-{{ix_run_id}}\",\n  \"actif\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.24 Créer ponte A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/pontes/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-PONTE-A-{{ix_run_id}}\",\n  \"bassin\": \"{{ix_bassin_rep_carpe}}\",\n  \"date_ponte\": \"2025-12-02\",\n  \"quantite_oeuf_obtenu\": \"5000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.25 Créer éclosion A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_eclosion_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ecloserie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-ECLOSION-A-{{ix_run_id}}\",\n  \"reference_ponte\": \"IX-PONTE-A-{{ix_run_id}}\",\n  \"date_eclosion\": \"2025-12-03\",\n  \"quantite_oeufs_eclos\": \"5000.00\",\n  \"quantite_alevins_obtenu\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.26 Créer lot A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_lot_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-LOT-A-{{ix_run_id}}\",\n  \"id_eclosion\": \"{{ix_eclosion_a}}\",\n  \"date_creation\": \"2025-12-04T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.27 Mettre lot A en stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/stocks/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ix_lot_a}}\",\n  \"id_bassin\": \"{{ix_bassin_stk}}\",\n  \"finalite\": \"GROSSISSEMENT\",\n  \"date_mise_en_stock\": \"2025-12-10T12:00:00Z\",\n  \"hapas\": [\n    {\n      \"id_hapa\": \"{{ix_hapa_a}}\",\n      \"effectif_entrant\": 1000\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.28 Créer brouillon de sortie du lot A (entrée le 2026-01-01)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_sortie_a\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ix_lot_a}}\",\n  \"id_bassin_destination\": \"{{ix_bassin_ind2}}\",\n  \"date_sortie\": \"2026-01-01T12:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.29 Valider la sortie du lot A avec son poids initial",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Effectif entrant 1000\", function () { pm.expect(data.effectif_entrant).to.eql(1000); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{ix_sortie_a}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.30 Retenir le lot de grossissement A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const lot = (Array.isArray(data) ? data : (data.results || []))[0] || {};",
+                  "pm.test(\"Poids initial 20.00 enregistré à la création\", function () { pm.expect(lot.poids_initial_g).to.eql(\"20.00\"); pm.expect(lot.effectif_initial).to.eql(1000); });",
+                  "pm.collectionVariables.set(\"ix_lot_gross_a\", String(lot.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?lot_origine={{ix_lot_a}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.31 Créer hapa de stock B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_hapa_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/hapas/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{ix_bassin_stk}}\",\n  \"nom\": \"IX_B-{{ix_run_id}}\",\n  \"actif\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.32 Créer ponte B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/pontes/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-PONTE-B-{{ix_run_id}}\",\n  \"bassin\": \"{{ix_bassin_rep_tilapia}}\",\n  \"date_ponte\": \"2025-12-02\",\n  \"quantite_oeuf_obtenu\": \"5000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.33 Créer éclosion B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_eclosion_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ecloserie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-ECLOSION-B-{{ix_run_id}}\",\n  \"reference_ponte\": \"IX-PONTE-B-{{ix_run_id}}\",\n  \"date_eclosion\": \"2025-12-03\",\n  \"quantite_oeufs_eclos\": \"5000.00\",\n  \"quantite_alevins_obtenu\": 500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.34 Créer lot B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_lot_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-LOT-B-{{ix_run_id}}\",\n  \"id_eclosion\": \"{{ix_eclosion_b}}\",\n  \"date_creation\": \"2025-12-04T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.35 Mettre lot B en stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/stocks/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ix_lot_b}}\",\n  \"id_bassin\": \"{{ix_bassin_stk}}\",\n  \"finalite\": \"GROSSISSEMENT\",\n  \"date_mise_en_stock\": \"2025-12-10T12:00:00Z\",\n  \"hapas\": [\n    {\n      \"id_hapa\": \"{{ix_hapa_b}}\",\n      \"effectif_entrant\": 500\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.36 Créer brouillon de sortie du lot B (entrée le 2026-01-01)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_sortie_b\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ix_lot_b}}\",\n  \"id_bassin_destination\": \"{{ix_bassin_ind2}}\",\n  \"date_sortie\": \"2026-01-01T12:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.37 Valider la sortie du lot B avec son poids initial",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Effectif entrant 500\", function () { pm.expect(data.effectif_entrant).to.eql(500); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{ix_sortie_b}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"poids_initial_g\": \"40.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.38 Retenir le lot de grossissement B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const lot = (Array.isArray(data) ? data : (data.results || []))[0] || {};",
+                  "pm.test(\"Poids initial 40.00 enregistré à la création\", function () { pm.expect(lot.poids_initial_g).to.eql(\"40.00\"); pm.expect(lot.effectif_initial).to.eql(500); });",
+                  "pm.collectionVariables.set(\"ix_lot_gross_b\", String(lot.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?lot_origine={{ix_lot_b}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.39 Créer hapa de stock C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_hapa_c\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/hapas/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{ix_bassin_stk}}\",\n  \"nom\": \"IX_C-{{ix_run_id}}\",\n  \"actif\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.40 Créer ponte C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/pontes/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-PONTE-C-{{ix_run_id}}\",\n  \"bassin\": \"{{ix_bassin_rep_carpe}}\",\n  \"date_ponte\": \"2025-12-02\",\n  \"quantite_oeuf_obtenu\": \"5000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.41 Créer éclosion C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_eclosion_c\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ecloserie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-ECLOSION-C-{{ix_run_id}}\",\n  \"reference_ponte\": \"IX-PONTE-C-{{ix_run_id}}\",\n  \"date_eclosion\": \"2025-12-03\",\n  \"quantite_oeufs_eclos\": \"5000.00\",\n  \"quantite_alevins_obtenu\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.42 Créer lot C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_lot_c\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"IX-LOT-C-{{ix_run_id}}\",\n  \"id_eclosion\": \"{{ix_eclosion_c}}\",\n  \"date_creation\": \"2025-12-04T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.43 Mettre lot C en stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/stocks/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ix_lot_c}}\",\n  \"id_bassin\": \"{{ix_bassin_stk}}\",\n  \"finalite\": \"GROSSISSEMENT\",\n  \"date_mise_en_stock\": \"2025-12-10T12:00:00Z\",\n  \"hapas\": [\n    {\n      \"id_hapa\": \"{{ix_hapa_c}}\",\n      \"effectif_entrant\": 1000\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.44 Créer brouillon de sortie du lot C (entrée le 2026-01-01)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_sortie_c\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{ix_lot_c}}\",\n  \"id_bassin_destination\": \"{{ix_bassin_ind3}}\",\n  \"date_sortie\": \"2026-01-01T12:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.45 Valider la sortie du lot C avec son poids initial",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Effectif entrant 1000\", function () { pm.expect(data.effectif_entrant).to.eql(1000); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{ix_sortie_c}}/valider/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.46 Retenir le lot de grossissement C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const lot = (Array.isArray(data) ? data : (data.results || []))[0] || {};",
+                  "pm.test(\"Poids initial 20.00 enregistré à la création\", function () { pm.expect(lot.poids_initial_g).to.eql(\"20.00\"); pm.expect(lot.effectif_initial).to.eql(1000); });",
+                  "pm.collectionVariables.set(\"ix_lot_gross_c\", String(lot.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?lot_origine={{ix_lot_c}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.47 Mortalité de 20 CARPE le 2026-01-20 (IND1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/evenements-mortalite-perte/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type_evenement\": \"MORTALITE\",\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 20,\n  \"date_evenement\": \"2026-01-20\",\n  \"id_cause\": \"{{ix_cause_inconnue}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.48 Mortalité de 30 CARPE le 2026-02-20 (IND1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/evenements-mortalite-perte/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type_evenement\": \"MORTALITE\",\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 30,\n  \"date_evenement\": \"2026-02-20\",\n  \"id_cause\": \"{{ix_cause_inconnue}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.49 Distribution de 50.00 kg le 2026-01-15 (IND1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Distribution valide\", function () { pm.expect(data.statut).to.eql(\"VALIDE\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/consommations-provende/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"id_provende\": \"{{ix_provende}}\",\n  \"date_distribution\": \"2026-01-15T08:00:00Z\",\n  \"quantite_kg\": \"50.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.50 Distribution de 90.00 kg le 2026-02-15 (IND1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Distribution valide\", function () { pm.expect(data.statut).to.eql(\"VALIDE\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/consommations-provende/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"id_provende\": \"{{ix_provende}}\",\n  \"date_distribution\": \"2026-02-15T08:00:00Z\",\n  \"quantite_kg\": \"90.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.51 S1 : pesée 1 le 2026-01-31 (98 poissons, 4410 g = 45 g)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_s1_p1\", String(data.id));",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
+                  "pm.test(\"Effectif vivant 980 et poids moyen 45.00\", function () { pm.expect(data.lignes[0].effectif_vivant).to.eql(980); pm.expect(data.lignes[0].poids_moyen).to.eql(\"45.00\"); });",
+                  "pm.test(\"S1 P1 : jour_de_cycle = 30\", function () { pm.expect(ind.jour_de_cycle).to.eql(30); });",
+                  "pm.test(\"S1 P1 : biomasse_kg = 44.100\", function () { pm.expect(ind.biomasse_kg).to.eql(\"44.100\"); });",
+                  "pm.test(\"S1 P1 : gmq_periode = 0.83\", function () { pm.expect(ind.gmq_periode).to.eql(\"0.83\"); });",
+                  "pm.test(\"S1 P1 : gmq_cumule = 0.83\", function () { pm.expect(ind.gmq_cumule).to.eql(\"0.83\"); });",
+                  "pm.test(\"S1 P1 : provende_periode_kg = 50.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"50.000\"); });",
+                  "pm.test(\"S1 P1 : ic_periode = 2.07\", function () { pm.expect(ind.ic_periode).to.eql(\"2.07\"); });",
+                  "pm.test(\"S1 P1 : ic_cumule = 2.07\", function () { pm.expect(ind.ic_cumule).to.eql(\"2.07\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"date\": \"2026-01-31\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n      \"nombre_poissons_peses\": 98,\n      \"poids_total_g\": \"4410.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.52 S1 : pesée 2 le 2026-03-02 (95 poissons, 7600 g = 80 g)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_s1_p2\", String(data.id));",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
+                  "pm.test(\"Effectif vivant 950\", function () { pm.expect(data.lignes[0].effectif_vivant).to.eql(950); });",
+                  "pm.test(\"S1 P2 : jour_de_cycle = 60\", function () { pm.expect(ind.jour_de_cycle).to.eql(60); });",
+                  "pm.test(\"S1 P2 : biomasse_kg = 76.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"76.000\"); });",
+                  "pm.test(\"S1 P2 : gmq_periode = 1.17\", function () { pm.expect(ind.gmq_periode).to.eql(\"1.17\"); });",
+                  "pm.test(\"S1 P2 : gmq_cumule = 1.00\", function () { pm.expect(ind.gmq_cumule).to.eql(\"1.00\"); });",
+                  "pm.test(\"S1 P2 : provende_periode_kg = 90.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"90.000\"); });",
+                  "pm.test(\"S1 P2 : ic_periode = 2.82\", function () { pm.expect(ind.ic_periode).to.eql(\"2.82\"); });",
+                  "pm.test(\"S1 P2 : ic_cumule = 2.50\", function () { pm.expect(ind.ic_cumule).to.eql(\"2.50\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"date\": \"2026-03-02\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n      \"nombre_poissons_peses\": 95,\n      \"poids_total_g\": \"7600.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.53 Distribution de 10.00 kg le 2026-03-10 (IND1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Distribution valide\", function () { pm.expect(data.statut).to.eql(\"VALIDE\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/consommations-provende/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"id_provende\": \"{{ix_provende}}\",\n  \"date_distribution\": \"2026-03-10T08:00:00Z\",\n  \"quantite_kg\": \"10.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.54 S3 : pesée le 2026-03-20 (95 poissons, 5700 g = 60 g) : biomasse en baisse",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_s1_p3\", String(data.id));",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
+                  "pm.test(\"S3 : biomasse_kg = 57.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"57.000\"); });",
+                  "pm.test(\"S3 : gmq_periode = -1.11\", function () { pm.expect(ind.gmq_periode).to.eql(\"-1.11\"); });",
+                  "pm.test(\"S3 : provende_periode_kg = 10.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"10.000\"); });",
+                  "pm.test(\"S3 : ic_periode = null\", function () { pm.expect(ind.ic_periode).to.eql(null); });",
+                  "pm.test(\"S3 : ic_cumule = 4.05\", function () { pm.expect(ind.ic_cumule).to.eql(\"4.05\"); });",
+                  "pm.test(\"S3 : jour_de_cycle = 78\", function () { pm.expect(ind.jour_de_cycle).to.eql(78); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"date\": \"2026-03-20\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n      \"nombre_poissons_peses\": 95,\n      \"poids_total_g\": \"5700.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.55 S4 : pesée le 2026-04-01 sans provende sur la période (9500 g = 100 g)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_s1_p4\", String(data.id));",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
+                  "pm.test(\"S4 : biomasse_kg = 95.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"95.000\"); });",
+                  "pm.test(\"S4 : gmq_periode = 3.33\", function () { pm.expect(ind.gmq_periode).to.eql(\"3.33\"); });",
+                  "pm.test(\"S4 : provende_periode_kg = 0.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"0.000\"); });",
+                  "pm.test(\"S4 : ic_periode = null\", function () { pm.expect(ind.ic_periode).to.eql(null); });",
+                  "pm.test(\"S4 : ic_cumule = 2.00\", function () { pm.expect(ind.ic_cumule).to.eql(\"2.00\"); });",
+                  "pm.test(\"S4 : jour_de_cycle = 90\", function () { pm.expect(ind.jour_de_cycle).to.eql(90); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"date\": \"2026-04-01\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n      \"nombre_poissons_peses\": 95,\n      \"poids_total_g\": \"9500.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.56 S6 : modifier la dernière pesée (9025 g = 95 g)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
+                  "pm.test(\"Poids moyen recalculé à 95.00\", function () { pm.expect(data.lignes[0].poids_moyen).to.eql(\"95.00\"); });",
+                  "pm.test(\"S6 : biomasse_kg = 90.250\", function () { pm.expect(ind.biomasse_kg).to.eql(\"90.250\"); });",
+                  "pm.test(\"S6 : gmq_periode = 2.92\", function () { pm.expect(ind.gmq_periode).to.eql(\"2.92\"); });",
+                  "pm.test(\"S6 : gmq_cumule = 0.83\", function () { pm.expect(ind.gmq_cumule).to.eql(\"0.83\"); });",
+                  "pm.test(\"S6 : provende_periode_kg = 0.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"0.000\"); });",
+                  "pm.test(\"S6 : ic_periode = null\", function () { pm.expect(ind.ic_periode).to.eql(null); });",
+                  "pm.test(\"S6 : ic_cumule = 2.14\", function () { pm.expect(ind.ic_cumule).to.eql(\"2.14\"); });",
+                  "pm.test(\"S6 : jour_de_cycle = 90\", function () { pm.expect(ind.jour_de_cycle).to.eql(90); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ix_s1_p4}}/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n      \"poids_total_g\": \"9025.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.57 S7 : supprimer la dernière pesée",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 204\", function () { pm.response.to.have.status(204); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ix_s1_p4}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.58 S7 : la pesée supprimée et son instantané ont disparu",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ix_s1_p4}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.59 S7 : l'instantané précédent est inchangé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
+                  "pm.test(\"S7 P3 : biomasse_kg = 57.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"57.000\"); });",
+                  "pm.test(\"S7 P3 : gmq_periode = -1.11\", function () { pm.expect(ind.gmq_periode).to.eql(\"-1.11\"); });",
+                  "pm.test(\"S7 P3 : provende_periode_kg = 10.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"10.000\"); });",
+                  "pm.test(\"S7 P3 : ic_periode = null\", function () { pm.expect(ind.ic_periode).to.eql(null); });",
+                  "pm.test(\"S7 P3 : ic_cumule = 4.05\", function () { pm.expect(ind.ic_cumule).to.eql(\"4.05\"); });",
+                  "pm.test(\"S7 P3 : jour_de_cycle = 78\", function () { pm.expect(ind.jour_de_cycle).to.eql(78); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ix_s1_p3}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.60 S7 : nouvelle pesée le 2026-04-05, calculée depuis la pesée du 2026-03-20",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_s1_p4b\", String(data.id));",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
+                  "pm.test(\"S7 nouvelle : biomasse_kg = 95.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"95.000\"); });",
+                  "pm.test(\"S7 nouvelle : gmq_periode = 2.50\", function () { pm.expect(ind.gmq_periode).to.eql(\"2.50\"); });",
+                  "pm.test(\"S7 nouvelle : gmq_cumule = 0.85\", function () { pm.expect(ind.gmq_cumule).to.eql(\"0.85\"); });",
+                  "pm.test(\"S7 nouvelle : provende_periode_kg = 0.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"0.000\"); });",
+                  "pm.test(\"S7 nouvelle : ic_periode = null\", function () { pm.expect(ind.ic_periode).to.eql(null); });",
+                  "pm.test(\"S7 nouvelle : ic_cumule = 2.00\", function () { pm.expect(ind.ic_cumule).to.eql(\"2.00\"); });",
+                  "pm.test(\"S7 nouvelle : jour_de_cycle = 94\", function () { pm.expect(ind.jour_de_cycle).to.eql(94); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"date\": \"2026-04-05\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n      \"nombre_poissons_peses\": 95,\n      \"poids_total_g\": \"9500.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.61 Distribution de 40.00 kg le 2026-01-10 (IND2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Distribution valide\", function () { pm.expect(data.statut).to.eql(\"VALIDE\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/consommations-provende/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"id_provende\": \"{{ix_provende}}\",\n  \"date_distribution\": \"2026-01-10T08:00:00Z\",\n  \"quantite_kg\": \"40.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.62 Distribution de 60.00 kg le 2026-01-20 (IND2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Distribution valide\", function () { pm.expect(data.statut).to.eql(\"VALIDE\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/consommations-provende/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"id_provende\": \"{{ix_provende}}\",\n  \"date_distribution\": \"2026-01-20T08:00:00Z\",\n  \"quantite_kg\": \"60.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.63 Distribution de 90.00 kg le 2026-02-10 (IND2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Distribution valide\", function () { pm.expect(data.statut).to.eql(\"VALIDE\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/consommations-provende/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"id_provende\": \"{{ix_provende}}\",\n  \"date_distribution\": \"2026-02-10T08:00:00Z\",\n  \"quantite_kg\": \"90.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.64 Distribution de 30.00 kg le 2026-02-20 (IND2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Distribution valide\", function () { pm.expect(data.statut).to.eql(\"VALIDE\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/consommations-provende/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"id_provende\": \"{{ix_provende}}\",\n  \"date_distribution\": \"2026-02-20T08:00:00Z\",\n  \"quantite_kg\": \"30.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.65 Mortalité de 50 CARPE le 2026-02-05 (IND2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/evenements-mortalite-perte/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type_evenement\": \"MORTALITE\",\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 50,\n  \"date_evenement\": \"2026-02-05\",\n  \"id_cause\": \"{{ix_cause_inconnue}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.66 S2 étape 1 : pesée de A le 2026-01-31 (100 poissons, 4500 g)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_a_p1\", String(data.id));",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_a\")) || {}).indicateurs || {};",
+                  "pm.test(\"S2 A1 : jour_de_cycle = 30\", function () { pm.expect(ind.jour_de_cycle).to.eql(30); });",
+                  "pm.test(\"S2 A1 : biomasse_kg = 45.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"45.000\"); });",
+                  "pm.test(\"S2 A1 : gmq_periode = 0.83\", function () { pm.expect(ind.gmq_periode).to.eql(\"0.83\"); });",
+                  "pm.test(\"S2 A1 : gmq_cumule = 0.83\", function () { pm.expect(ind.gmq_cumule).to.eql(\"0.83\"); });",
+                  "pm.test(\"S2 A1 : provende_periode_kg = 50.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"50.000\"); });",
+                  "pm.test(\"S2 A1 : ic_periode = 2.00\", function () { pm.expect(ind.ic_periode).to.eql(\"2.00\"); });",
+                  "pm.test(\"S2 A1 : ic_cumule = 2.00\", function () { pm.expect(ind.ic_cumule).to.eql(\"2.00\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"date\": \"2026-01-31\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4500.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.67 S2 étape 2 : pesée de A le 2026-03-02 (95 poissons, 8550 g) ; B sans pesée (référence 20 kg)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_a_p2\", String(data.id));",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_a\")) || {}).indicateurs || {};",
+                  "pm.test(\"Effectif vivant de A : 950\", function () { pm.expect(data.lignes[0].effectif_vivant).to.eql(950); });",
+                  "pm.test(\"S2 A2 : biomasse_kg = 85.500\", function () { pm.expect(ind.biomasse_kg).to.eql(\"85.500\"); });",
+                  "pm.test(\"S2 A2 : gmq_periode = 1.50\", function () { pm.expect(ind.gmq_periode).to.eql(\"1.50\"); });",
+                  "pm.test(\"S2 A2 : gmq_cumule = 1.17\", function () { pm.expect(ind.gmq_cumule).to.eql(\"1.17\"); });",
+                  "pm.test(\"S2 A2 : provende_periode_kg = 81.753\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"81.753\"); });",
+                  "pm.test(\"S2 A2 : ic_periode = 2.02\", function () { pm.expect(ind.ic_periode).to.eql(\"2.02\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"date\": \"2026-03-02\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 95,\n      \"poids_total_g\": \"8550.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.68 S2 étape 3 : pesée de B le 2026-01-31 (50 poissons, 4000 g)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_b_p1\", String(data.id));",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_b\")) || {}).indicateurs || {};",
+                  "pm.test(\"S2 B1 : biomasse_kg = 40.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"40.000\"); });",
+                  "pm.test(\"S2 B1 : gmq_periode = 1.33\", function () { pm.expect(ind.gmq_periode).to.eql(\"1.33\"); });",
+                  "pm.test(\"S2 B1 : provende_periode_kg = 50.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"50.000\"); });",
+                  "pm.test(\"S2 B1 : ic_periode = 2.50\", function () { pm.expect(ind.ic_periode).to.eql(\"2.50\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"date\": \"2026-01-31\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_b}}\",\n      \"nombre_poissons_peses\": 50,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.69 S2 étape 3 : recalcul croisé de la pesée 2 de A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_a\")) || {}).indicateurs || {};",
+                  "pm.test(\"S2 A2 recalculée : provende_periode_kg = 61.993\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"61.993\"); });",
+                  "pm.test(\"S2 A2 recalculée : ic_periode = 1.53\", function () { pm.expect(ind.ic_periode).to.eql(\"1.53\"); });",
+                  "pm.test(\"S2 A2 recalculée : ic_cumule = 1.71\", function () { pm.expect(ind.ic_cumule).to.eql(\"1.71\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ix_a_p2}}/",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.70 S2 étape 4 : pesée de B le 2026-03-02 (50 poissons, 7000 g)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_b_p2\", String(data.id));",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_b\")) || {}).indicateurs || {};",
+                  "pm.test(\"S2 B2 : biomasse_kg = 70.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"70.000\"); });",
+                  "pm.test(\"S2 B2 : gmq_periode = 2.00\", function () { pm.expect(ind.gmq_periode).to.eql(\"2.00\"); });",
+                  "pm.test(\"S2 B2 : gmq_cumule = 1.67\", function () { pm.expect(ind.gmq_cumule).to.eql(\"1.67\"); });",
+                  "pm.test(\"S2 B2 : provende_periode_kg = 58.007\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"58.007\"); });",
+                  "pm.test(\"S2 B2 : ic_periode = 1.93\", function () { pm.expect(ind.ic_periode).to.eql(\"1.93\"); });",
+                  "pm.test(\"S2 B2 : ic_cumule = 2.16\", function () { pm.expect(ind.ic_cumule).to.eql(\"2.16\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"date\": \"2026-03-02\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_b}}\",\n      \"nombre_poissons_peses\": 50,\n      \"poids_total_g\": \"7000.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "07.71 S2 étape 5 : instantanés distincts et provende entièrement répartie",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const liste = Array.isArray(data) ? data : (data.results || []);",
+                  "const lignes = liste.flatMap(p => p.lignes.map(l => ({ date: p.date, lot: String(l.id_lot_grossissement), ind: l.indicateurs })));",
+                  "const lotA = pm.collectionVariables.get(\"ix_lot_gross_a\"), lotB = pm.collectionVariables.get(\"ix_lot_gross_b\");",
+                  "const part = (lot, date) => Number((lignes.find(l => l.lot === lot && l.date === date) || { ind: {} }).ind.provende_periode_kg);",
+                  "pm.test(\"Quatre instantanés, deux par lot\", function () { pm.expect(lignes.length).to.eql(4); pm.expect(lignes.filter(l => l.lot === lotA).length).to.eql(2); pm.expect(lignes.filter(l => l.lot === lotB).length).to.eql(2); });",
+                  "pm.test(\"Instantanés de A et B distincts\", function () { const a = lignes.find(l => l.lot === lotA && l.date === \"2026-03-02\").ind, b = lignes.find(l => l.lot === lotB && l.date === \"2026-03-02\").ind; pm.expect(a.biomasse_kg).to.eql(\"85.500\"); pm.expect(b.biomasse_kg).to.eql(\"70.000\"); });",
+                  "pm.test(\"Période 1 : 100,000 kg répartis\", function () { pm.expect((part(lotA, \"2026-01-31\") + part(lotB, \"2026-01-31\")).toFixed(3)).to.eql(\"100.000\"); });",
+                  "pm.test(\"Période 2 : 120,000 kg répartis (61,993 + 58,007)\", function () { pm.expect(part(lotA, \"2026-03-02\")).to.eql(61.993); pm.expect(part(lotB, \"2026-03-02\")).to.eql(58.007); pm.expect((part(lotA, \"2026-03-02\") + part(lotB, \"2026-03-02\")).toFixed(3)).to.eql(\"120.000\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/?bassin={{ix_bassin_ind2}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.72 S2 étape 5 : le journal ne contient que les 4 distributions du bassin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const liste = Array.isArray(data) ? data : (data.results || []);",
+                  "pm.test(\"Quatre distributions, aucune par lot\", function () { pm.expect(liste.length).to.eql(4); pm.expect(liste.reduce((s, d) => s + Number(d.quantite_kg), 0)).to.eql(220); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/consommations-provende/?bassin={{ix_bassin_ind2}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "07.73 S5 : pesée le jour même de l'entrée (2026-01-01)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ix_c_p1\", String(data.id));",
+                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_c\")) || {}).indicateurs || {};",
+                  "pm.test(\"S5 : jour_de_cycle = 0\", function () { pm.expect(ind.jour_de_cycle).to.eql(0); });",
+                  "pm.test(\"S5 : biomasse_kg = 20.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"20.000\"); });",
+                  "pm.test(\"S5 : gmq_periode = null\", function () { pm.expect(ind.gmq_periode).to.eql(null); });",
+                  "pm.test(\"S5 : gmq_cumule = null\", function () { pm.expect(ind.gmq_cumule).to.eql(null); });",
+                  "pm.test(\"S5 : provende_periode_kg = 0.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"0.000\"); });",
+                  "pm.test(\"S5 : ic_periode = null\", function () { pm.expect(ind.ic_periode).to.eql(null); });",
+                  "pm.test(\"S5 : ic_cumule = null\", function () { pm.expect(ind.ic_cumule).to.eql(null); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind3}}\",\n  \"date\": \"2026-01-01\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_c}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"2000.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         }
       ]

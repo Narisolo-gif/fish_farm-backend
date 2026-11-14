@@ -18,7 +18,22 @@ from .services import lot_a_historique, verifier_capacite_bassin
     sortie_stock_validee,
     dispatch_uid="grossissement.creer_lot_apres_sortie_validee",
 )
-def creer_lot_apres_sortie_validee(sender, *, sortie, utilisateur, **kwargs):
+def creer_lot_apres_sortie_validee(
+    sender,
+    *,
+    sortie,
+    utilisateur,
+    poids_initial_g=None,
+    **kwargs,
+):
+    # Le point de départ des indicateurs (biomasse, GMQ, IC) est obligatoire.
+    if poids_initial_g is None or poids_initial_g <= 0:
+        raise ValidationError({
+            "poids_initial_g": (
+                "Le poids moyen initial est obligatoire et doit être "
+                "strictement positif."
+            )
+        })
     lot = Lot.objects.select_for_update().get(pk=sortie.lot_id)
     if lot.stade != Lot.Stade.EN_STOCK:
         raise ValidationError({
@@ -37,6 +52,7 @@ def creer_lot_apres_sortie_validee(sender, *, sortie, utilisateur, **kwargs):
         espece=sortie.espece,
         date_mise_en_place=sortie.date_sortie,
         effectif_initial=sortie.effectif_entrant,
+        poids_initial_g=poids_initial_g,
         utilisateur=sortie.validee_par or utilisateur,
     )
     lot.stade = Lot.Stade.EN_GROSSISSEMENT
@@ -61,12 +77,13 @@ def supprimer_lot_avant_annulation(sender, *, sortie, utilisateur, **kwargs):
         raise ValidationError({
             "statut": "Le lot de grossissement doit être actif pour annuler la sortie."
         })
-    if lot_grossissement.poids_initial_g is not None or lot_a_historique(
-        lot_grossissement
-    ):
+    # Le poids initial est saisi à la validation : seul un historique (pesées)
+    # empêche d'annuler la sortie.
+    if lot_a_historique(lot_grossissement):
         raise ValidationError({
             "detail": (
-                "Le lot de grossissement possède un poids initial ou un historique."
+                "Le lot de grossissement possède un historique de pesées : "
+                "la sortie ne peut plus être annulée."
             )
         })
     lot_grossissement.delete()

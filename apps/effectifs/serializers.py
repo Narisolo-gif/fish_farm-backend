@@ -241,6 +241,21 @@ class ValidationSortieSerializer(serializers.Serializer):
         allow_blank=True,
         trim_whitespace=True,
     )
+    # Poids moyen initial (g) du lot de grossissement créé par la validation ;
+    # son caractère obligatoire est contrôlé par le module grossissement.
+    poids_initial_g = serializers.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        required=False,
+        allow_null=True,
+    )
+
+    def validate_poids_initial_g(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError(
+                "Le poids moyen initial doit être strictement positif."
+            )
+        return value
 
 
 class AnnulationSortieStockSerializer(serializers.Serializer):

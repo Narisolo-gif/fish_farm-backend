@@ -78,3 +78,27 @@ npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.j
 ```
 
 Valeur à vérifier à la main : le lot A compte 1 000 poissons ; à 10 %, la cible est de 100 poissons ; 100 poissons pour 2 537,50 g donnent 25,375 g, soit **25,38 g** après arrondi.
+
+## Poids initial obligatoire à la validation d'une sortie
+
+Le lot de grossissement est créé à la validation de la sortie de stock ; son poids moyen initial est désormais **obligatoire** dans le body de `POST /api/v1/effectifs/sorties-stock/{id}/valider/` :
+
+```json
+{ "poids_initial_g": "20.00" }
+```
+
+Sans ce champ (ou avec une valeur ≤ 0), la validation est refusée en 400 sur `poids_initial_g` et la sortie reste en brouillon. Toutes les validations des deux collections envoient `"poids_initial_g": "20.00"`. Le poids reste corrigeable ensuite par `PATCH` du lot de grossissement.
+
+## Indicateurs (collection grossissement)
+
+Le dossier **07 Indicateurs** est autonome, à **dates fixes** (cycle de 2026, entrée des lots le 2026-01-01) et à références uniques par exécution : il peut être relancé sur la même base. Il crée ses bassins, ses lots, leurs mortalités et les distributions de provende, puis vérifie l'objet `indicateurs` de chaque ligne de pesée :
+
+- un lot seul (S1), dont la biomasse en baisse (IC `null`), une période sans provende, la modification et la suppression de la dernière pesée ;
+- deux lots d'espèces différentes dans un même bassin, avec le recalcul croisé de la provende (81,753 kg puis 61,993 kg pour le lot A) ;
+- une pesée le jour même de l'entrée (GMQ `null`).
+
+```powershell
+npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "07 Indicateurs"
+```
+
+Les instantanés sont recalculés à chaque création, modification ou suppression de pesée du bassin. Une distribution ou une mortalité saisie après coup sur une période déjà pesée n'est prise en compte qu'à la prochaine opération de pesée du bassin.

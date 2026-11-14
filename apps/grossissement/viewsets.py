@@ -147,7 +147,7 @@ class PeseeViewSet(viewsets.ModelViewSet):
 
     queryset = (
         Pesee.objects.select_related("bassin", "utilisateur")
-        .prefetch_related("lignes__lot_grossissement")
+        .prefetch_related("lignes__lot_grossissement", "lignes__indicateur")
         .all()
     )
     serializer_class = PeseeSerializer
@@ -204,7 +204,7 @@ class PeseeViewSet(viewsets.ModelViewSet):
         return Response(
             PeseeSerializer(
                 Pesee.objects.select_related("bassin", "utilisateur")
-                .prefetch_related("lignes__lot_grossissement")
+                .prefetch_related("lignes__lot_grossissement", "lignes__indicateur")
                 .get(pk=pesee_id)
             ).data
         )

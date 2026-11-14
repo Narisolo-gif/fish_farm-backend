@@ -5020,7 +5020,7 @@
             "description": "Vérifie 08.08 refuser validation avec entrant supérieur au sortant.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"effectif_entrant\": 9800,\n  \"justification_ecart\": \"Entrant trop élevé\"\n}",
+              "raw": "{\n  \"effectif_entrant\": 9800,\n  \"justification_ecart\": \"Entrant trop élevé\",\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5060,7 +5060,7 @@
             "description": "Vérifie 08.09 exiger justification pour écart de sortie.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"effectif_entrant\": 9760\n}",
+              "raw": "{\n  \"effectif_entrant\": 9760,\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5110,7 +5110,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5160,7 +5160,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"effectif_entrant\": 9760,\n  \"justification_ecart\": \"Écart de comptage à l'arrivée\"\n}",
+              "raw": "{\n  \"effectif_entrant\": 9760,\n  \"justification_ecart\": \"Écart de comptage à l'arrivée\",\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5201,7 +5201,7 @@
             "description": "Vérifie 08.12 refuser double validation.",
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5514,7 +5514,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5614,7 +5614,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"effectif_entrant\": 1000\n}",
+              "raw": "{\n  \"effectif_entrant\": 1000,\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5919,7 +5919,7 @@
             "description": "Vérifie 09.12 revalider sortie c.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"effectif_entrant\": 1000\n}",
+              "raw": "{\n  \"effectif_entrant\": 1000,\n  \"poids_initial_g\": \"20.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
