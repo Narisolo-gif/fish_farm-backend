@@ -3,7 +3,7 @@
 Exécution : python -m unittest apps.grossissement.tests.test_calculs -v
 """
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal as D
 
 from apps.grossissement.calculs import (
@@ -13,9 +13,12 @@ from apps.grossissement.calculs import (
     biomasse_kg,
     calculer_instantanes,
     echantillon_conforme,
+    etat_calendrier,
     gmq,
     ic,
+    jour_echeance,
     poids_moyen_echantillon,
+    pourcentage_reel_echantillon,
     repartir_provende,
     taille_echantillon_cible,
 )
@@ -87,6 +90,65 @@ class EchantillonTests(unittest.TestCase):
         self.assertTrue(echantillon_conforme(200, 200))
         self.assertFalse(echantillon_conforme(199, 200))
         self.assertTrue(echantillon_conforme(201, 200))
+
+    def test_pourcentage_reel_echantillon(self):
+        self.assertEqual(pourcentage_reel_echantillon(10, 100), D("10.00"))
+        self.assertEqual(pourcentage_reel_echantillon(1, 3), D("33.33"))
+        self.assertEqual(pourcentage_reel_echantillon(2, 3), D("66.67"))
+        self.assertEqual(pourcentage_reel_echantillon(100, 100), D("100.00"))
+
+
+class CalendrierTests(unittest.TestCase):
+    """J30, J60 puis tous les 15 jours, sans limite ; information seulement."""
+
+    def _etat(self, age, derniere_pesee_jour=None):
+        return etat_calendrier(
+            ENTREE,
+            ENTREE + timedelta(days=age),
+            (
+                ENTREE + timedelta(days=derniere_pesee_jour)
+                if derniere_pesee_jour is not None
+                else None
+            ),
+        )
+
+    def test_jours_des_echeances(self):
+        self.assertEqual(
+            [jour_echeance(rang) for rang in range(1, 7)],
+            [30, 60, 75, 90, 105, 120],
+        )
+        self.assertEqual(jour_echeance(30), 60 + 28 * 15)
+
+    def test_etape_et_prochaine_echeance(self):
+        for age, etape, prochaine in (
+            (0, 1, 30),
+            (29, 1, 30),
+            (30, 2, 30),
+            (31, 2, 60),
+            (60, 3, 60),
+            (75, 4, 75),
+            (180, 11, 180),
+            (181, 11, 195),
+            (400, 25, 405),
+        ):
+            with self.subTest(age=age):
+                etat = self._etat(age)
+                self.assertEqual(etat["etape_courante"], etape)
+                self.assertEqual(
+                    etat["prochaine_echeance"], ENTREE + timedelta(days=prochaine)
+                )
+
+    def test_pesee_en_retard(self):
+        # Le jour même de l'échéance, la pesée n'est pas encore en retard.
+        self.assertFalse(self._etat(30)["pesee_en_retard"])
+        self.assertTrue(self._etat(31)["pesee_en_retard"])
+        # Pesée faite le jour de l'échéance J30 : à jour jusqu'à J60.
+        self.assertFalse(self._etat(60, derniere_pesee_jour=30)["pesee_en_retard"])
+        self.assertTrue(self._etat(61, derniere_pesee_jour=30)["pesee_en_retard"])
+        # Pesée faite avant l'échéance : l'échéance reste à honorer.
+        self.assertTrue(self._etat(31, derniere_pesee_jour=28)["pesee_en_retard"])
+        # Avant la première échéance, jamais en retard.
+        self.assertFalse(self._etat(10)["pesee_en_retard"])
 
 
 class RepartitionTests(unittest.TestCase):

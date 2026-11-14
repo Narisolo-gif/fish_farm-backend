@@ -1,3 +1,4 @@
+from django.db.models import Prefetch
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import status, viewsets
@@ -18,17 +19,20 @@ from .serializers import (
     ClotureLotGrossissementSerializer,
     LotGrossissementSerializer,
     OrigineLotGrossissementSerializer,
+    AnnulationPeseeSerializer,
+    ApercuPeseeSerializer,
     PeseeEcritureSerializer,
     PeseeSerializer,
     SortieGrossissementSerializer,
 )
 from .services import (
     EchantillonNonConforme,
+    annuler_pesee,
+    apercu_pesee,
     apercu_sortie_grossissement,
     cloturer_lot_grossissement,
     creer_pesee,
     modifier_pesee,
-    supprimer_pesee,
     valider_sortie_grossissement,
 )
 
@@ -54,6 +58,14 @@ class LotGrossissementViewSet(viewsets.ModelViewSet):
         .prefetch_related(
             "lot_origine__traitement__lignes_hapas__hapa",
             "lot_origine__mise_en_stock__lignes_hapas__hapa",
+            # Dernière pesée valide et ses indicateurs (fiche du lot).
+            Prefetch(
+                "pesees",
+                queryset=Pesee.objects.filter(statut=Pesee.Statut.VALIDEE)
+                .select_related("indicateur")
+                .order_by("-date", "-id"),
+                to_attr="pesees_valides",
+            ),
         )
         .all()
     )
@@ -174,22 +186,28 @@ def _reponse_echantillon_non_conforme(exc):
 
 class PeseeViewSet(viewsets.ModelViewSet):
     """
-    Pesées sur échantillon des lots de grossissement.
+    Pesées sur échantillon, une par lot de grossissement et par date.
+
+    POST / : enregistre une pesée (lot, espèce, bassin et effectif déduits).
+    POST /apercu/ : formulaire prérempli et valeurs calculées, rien n'est écrit.
+    PATCH /{id}/ : corrige la dernière pesée valide du lot (date figée).
+    POST /{id}/annuler/ : annule la dernière pesée valide (motif obligatoire).
+    Aucune suppression : DELETE n'est pas permis.
 
     Administrateur, Gestionnaire : toutes les actions.
-    Employé : création, liste et lecture.
+    Employé : création, aperçu, liste et lecture.
     """
 
-    queryset = (
-        Pesee.objects.select_related("bassin", "utilisateur")
-        .prefetch_related("lignes__lot_grossissement", "lignes__indicateur")
-        .all()
-    )
+    queryset = Pesee.objects.select_related(
+        "lot_grossissement",
+        "bassin",
+        "indicateur",
+    ).all()
     serializer_class = PeseeSerializer
-    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_permissions(self):
-        if self.action in {"partial_update", "destroy"}:
+        if self.action in {"partial_update", "annuler"}:
             return [
                 IsAuthenticated(),
                 IsTousRolesActifs(),
@@ -203,13 +221,19 @@ class PeseeViewSet(viewsets.ModelViewSet):
 
         for parametre, champ in (
             ("bassin", "bassin_id"),
-            ("lot", "lignes__lot_grossissement_id"),
+            ("lot", "lot_grossissement_id"),
         ):
             valeur = params.get(parametre)
             if valeur:
                 if not valeur.isdigit():
                     raise ValidationError({parametre: "Identifiant invalide."})
                 queryset = queryset.filter(**{champ: valeur})
+
+        statut_pesee = params.get("statut")
+        if statut_pesee:
+            if statut_pesee not in Pesee.Statut.values:
+                raise ValidationError({"statut": "Valeur inconnue."})
+            queryset = queryset.filter(statut=statut_pesee)
 
         dates = {}
         for parametre, lookup in (
@@ -233,35 +257,39 @@ class PeseeViewSet(viewsets.ModelViewSet):
             raise ValidationError({
                 "date_max": "La date de fin doit être égale ou postérieure au début."
             })
-        return queryset.distinct().order_by("-date", "-id")
+        return queryset.order_by("-date", "-id")
 
-    def _relire(self, pesee_id):
+    def _relire(self, pesee_id, statut_http=status.HTTP_200_OK):
         return Response(
-            PeseeSerializer(
-                Pesee.objects.select_related("bassin", "utilisateur")
-                .prefetch_related("lignes__lot_grossissement", "lignes__indicateur")
-                .get(pk=pesee_id)
-            ).data
+            PeseeSerializer(self.queryset.get(pk=pesee_id)).data,
+            status=statut_http,
         )
 
     def create(self, request, *args, **kwargs):
-        serializer = PeseeEcritureSerializer(data=request.data)
+        serializer = PeseeEcritureSerializer(data=request.data, creation=True)
         serializer.is_valid(raise_exception=True)
         donnees = serializer.validated_data
         try:
             pesee = creer_pesee(
-                bassin_id=donnees["id_bassin"],
+                lot_id=donnees["id_lot_grossissement"],
                 date_pesee=donnees["date"],
-                lignes=donnees["lignes"],
+                nombre=donnees["nombre_poissons_peses"],
+                poids_total=donnees["poids_total_g"],
+                pourcentage=donnees.get("pourcentage_echantillon"),
                 observation=donnees.get("observation", ""),
                 confirmer=donnees.get("confirmer_echantillon_non_conforme", False),
                 utilisateur=request.user,
             )
         except EchantillonNonConforme as exc:
             return _reponse_echantillon_non_conforme(exc)
-        reponse = self._relire(pesee.pk)
-        reponse.status_code = status.HTTP_201_CREATED
-        return reponse
+        return self._relire(pesee.pk, status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], url_path="apercu")
+    def apercu(self, request):
+        serializer = PeseeEcritureSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        contexte = apercu_pesee(serializer.validated_data)
+        return Response(ApercuPeseeSerializer(contexte).data)
 
     def partial_update(self, request, *args, **kwargs):
         pesee = self.get_object()
@@ -278,6 +306,14 @@ class PeseeViewSet(viewsets.ModelViewSet):
             return _reponse_echantillon_non_conforme(exc)
         return self._relire(pesee.pk)
 
-    def destroy(self, request, *args, **kwargs):
-        supprimer_pesee(self.get_object().pk)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+    @action(detail=True, methods=["post"], url_path="annuler")
+    def annuler(self, request, pk=None):
+        pesee = self.get_object()
+        serializer = AnnulationPeseeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        annuler_pesee(
+            pesee.pk,
+            motif=serializer.validated_data["motif"],
+            utilisateur=request.user,
+        )
+        return self._relire(pesee.pk)

@@ -6,7 +6,7 @@ qu'au résultat final, jamais aux valeurs intermédiaires. Les valeurs non
 calculables valent None, jamais zéro.
 """
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 from typing import Callable, Optional
 
@@ -101,6 +101,57 @@ def poids_moyen_echantillon(poids_total_g, nombre_poissons):
 def echantillon_conforme(nombre_poissons_peses, taille_cible):
     """Vrai si l'échantillon atteint la taille cible."""
     return nombre_poissons_peses >= taille_cible
+
+
+def pourcentage_reel_echantillon(nombre_poissons_peses, effectif_vivant):
+    """Part réellement pesée de l'effectif vivant (%), arrondie à 2 décimales."""
+    return _arrondir(
+        Decimal(nombre_poissons_peses) * Decimal(100) / Decimal(effectif_vivant),
+        2,
+    )
+
+
+# --- Calendrier des pesées (information, jamais bloquant) -------------------
+
+PREMIERES_ECHEANCES_JOURS = (30, 60)
+INTERVALLE_PESEE_JOURS = 15
+
+
+def jour_echeance(rang):
+    """Jour de cycle de la n-ième pesée prévue : J30, J60, puis tous les 15 jours."""
+    if rang <= len(PREMIERES_ECHEANCES_JOURS):
+        return PREMIERES_ECHEANCES_JOURS[rang - 1]
+    return (
+        PREMIERES_ECHEANCES_JOURS[-1]
+        + (rang - len(PREMIERES_ECHEANCES_JOURS)) * INTERVALLE_PESEE_JOURS
+    )
+
+
+def etat_calendrier(date_entree, aujourdhui, date_derniere_pesee=None):
+    """Position du lot dans le calendrier des pesées, sans limite de durée.
+
+    - `etape_courante` : 1 avant J30, 2 de J30 à J59, 3 de J60 à J74, etc. ;
+    - `prochaine_echeance` : première échéance au plus tôt aujourd'hui ;
+    - `pesee_en_retard` : une échéance strictement passée est postérieure à la
+      dernière pesée (ou à la mise en place s'il n'y en a aucune).
+    """
+    age = max(0, (aujourdhui - date_entree).days)
+    etape = 1
+    while jour_echeance(etape) <= age:
+        etape += 1
+    rang = 1
+    while jour_echeance(rang) < age:
+        rang += 1
+    reference = date_derniere_pesee or date_entree
+    en_retard = (
+        rang > 1
+        and date_entree + timedelta(days=jour_echeance(rang - 1)) > reference
+    )
+    return {
+        "etape_courante": etape,
+        "prochaine_echeance": date_entree + timedelta(days=jour_echeance(rang)),
+        "pesee_en_retard": en_retard,
+    }
 
 
 @dataclass(frozen=True)

@@ -28,9 +28,10 @@ from .calculs import (
     calculer_instantanes,
     echantillon_conforme,
     poids_moyen_echantillon,
+    pourcentage_reel_echantillon,
     taille_echantillon_cible,
 )
-from .models import IndicateurLot, LotGrossissement, Pesee, PeseeLot
+from .models import IndicateurLot, LotGrossissement, Pesee
 
 
 MAX_LOTS_ACTIFS_PAR_BASSIN = 2
@@ -162,8 +163,10 @@ def modifier_lot_grossissement(lot_id, data):
 
 
 def lot_a_historique(lot):
+    # Toute pesée, même annulée, est un historique : elle n'est jamais
+    # supprimée et protège le lot (PROTECT).
     # TODO : inclure les répartitions de provende.
-    return lot.lignes_pesee.exists()
+    return lot.pesees.exists()
 
 def verifier_capacite_bassin(bassin, espece, date_mise_en_place=None):
     """Contrôle d'accueil d'un nouveau lot ; le bassin doit être verrouillé par l'appelant."""
@@ -232,74 +235,102 @@ def _date_entree(lot):
     return timezone.localtime(lot.date_mise_en_place).date()
 
 
-def _controler_lot_pour_pesee(lot, bassin, date_pesee):
-    if lot.bassin_id != bassin.pk:
-        raise ValidationError({
-            "id_lot_grossissement": (
-                f"Lot {lot.code} : le lot n'appartient pas au bassin de la pesée."
-            )
-        })
+def derniere_pesee_valide(lot):
+    """Dernière pesée valide du lot, ou None."""
+    return (
+        Pesee.objects.filter(lot_grossissement=lot, statut=Pesee.Statut.VALIDEE)
+        .order_by("-date", "-id")
+        .first()
+    )
+
+
+def _verifier_lot_pesable(lot, bassin):
     if lot.statut != LotGrossissement.Statut.ACTIF:
         raise ValidationError({
+            "id_lot_grossissement": "Seul un lot de grossissement actif peut être pesé."
+        })
+    if bassin.statut != Bassin.Statut.ACTIF:
+        raise ValidationError({
+            "id_lot_grossissement": "Le bassin du lot doit être actif."
+        })
+    if bassin.categorie != Bassin.Categorie.GROSSISSEMENT:
+        raise ValidationError({
             "id_lot_grossissement": (
-                f"Lot {lot.code} : seul un lot de grossissement actif peut être pesé."
+                "Le bassin du lot doit être de catégorie GROSSISSEMENT."
             )
+        })
+
+
+def _verifier_date_pesee(lot, date_pesee):
+    """Date libre dans le cycle : au plus aujourd'hui, après la dernière pesée."""
+    if date_pesee > timezone.localdate():
+        raise ValidationError({
+            "date": "La date de pesée ne peut pas être dans le futur."
         })
     if date_pesee < _date_entree(lot):
         raise ValidationError({
             "date": (
-                f"Lot {lot.code} : la date de pesée ne peut pas précéder "
-                f"la mise en place du lot ({_date_entree(lot)})."
+                "La date de pesée ne peut pas précéder la mise en place "
+                f"du lot ({_date_entree(lot)})."
+            )
+        })
+    derniere = derniere_pesee_valide(lot)
+    if derniere is not None and date_pesee <= derniere.date:
+        raise ValidationError({
+            "date": (
+                "La date doit être postérieure à la dernière pesée du lot "
+                f"({derniere.date})."
             )
         })
 
 
-def _calculer_ligne(lot, date_pesee, *, pourcentage, nombre, poids_total):
-    """Contrôle une ligne et renvoie ses valeurs calculées."""
+def _calculer_mesures(lot, date_pesee, *, pourcentage, nombre, poids_total, complet=True):
+    """Contrôle les mesures et renvoie les valeurs calculées de la pesée.
+
+    À l'aperçu (`complet=False`), le nombre et le poids peuvent manquer :
+    les valeurs qui en dépendent valent alors None.
+    """
     if pourcentage is None:
         pourcentage = lot.pourcentage_groupe_pesee
     if pourcentage <= 0 or pourcentage > 100:
         raise ValidationError({
             "pourcentage_echantillon": (
-                f"Lot {lot.code} : le pourcentage doit être supérieur à 0 "
-                "et inférieur ou égal à 100."
+                "Le pourcentage doit être supérieur à 0 et inférieur ou égal à 100."
             )
         })
-    if nombre is None or nombre <= 0:
+    if (complet or nombre is not None) and (nombre is None or nombre <= 0):
         raise ValidationError({
             "nombre_poissons_peses": (
-                f"Lot {lot.code} : le nombre de poissons pesés doit être "
-                "strictement positif."
+                "Le nombre de poissons pesés doit être strictement positif."
             )
         })
-    if poids_total is None or poids_total <= 0:
+    if (complet or poids_total is not None) and (poids_total is None or poids_total <= 0):
         raise ValidationError({
-            "poids_total_g": (
-                f"Lot {lot.code} : le poids total doit être strictement positif."
-            )
+            "poids_total_g": "Le poids total doit être strictement positif."
         })
     effectif = effectif_vivant(lot.bassin_id, lot.espece, a_la_date=date_pesee)
     if effectif <= 0:
         raise ValidationError({
             "effectif_vivant": (
-                f"Lot {lot.code} : l'effectif vivant est nul à la date de la "
-                "pesée, aucune pesée n'est possible."
+                "L'effectif vivant est nul à la date de la pesée, "
+                "aucune pesée n'est possible."
             )
         })
-    if nombre > effectif:
+    if nombre is not None and nombre > effectif:
         raise ValidationError({
             "nombre_poissons_peses": (
-                f"Lot {lot.code} : le nombre de poissons pesés ({nombre}) dépasse "
+                f"Le nombre de poissons pesés ({nombre}) dépasse "
                 f"l'effectif vivant ({effectif})."
             )
         })
-    poids_moyen = _calculer_poids_moyen(poids_total, nombre)
-    if poids_moyen <= 0:
+    poids_moyen = (
+        _calculer_poids_moyen(poids_total, nombre)
+        if nombre is not None and poids_total is not None
+        else None
+    )
+    if poids_moyen is not None and poids_moyen <= 0:
         raise ValidationError({
-            "poids_total_g": (
-                f"Lot {lot.code} : le poids moyen calculé est nul, "
-                "vérifiez le poids total."
-            )
+            "poids_total_g": "Le poids moyen calculé est nul, vérifiez le poids total."
         })
     return {
         "pourcentage_echantillon": pourcentage,
@@ -308,215 +339,206 @@ def _calculer_ligne(lot, date_pesee, *, pourcentage, nombre, poids_total):
         "nombre_poissons_peses": nombre,
         "poids_total_g": poids_total,
         "poids_moyen": poids_moyen,
+        "pourcentage_reel": (
+            pourcentage_reel_echantillon(nombre, effectif)
+            if nombre is not None
+            else None
+        ),
     }
 
 
-def _verifier_conformite(lignes_calculees, confirmer):
-    non_conformes = [
-        {
+def _verifier_conformite(lot, valeurs, confirmer):
+    if (
+        valeurs["nombre_poissons_peses"] < valeurs["taille_echantillon_cible"]
+        and not confirmer
+    ):
+        raise EchantillonNonConforme([{
             "id_lot_grossissement": lot.pk,
             "reference_lot": lot.code,
             "nombre_poissons_peses": valeurs["nombre_poissons_peses"],
             "taille_echantillon_cible": valeurs["taille_echantillon_cible"],
-        }
-        for lot, valeurs in lignes_calculees
-        if valeurs["nombre_poissons_peses"] < valeurs["taille_echantillon_cible"]
-    ]
-    if non_conformes and not confirmer:
-        raise EchantillonNonConforme(non_conformes)
+        }])
 
 
-def _verifier_lots_uniques(identifiants):
-    if len(set(identifiants)) != len(identifiants):
+def _verrouiller_lot(lot_id):
+    """Verrouille le bassin puis le lot (même ordre que les autres services)."""
+    bassin_id = (
+        LotGrossissement.objects.filter(pk=lot_id)
+        .values_list("bassin_id", flat=True)
+        .first()
+    )
+    if bassin_id is None:
         raise ValidationError({
-            "lignes": "Un même lot ne peut figurer qu'une fois dans une pesée."
+            "id_lot_grossissement": "Lot de grossissement introuvable."
         })
+    bassin = Bassin.objects.select_for_update().get(pk=bassin_id)
+    lot = LotGrossissement.objects.select_for_update().get(pk=lot_id)
+    return lot, bassin
+
+
+def apercu_pesee(donnees):
+    """Valeurs préremplies et calculées du formulaire de pesée ; rien n'est écrit."""
+    lot = (
+        LotGrossissement.objects.select_related("bassin")
+        .filter(pk=donnees["id_lot_grossissement"])
+        .first()
+    )
+    if lot is None:
+        raise ValidationError({
+            "id_lot_grossissement": "Lot de grossissement introuvable."
+        })
+    _verifier_lot_pesable(lot, lot.bassin)
+    date_pesee = donnees.get("date") or timezone.localdate()
+    _verifier_date_pesee(lot, date_pesee)
+    valeurs = _calculer_mesures(
+        lot,
+        date_pesee,
+        pourcentage=donnees.get("pourcentage_echantillon"),
+        nombre=donnees.get("nombre_poissons_peses"),
+        poids_total=donnees.get("poids_total_g"),
+        complet=False,
+    )
+    derniere = derniere_pesee_valide(lot)
+    return {
+        "lot": lot,
+        "date": date_pesee,
+        "date_derniere_pesee": derniere.date if derniere is not None else None,
+        "date_min": (
+            derniere.date + timedelta(days=1)
+            if derniere is not None
+            else _date_entree(lot)
+        ),
+        "echantillon_conforme": (
+            valeurs["nombre_poissons_peses"] >= valeurs["taille_echantillon_cible"]
+            if valeurs["nombre_poissons_peses"] is not None
+            else None
+        ),
+        **valeurs,
+    }
 
 
 @transaction.atomic
 def creer_pesee(
     *,
-    bassin_id,
+    lot_id,
     date_pesee,
-    lignes,
+    nombre,
+    poids_total,
     utilisateur,
+    pourcentage=None,
     observation="",
     confirmer=False,
 ):
-    try:
-        bassin = Bassin.objects.select_for_update().get(pk=bassin_id)
-    except Bassin.DoesNotExist as exc:
-        raise ValidationError({"id_bassin": "Bassin introuvable."}) from exc
-    if bassin.statut != Bassin.Statut.ACTIF:
-        raise ValidationError({"id_bassin": "Le bassin doit être actif."})
-    if bassin.categorie != Bassin.Categorie.GROSSISSEMENT:
-        raise ValidationError({
-            "id_bassin": "Le bassin doit être de catégorie GROSSISSEMENT."
-        })
-    if date_pesee > timezone.localdate():
-        raise ValidationError({
-            "date": "La date de pesée ne peut pas être dans le futur."
-        })
-    if not lignes:
-        raise ValidationError({"lignes": "Au moins un lot doit être pesé."})
-    identifiants = [ligne["id_lot_grossissement"] for ligne in lignes]
-    _verifier_lots_uniques(identifiants)
-
-    lots = {
-        lot.pk: lot
-        for lot in LotGrossissement.objects.select_for_update()
-        .filter(pk__in=identifiants)
-        .order_by("pk")
-    }
-    lignes_calculees = []
-    for donnees in lignes:
-        lot = lots.get(donnees["id_lot_grossissement"])
-        if lot is None:
-            raise ValidationError({
-                "id_lot_grossissement": (
-                    "Lot de grossissement introuvable "
-                    f"({donnees['id_lot_grossissement']})."
-                )
-            })
-        _controler_lot_pour_pesee(lot, bassin, date_pesee)
-        derniere = (
-            PeseeLot.objects.filter(
-                lot_grossissement=lot,
-                pesee__date__gte=date_pesee,
-            )
-            .order_by("-pesee__date")
-            .values_list("pesee__date", flat=True)
-            .first()
-        )
-        if derniere is not None:
-            raise ValidationError({
-                "date": (
-                    f"Lot {lot.code} : la date doit être postérieure à la "
-                    f"dernière pesée du lot ({derniere})."
-                )
-            })
-        lignes_calculees.append((
-            lot,
-            _calculer_ligne(
-                lot,
-                date_pesee,
-                pourcentage=donnees.get("pourcentage_echantillon"),
-                nombre=donnees.get("nombre_poissons_peses"),
-                poids_total=donnees.get("poids_total_g"),
-            ),
-        ))
-    _verifier_conformite(lignes_calculees, confirmer)
-
+    lot, bassin = _verrouiller_lot(lot_id)
+    _verifier_lot_pesable(lot, bassin)
+    _verifier_date_pesee(lot, date_pesee)
+    valeurs = _calculer_mesures(
+        lot,
+        date_pesee,
+        pourcentage=pourcentage,
+        nombre=nombre,
+        poids_total=poids_total,
+    )
+    _verifier_conformite(lot, valeurs, confirmer)
     pesee = Pesee.objects.create(
+        lot_grossissement=lot,
         bassin=bassin,
         date=date_pesee,
         utilisateur=utilisateur,
         observation=observation or "",
+        **valeurs,
     )
-    PeseeLot.objects.bulk_create([
-        PeseeLot(pesee=pesee, lot_grossissement=lot, **valeurs)
-        for lot, valeurs in lignes_calculees
-    ])
     recalculer_indicateurs_bassin(bassin.pk)
     return pesee
 
 
 def _verrouiller_pesee(pesee_id):
-    try:
-        pesee = Pesee.objects.select_for_update().get(pk=pesee_id)
-    except Pesee.DoesNotExist as exc:
-        raise NotFound("Pesée introuvable.") from exc
-    Bassin.objects.select_for_update().get(pk=pesee.bassin_id)
-    lignes = list(pesee.lignes.order_by("id"))
-    lots = {
-        lot.pk: lot
-        for lot in LotGrossissement.objects.select_for_update()
-        .filter(pk__in=[ligne.lot_grossissement_id for ligne in lignes])
-        .order_by("pk")
-    }
-    for ligne in lignes:
-        ligne.lot_grossissement = lots[ligne.lot_grossissement_id]
-    return pesee, lignes
+    lot_id = (
+        Pesee.objects.filter(pk=pesee_id)
+        .values_list("lot_grossissement_id", flat=True)
+        .first()
+    )
+    if lot_id is None:
+        raise NotFound("Pesée introuvable.")
+    lot, _ = _verrouiller_lot(lot_id)
+    pesee = Pesee.objects.select_for_update().get(pk=pesee_id)
+    pesee.lot_grossissement = lot
+    return pesee, lot
 
 
-def _verifier_pesee_modifiable(pesee, lignes):
-    """Seule la dernière pesée de chacun de ses lots, tous actifs, est corrigeable."""
-    for ligne in lignes:
-        lot = ligne.lot_grossissement
-        if lot.statut != LotGrossissement.Statut.ACTIF:
-            raise ValidationError({
-                "detail": (
-                    f"Lot {lot.code} : le lot n'est plus actif, "
-                    "la pesée ne peut plus être modifiée ni supprimée."
-                )
-            })
-        if PeseeLot.objects.filter(
-            lot_grossissement=lot,
-            pesee__date__gt=pesee.date,
-        ).exists():
-            raise ValidationError({
-                "detail": (
-                    f"Lot {lot.code} : une pesée plus récente existe, seule la "
-                    "dernière pesée du lot peut être modifiée ou supprimée."
-                )
-            })
+def _verifier_pesee_modifiable(pesee, lot):
+    """Seule la dernière pesée valide d'un lot actif est corrigeable ou annulable."""
+    if pesee.statut != Pesee.Statut.VALIDEE:
+        raise ValidationError({
+            "detail": "Cette pesée est annulée : elle ne peut plus être modifiée."
+        })
+    if lot.statut != LotGrossissement.Statut.ACTIF:
+        raise ValidationError({
+            "detail": (
+                "Le lot n'est plus actif : la pesée ne peut plus être "
+                "modifiée ni annulée."
+            )
+        })
+    if Pesee.objects.filter(
+        lot_grossissement=lot,
+        statut=Pesee.Statut.VALIDEE,
+        date__gt=pesee.date,
+    ).exists():
+        raise ValidationError({
+            "detail": (
+                "Une pesée plus récente existe : seule la dernière pesée "
+                "du lot peut être modifiée ou annulée."
+            )
+        })
 
 
 @transaction.atomic
 def modifier_pesee(pesee_id, donnees, *, confirmer=False):
-    pesee, lignes = _verrouiller_pesee(pesee_id)
-    _verifier_pesee_modifiable(pesee, lignes)
-
-    modifications = donnees.get("lignes") or []
-    _verifier_lots_uniques([m["id_lot_grossissement"] for m in modifications])
-    lignes_par_lot = {ligne.lot_grossissement_id: ligne for ligne in lignes}
-
-    lignes_calculees = []
-    lignes_modifiees = []
-    for modification in modifications:
-        ligne = lignes_par_lot.get(modification["id_lot_grossissement"])
-        if ligne is None:
-            raise ValidationError({
-                "id_lot_grossissement": (
-                    "Ce lot ne fait pas partie de la pesée "
-                    f"({modification['id_lot_grossissement']})."
-                )
-            })
-        lot = ligne.lot_grossissement
-        valeurs = _calculer_ligne(
-            lot,
-            pesee.date,
-            pourcentage=modification.get(
-                "pourcentage_echantillon", ligne.pourcentage_echantillon
-            ),
-            nombre=modification.get(
-                "nombre_poissons_peses", ligne.nombre_poissons_peses
-            ),
-            poids_total=modification.get("poids_total_g", ligne.poids_total_g),
-        )
-        lignes_calculees.append((lot, valeurs))
-        lignes_modifiees.append((ligne, valeurs))
-    _verifier_conformite(lignes_calculees, confirmer)
-
-    for ligne, valeurs in lignes_modifiees:
-        for champ, valeur in valeurs.items():
-            setattr(ligne, champ, valeur)
-        ligne.save(update_fields=list(valeurs))
+    """Corrige les mesures de la dernière pesée ; la date reste figée."""
+    pesee, lot = _verrouiller_pesee(pesee_id)
+    _verifier_pesee_modifiable(pesee, lot)
+    valeurs = _calculer_mesures(
+        lot,
+        pesee.date,
+        pourcentage=donnees.get(
+            "pourcentage_echantillon", pesee.pourcentage_echantillon
+        ),
+        nombre=donnees.get("nombre_poissons_peses", pesee.nombre_poissons_peses),
+        poids_total=donnees.get("poids_total_g", pesee.poids_total_g),
+    )
+    _verifier_conformite(lot, valeurs, confirmer)
+    for champ, valeur in valeurs.items():
+        setattr(pesee, champ, valeur)
+    champs = list(valeurs)
     if "observation" in donnees:
         pesee.observation = donnees["observation"] or ""
-    pesee.save(update_fields=["observation", "updated_at"])
+        champs.append("observation")
+    pesee.save(update_fields=[*champs, "updated_at"])
     recalculer_indicateurs_bassin(pesee.bassin_id)
     return pesee
 
 
 @transaction.atomic
-def supprimer_pesee(pesee_id):
-    pesee, lignes = _verrouiller_pesee(pesee_id)
-    _verifier_pesee_modifiable(pesee, lignes)
-    bassin_id = pesee.bassin_id
-    # Les instantanés de la pesée disparaissent avec ses lignes (CASCADE).
-    pesee.delete()
-    recalculer_indicateurs_bassin(bassin_id)
+def annuler_pesee(pesee_id, *, motif, utilisateur):
+    """Annule la dernière pesée valide ; la précédente redevient corrigeable."""
+    motif = (motif or "").strip()
+    if not motif:
+        raise ValidationError({"motif": "Le motif d'annulation est obligatoire."})
+    pesee, lot = _verrouiller_pesee(pesee_id)
+    _verifier_pesee_modifiable(pesee, lot)
+    pesee.statut = Pesee.Statut.ANNULEE
+    pesee.motif_annulation = motif
+    pesee.annulee_par = utilisateur
+    pesee.annulee_le = timezone.now()
+    pesee.save(update_fields=[
+        "statut",
+        "motif_annulation",
+        "annulee_par",
+        "annulee_le",
+        "updated_at",
+    ])
+    recalculer_indicateurs_bassin(pesee.bassin_id)
+    return pesee
 
 
 # --- Indicateurs -------------------------------------------------------------
@@ -572,24 +594,38 @@ def recalculer_indicateurs_bassin(bassin_id):
     """Recalcule les instantanés de tous les lots pesés du bassin (idempotent).
 
     Tout le bassin est recalculé : la part de provende d'un lot dépend des
-    poids et des effectifs des autres lots présents.
+    poids et des effectifs des autres lots présents. Seules les pesées
+    valides comptent, et l'effectif est relu dans le registre à la date de
+    chaque pesée : une mortalité saisie après coup est prise en compte.
     """
+    # Les instantanés des pesées annulées ne sont plus valables.
+    IndicateurLot.objects.filter(
+        pesee__lot_grossissement__bassin_id=bassin_id,
+        pesee__statut=Pesee.Statut.ANNULEE,
+    ).delete()
+
     lots = list(LotGrossissement.objects.filter(bassin_id=bassin_id))
-    lignes = list(
-        PeseeLot.objects.filter(lot_grossissement__bassin_id=bassin_id)
-        .select_related("pesee")
+    pesees = list(
+        Pesee.objects.filter(
+            lot_grossissement__bassin_id=bassin_id,
+            statut=Pesee.Statut.VALIDEE,
+        )
     )
-    if not lignes:
+    if not pesees:
         return
 
+    date_max = max(pesee.date for pesee in pesees)
+    effectif_a = _effectifs_a_la_date(bassin_id, lots, date_max)
     pesees_par_lot = defaultdict(list)
-    for ligne in lignes:
-        pesees_par_lot[ligne.lot_grossissement_id].append(
+    for pesee in pesees:
+        pesees_par_lot[pesee.lot_grossissement_id].append(
             PeseeCalcul(
-                id=ligne.pk,
-                date=ligne.pesee.date,
-                effectif_vivant=ligne.effectif_vivant,
-                poids_moyen=ligne.poids_moyen,
+                id=pesee.pk,
+                date=pesee.date,
+                effectif_vivant=max(
+                    0, effectif_a(pesee.lot_grossissement_id, pesee.date)
+                ),
+                poids_moyen=pesee.poids_moyen,
             )
         )
     lots_calcul = [
@@ -605,7 +641,6 @@ def recalculer_indicateurs_bassin(bassin_id):
     ]
 
     date_min = min(lot.date_entree for lot in lots_calcul)
-    date_max = max(ligne.pesee.date for ligne in lignes)
     quantites_par_jour = defaultdict(Decimal)
     distributions = ConsommationProvende.objects.filter(
         bassin_id=bassin_id,
@@ -616,18 +651,14 @@ def recalculer_indicateurs_bassin(bassin_id):
     for date_distribution, quantite_kg in distributions:
         quantites_par_jour[timezone.localtime(date_distribution).date()] += quantite_kg
 
-    allocations = allouer_provende(
-        quantites_par_jour,
-        lots_calcul,
-        _effectifs_a_la_date(bassin_id, lots, date_max),
-    )
+    allocations = allouer_provende(quantites_par_jour, lots_calcul, effectif_a)
     for lot in lots_calcul:
         if not lot.pesees:
             continue
         for instantane in calculer_instantanes(lot, allocations[lot.id]):
-            pesee_lot_id = instantane.pop("pesee_id")
+            pesee_id = instantane.pop("pesee_id")
             IndicateurLot.objects.update_or_create(
-                pesee_lot_id=pesee_lot_id,
+                pesee_id=pesee_id,
                 defaults=instantane,
             )
 

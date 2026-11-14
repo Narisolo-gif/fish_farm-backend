@@ -79,6 +79,24 @@ npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.j
 
 Valeur à vérifier à la main : le lot A compte 1 000 poissons ; à 10 %, la cible est de 100 poissons ; 100 poissons pour 2 537,50 g donnent 25,375 g, soit **25,38 g** après arrondi.
 
+Une pesée porte sur **un lot** de grossissement et une date (migrations `grossissement` 0007 et 0008 : les anciennes lignes `PeseeLot` deviennent des `Pesee`, identifiants conservés). L'utilisateur saisit seulement la date, le nombre de poissons pesés et le poids total. Le lot, l'espèce, le bassin, l'effectif vivant (lu dans le registre), la taille cible, le poids moyen, le pourcentage réel (`pourcentage_reel` = pesés ÷ vivants) et l'utilisateur sont déduits ou calculés :
+
+```json
+{
+  "id_lot_grossissement": 7,
+  "date": "2026-04-01",
+  "nombre_poissons_peses": 100,
+  "poids_total_g": "2537.50"
+}
+```
+
+- `POST /api/v1/grossissement/pesees/apercu/` : formulaire prérempli (effectif vivant, cible, date de la dernière pesée, date minimale ; poids moyen et pourcentage réel si les mesures sont fournies), rien n'est écrit ;
+- la date est libre dans le cycle (aucune échéance imposée), au plus aujourd'hui, au plus tôt la mise en place, et strictement après la dernière pesée valide du lot (date unique par lot) ;
+- `PATCH …/{id}/` corrige les mesures de la **dernière** pesée valide seulement (date et lot figés) ; `POST …/{id}/annuler/` (motif obligatoire) l'annule, et la précédente redevient corrigeable. Aucune suppression : `DELETE` répond 405 ;
+- la fiche du lot expose `poids_moyen_actuel`, `date_derniere_pesee`, `derniers_indicateurs` et, à titre indicatif, `etape_courante`, `prochaine_echeance_pesee` et `pesee_en_retard` (calendrier J30, J60 puis tous les 15 jours, sans limite, jamais bloquant).
+
+Dans le dossier 06, les anciens cas propres à la pesée de bassin (lot d'un autre bassin, lot en double, bassin STOCKS ou inactif, pesée partiellement invalide) sont remplacés par : bassin saisi refusé (déduit du lot), ancien format `lignes` refusé, lot inexistant, aperçu sans puis avec mesures, champ calculé refusé, annulation (refusée si ce n'est pas la dernière ou sans motif) et `DELETE` en 405. Les pesées de A et T du même jour sont deux requêtes (06.37 et 06.37b).
+
 ## Sortie vers le grossissement en une seule transaction
 
 Il n'y a plus de brouillon ni de validation en deux temps. Deux appels, réservés à l'Administrateur et au Gestionnaire :
@@ -125,9 +143,9 @@ Scénarios couverts : aperçu sans écriture ; cas nominal (200 poissons pesés 
 
 ## Indicateurs (collection grossissement)
 
-Le dossier **07 Indicateurs** est autonome, à **dates fixes** (cycle de 2026, entrée des lots le 2026-01-01) et à références uniques par exécution : il peut être relancé sur la même base. Il crée ses bassins, ses lots, leurs mortalités et les distributions de provende, puis vérifie l'objet `indicateurs` de chaque ligne de pesée :
+Le dossier **07 Indicateurs** est autonome, à **dates fixes** (cycle de 2026, entrée des lots le 2026-01-01) et à références uniques par exécution : il peut être relancé sur la même base. Il crée ses bassins, ses lots, leurs mortalités et les distributions de provende, puis vérifie l'objet `indicateurs` de chaque pesée :
 
-- un lot seul (S1), dont la biomasse en baisse (IC `null`), une période sans provende, la modification et la suppression de la dernière pesée ;
+- un lot seul (S1), dont la biomasse en baisse (IC `null`), une période sans provende, la modification et l'annulation de la dernière pesée (la pesée reste consultable, son instantané disparaît) ;
 - deux lots d'espèces différentes dans un même bassin, avec le recalcul croisé de la provende (81,753 kg puis 61,993 kg pour le lot A) ;
 - une pesée le jour même de l'entrée (GMQ `null`).
 
@@ -135,4 +153,4 @@ Le dossier **07 Indicateurs** est autonome, à **dates fixes** (cycle de 2026, e
 npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "07 Indicateurs"
 ```
 
-Les instantanés sont recalculés à chaque création, modification ou suppression de pesée du bassin. Une distribution ou une mortalité saisie après coup sur une période déjà pesée n'est prise en compte qu'à la prochaine opération de pesée du bassin.
+Les instantanés sont recalculés pour tout le bassin à chaque création, correction ou annulation de pesée, à partir des seules pesées valides. L'effectif de chaque pesée est alors relu dans le registre (l'`effectif_vivant` de la pesée reste la trace de la saisie ; celui de `indicateurs` est l'effectif relu). Une distribution ou une mortalité saisie après coup sur une période déjà pesée n'est donc prise en compte qu'à la prochaine opération de pesée du bassin.

@@ -337,31 +337,27 @@ class Command(BaseCommand):
                 "ammoniac": str(parametre.ammoniac),
             })
 
-        # Pesées dans l'ordre chronologique ; les lots pesés le même jour
-        # partagent un même événement de pesée.
+        # Une pesée par lot et par date, dans l'ordre chronologique.
         for jour in scenario.dates_pesee():
-            lignes = [
-                {
-                    "id_lot_grossissement": lots_gross[lot.profil.cle].pk,
-                    "pourcentage_echantillon": "10",
-                    "nombre_poissons_peses": pesee.nombre_poissons_peses,
-                    "poids_total_g": str(pesee.poids_total_g),
-                }
-                for lot in scenario.lots
-                for pesee in lot.pesees
-                if pesee.date == jour
-            ]
-            client.post("/api/v1/grossissement/pesees/", {
-                "id_bassin": bassin_gro, "date": _iso(jour),
-                "observation": OBSERVATION, "lignes": lignes,
-            })
+            for lot in scenario.lots:
+                for pesee in lot.pesees:
+                    if pesee.date != jour:
+                        continue
+                    client.post("/api/v1/grossissement/pesees/", {
+                        "id_lot_grossissement": lots_gross[lot.profil.cle].pk,
+                        "date": _iso(jour),
+                        "pourcentage_echantillon": "10",
+                        "nombre_poissons_peses": pesee.nombre_poissons_peses,
+                        "poids_total_g": str(pesee.poids_total_g),
+                        "observation": OBSERVATION,
+                    })
         return lots_gross
 
     # --- Récapitulatif ---------------------------------------------------------
 
     def _afficher_recapitulatif(self, resultats, date_reference):
         from apps.effectifs.calculs import effectif_vivant
-        from apps.grossissement.models import Pesee, PeseeLot
+        from apps.grossissement.models import Pesee
 
         if not resultats:
             self.stdout.write("Aucun scénario écrit.")
@@ -372,9 +368,12 @@ class Command(BaseCommand):
             poids, ics, effectifs = [], [], []
             for lot in lots.values():
                 derniere = (
-                    PeseeLot.objects.filter(lot_grossissement=lot)
-                    .select_related("pesee", "indicateur")
-                    .order_by("-pesee__date")
+                    Pesee.objects.filter(
+                        lot_grossissement=lot,
+                        statut=Pesee.Statut.VALIDEE,
+                    )
+                    .select_related("indicateur")
+                    .order_by("-date")
                     .first()
                 )
                 indicateur = getattr(derniere, "indicateur", None) if derniere else None
@@ -390,7 +389,12 @@ class Command(BaseCommand):
                 scenario.code,
                 reference,
                 " / ".join(lot.code for lot in lots.values()),
-                str(Pesee.objects.filter(bassin_id=bassin_id).count()),
+                str(
+                    Pesee.objects.filter(bassin_id=bassin_id, statut=Pesee.Statut.VALIDEE)
+                    .values("date")
+                    .distinct()
+                    .count()
+                ),
                 " / ".join(poids),
                 " / ".join(ics),
                 " / ".join(effectifs),

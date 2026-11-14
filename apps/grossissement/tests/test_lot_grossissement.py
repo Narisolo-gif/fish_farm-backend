@@ -41,7 +41,9 @@ URL_LOTS = "/api/v1/grossissement/lots-grossissement/"
 URL_APERCU = f"{URL_LOTS}apercu-sortie/"
 
 
-class LotGrossissementTests(TestCase):
+class OutilsLotGrossissement:
+    """setUp et assistants partagés : lot en stock, sortie validée, lot de grossissement."""
+
     def setUp(self):
         role = Role.objects.create(libelle="Administrateur")
         self.user = User.objects.create_user(
@@ -76,7 +78,14 @@ class LotGrossissementTests(TestCase):
             statut=Hapa.Statut.ACTIF,
         )
 
-    def _creer_lot(self, reference, *, parcours=None, espece=Lot.Espece.CARPE):
+    def _creer_lot(
+        self,
+        reference,
+        *,
+        parcours=None,
+        espece=Lot.Espece.CARPE,
+        quantite_initiale=20,
+    ):
         bassin_reproduction = self._bassin(
             f"REP-{reference}",
             Bassin.Categorie.REPRODUCTION,
@@ -107,7 +116,7 @@ class LotGrossissementTests(TestCase):
             date_creation=timezone.now(),
             espece=espece,
             utilisateur_createur=self.user,
-            quantite_initiale=20,
+            quantite_initiale=quantite_initiale,
             parcours_production=(
                 parcours or Lot.ParcoursProduction.SANS_TRAITEMENT
             ),
@@ -131,6 +140,7 @@ class LotGrossissementTests(TestCase):
                 else Lot.ParcoursProduction.SANS_TRAITEMENT
             ),
             espece=espece,
+            quantite_initiale=max(20, quantite),
         )
         if traiter:
             bassin_traitement = self._bassin(
@@ -256,6 +266,8 @@ class LotGrossissementTests(TestCase):
         self.assertEqual(validated.status_code, 201, validated.data)
         return lot, mise_en_stock, validated.data["id_sortie_stock"], validated.data
 
+
+class LotGrossissementTests(OutilsLotGrossissement, TestCase):
     def test_validation_cree_lot_grossissement_et_change_le_stade(self):
         lot, _, sortie_id, payload = self._sortie_validee("LOT-VALIDATION", 10)
         grossissement = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
@@ -549,13 +561,10 @@ class LotGrossissementTests(TestCase):
         lot_a, _, sortie_a, _ = self._sortie_validee("LOT-POIDS", 10)
         gross_a = LotGrossissement.objects.get(sortie_stock_id=sortie_a)
         creer_pesee(
-            bassin_id=gross_a.bassin_id,
+            lot_id=gross_a.pk,
             date_pesee=timezone.localdate(),
-            lignes=[{
-                "id_lot_grossissement": gross_a.pk,
-                "nombre_poissons_peses": 1,
-                "poids_total_g": Decimal("25.00"),
-            }],
+            nombre=1,
+            poids_total=Decimal("25.00"),
             utilisateur=self.user,
         )
         count_mouvements = MouvementEffectif.objects.count()
@@ -914,6 +923,7 @@ class LotGrossissementTests(TestCase):
                 self.assertEqual(refused.status_code, 400, refused.data)
 
     def test_age_et_rappels_aux_limites_du_cycle(self):
+        # J30, J60 puis tous les 15 jours, sans limite de durée.
         _, _, sortie_id, _ = self._sortie_validee("LOT-CYCLE", 10)
         gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
         for age, etape, prochaine in (
@@ -921,7 +931,9 @@ class LotGrossissementTests(TestCase):
             (29, 1, 30),
             (30, 2, 30),
             (75, 4, 75),
-            (180, None, None),
+            (76, 4, 90),
+            (180, 11, 180),
+            (400, 25, 405),
         ):
             with self.subTest(age=age):
                 gross.date_mise_en_place = timezone.make_aware(
@@ -933,11 +945,7 @@ class LotGrossissementTests(TestCase):
                 ):
                     self.assertEqual(gross.age_jours, age)
                     self.assertEqual(gross.etape_courante, etape)
-                    expected = (
-                        self.today + timedelta(days=prochaine - age)
-                        if prochaine is not None
-                        else None
-                    )
+                    expected = self.today + timedelta(days=prochaine - age)
                     self.assertEqual(gross.prochaine_echeance_pesee, expected)
 
     def test_origine_expose_traitement_stock_et_lot_sans_traitement(self):

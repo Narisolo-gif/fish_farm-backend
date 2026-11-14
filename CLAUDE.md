@@ -29,7 +29,7 @@ Tests E2E Postman : `tests/postman/` (collection séquentielle 00→12, base vid
 | stocks | MiseEnStock (OneToOne Lot, `finalite`), MiseEnStockHapa |
 | provende | TypeProvende, Provende, ConsommationProvende |
 | effectifs | MouvementEffectif, EvenementMortalitePerte, CauseMortalite, CategoriePerte, BlocageSaisie, SortieStock, SortieStockLigne |
-| grossissement | LotGrossissement |
+| grossissement | LotGrossissement, Pesee (une par lot et par date), IndicateurLot (cache dérivé, OneToOne Pesee) |
 | monitoring | vide (pas encore implémenté) |
 
 ## Registre `effectifs` (cœur du métier)
@@ -39,6 +39,13 @@ Tests E2E Postman : `tests/postman/` (collection séquentielle 00→12, base vid
 - La mortalité, la perte et les sorties de stock sont **centralisées dans `effectifs`**, et la consommation dans `provende.ConsommationProvende`. Il n'y a pas de modèle de mortalité ou de consommation par domaine.
 - `effectifs` ne doit pas importer `grossissement` : il passe par les signaux `sortie_stock_avant_annulation` et `mouvement_avant_annulation` (`apps/effectifs/signals.py`), consommés par `apps/grossissement/receivers.py`.
 - La sortie vers le grossissement est faite par `grossissement.services.valider_sortie_grossissement` (une transaction, sans brouillon ni signal ; `SortieStock.statut` vaut `VALIDEE` ou `ANNULEE`), qui s'appuie sur `effectifs.services.preparer_sortie_stock` et `enregistrer_sortie_stock_validee`. Aperçu : `apercu_sortie_grossissement`.
+
+## Pesée de suivi (`grossissement`)
+- Une `Pesee` porte sur un lot de grossissement et une date : la date est libre (≤ aujourd'hui, ≥ mise en place) mais strictement postérieure à la dernière pesée **valide** du lot (`UniqueConstraint` lot + date sur `VALIDEE`).
+- Seule la dernière pesée valide d'un lot actif est corrigeable (`modifier_pesee`, date figée) ou annulable (`annuler_pesee`, motif obligatoire) ; jamais de suppression. Une pesée, même annulée, empêche d'annuler la sortie de stock (`lot_a_historique`).
+- Échantillon : pourcentage cible → taille cible (confirmation `confirmer_echantillon_non_conforme` si en dessous, comme P0) et `pourcentage_reel` calculé.
+- `recalculer_indicateurs_bassin` recalcule tout le bassin à chaque pesée, correction ou annulation, sur les pesées valides, en **relisant l'effectif dans le registre** ; l'`effectif_vivant` stocké sur la pesée n'est qu'une trace de la saisie.
+- Calendrier indicatif (`calculs.etat_calendrier`) : J30, J60 puis tous les 15 jours, sans limite ; il alimente `pesee_en_retard` sans jamais bloquer une saisie.
 
 ## Cycle de vie d'un lot (`Lot.stade`)
 `CREEE` → `EN_TRAITEMENT` (seulement si `parcours_production = TRAITEMENT_REQUIS` ; bassin de catégorie TRAITEMENT, hapas obligatoires) → `EN_STOCK` → (sortie totale validée et création du lot, une transaction) `EN_GROSSISSEMENT` → `CLOTUREE`.

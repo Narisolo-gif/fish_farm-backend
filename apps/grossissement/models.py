@@ -1,4 +1,3 @@
-from datetime import timedelta
 from uuid import uuid4
 
 from django.conf import settings
@@ -9,8 +8,7 @@ from apps.bassins.models import Bassin
 from apps.effectifs.models import MouvementEffectif, SortieStock
 from apps.lots.models import Lot
 
-
-CYCLE_PLAN_JOURS = [30, 30] + [15] * 8
+from .calculs import etat_calendrier
 
 
 class LotGrossissement(models.Model):
@@ -191,92 +189,103 @@ class LotGrossissement(models.Model):
         return max(0, (timezone.localdate() - date_mise_en_place).days)
 
     @property
+    def date_entree(self):
+        return timezone.localtime(self.date_mise_en_place).date()
+
+    def calendrier_pesees(self, date_derniere_pesee=None):
+        """Calendrier indicatif (J30, J60, puis tous les 15 jours) : jamais bloquant."""
+        return etat_calendrier(
+            self.date_entree,
+            timezone.localdate(),
+            date_derniere_pesee,
+        )
+
+    @property
     def etape_courante(self):
-        age = self.age_jours
-        cumul = 0
-        for etape, duree in enumerate(CYCLE_PLAN_JOURS, start=1):
-            cumul += duree
-            if age < cumul:
-                return etape
-        return None
+        return self.calendrier_pesees()["etape_courante"]
 
     @property
     def prochaine_echeance_pesee(self):
-        age = self.age_jours
-        if age >= sum(CYCLE_PLAN_JOURS):
-            return None
-        date_mise_en_place = timezone.localtime(
-            self.date_mise_en_place
-        ).date()
-        cumul = 0
-        for duree in CYCLE_PLAN_JOURS:
-            cumul += duree
-            if cumul >= age:
-                return date_mise_en_place + timedelta(days=cumul)
-        return None
+        return self.calendrier_pesees()["prochaine_echeance"]
 
     def __str__(self):
         return self.code or f"Lot de grossissement {self.pk}"
 
 class Pesee(models.Model):
-    """Événement de pesée sur échantillon d'un bassin de grossissement."""
+    """Pesée sur échantillon d'un lot de grossissement, à une date.
 
+    Seule la dernière pesée valide d'un lot actif est corrigeable ; une pesée
+    n'est jamais supprimée : elle est annulée avec un motif.
+    """
+
+    class Statut(models.TextChoices):
+        VALIDEE = "VALIDEE", "Validée"
+        ANNULEE = "ANNULEE", "Annulée"
+
+    lot_grossissement = models.ForeignKey(
+        LotGrossissement,
+        on_delete=models.PROTECT,
+        related_name="pesees",
+    )
+    # Bassin du lot au moment de la pesée, copié pour la trace et le filtrage.
     bassin = models.ForeignKey(
         Bassin,
         on_delete=models.PROTECT,
         related_name="pesees",
     )
     date = models.DateField()
+    # Pourcentage cible : il fixe la taille d'échantillon attendue.
+    pourcentage_echantillon = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=10,
+    )
+    # Part réellement pesée de l'effectif vivant (calculée).
+    pourcentage_reel = models.DecimalField(max_digits=5, decimal_places=2)
+    # Effectif vivant lu dans le registre lors de la saisie, copié pour trace.
+    # Les indicateurs relisent le registre à chaque recalcul.
+    effectif_vivant = models.PositiveIntegerField()
+    taille_echantillon_cible = models.PositiveIntegerField()
+    nombre_poissons_peses = models.PositiveIntegerField()
+    poids_total_g = models.DecimalField(max_digits=12, decimal_places=2)
+    poids_moyen = models.DecimalField(max_digits=10, decimal_places=2)
+    observation = models.TextField(blank=True, default="")
+    statut = models.CharField(
+        max_length=10,
+        choices=Statut.choices,
+        default=Statut.VALIDEE,
+    )
+    motif_annulation = models.TextField(blank=True, default="")
+    annulee_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="pesees_annulees",
+        null=True,
+        blank=True,
+    )
+    annulee_le = models.DateTimeField(null=True, blank=True)
     utilisateur = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="pesees_saisies",
     )
-    observation = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-date", "-id"]
         indexes = [
+            models.Index(
+                fields=["lot_grossissement", "statut", "date"],
+                name="pesee_lot_statut_date_idx",
+            ),
             models.Index(fields=["bassin", "date"], name="pesee_bassin_date_idx"),
         ]
-
-    def __str__(self):
-        return f"Pesée {self.bassin} du {self.date}"
-
-
-class PeseeLot(models.Model):
-    """Échantillon pesé d'un lot ; le poids moyen est calculé par le service."""
-
-    pesee = models.ForeignKey(
-        Pesee,
-        on_delete=models.CASCADE,
-        related_name="lignes",
-    )
-    lot_grossissement = models.ForeignKey(
-        LotGrossissement,
-        on_delete=models.PROTECT,
-        related_name="lignes_pesee",
-    )
-    pourcentage_echantillon = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=10,
-    )
-    # Effectif vivant lu dans le registre à la date de la pesée, copié pour trace.
-    effectif_vivant = models.PositiveIntegerField()
-    taille_echantillon_cible = models.PositiveIntegerField()
-    nombre_poissons_peses = models.PositiveIntegerField()
-    poids_total_g = models.DecimalField(max_digits=12, decimal_places=2)
-    poids_moyen = models.DecimalField(max_digits=10, decimal_places=2)
-
-    class Meta:
-        ordering = ["id"]
         constraints = [
             models.UniqueConstraint(
-                fields=["pesee", "lot_grossissement"],
-                name="pesee_lot_unique",
+                fields=["lot_grossissement", "date"],
+                condition=models.Q(statut="VALIDEE"),
+                name="pesee_lot_date_unique",
             ),
             models.CheckConstraint(
                 condition=(
@@ -284,6 +293,13 @@ class PeseeLot(models.Model):
                     & models.Q(pourcentage_echantillon__lte=100)
                 ),
                 name="pesee_lot_pourcentage_valide",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(pourcentage_reel__gte=0)
+                    & models.Q(pourcentage_reel__lte=100)
+                ),
+                name="pesee_pourcentage_reel_valide",
             ),
             models.CheckConstraint(
                 condition=models.Q(effectif_vivant__gt=0),
@@ -308,6 +324,13 @@ class PeseeLot(models.Model):
                 condition=models.Q(poids_moyen__gt=0),
                 name="pesee_lot_poids_moyen_positif",
             ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(statut="ANNULEE")
+                    | models.Q(motif_annulation__gt="", annulee_le__isnull=False)
+                ),
+                name="pesee_annulation_motivee",
+            ),
         ]
 
     @property
@@ -315,14 +338,17 @@ class PeseeLot(models.Model):
         return self.nombre_poissons_peses >= self.taille_echantillon_cible
 
     def __str__(self):
-        return f"{self.lot_grossissement} - {self.pesee.date}"
+        return f"Pesée {self.lot_grossissement} du {self.date}"
 
 
 class IndicateurLot(models.Model):
-    """Instantané des indicateurs d'un lot à une pesée, recalculé par le service."""
+    """Instantané des indicateurs d'un lot à une pesée valide, recalculé par le service.
 
-    pesee_lot = models.OneToOneField(
-        PeseeLot,
+    Cache dérivé : il est supprimé quand sa pesée est annulée.
+    """
+
+    pesee = models.OneToOneField(
+        Pesee,
         on_delete=models.CASCADE,
         related_name="indicateur",
     )
@@ -360,4 +386,4 @@ class IndicateurLot(models.Model):
         ]
 
     def __str__(self):
-        return f"Indicateurs {self.pesee_lot}"
+        return f"Indicateurs {self.pesee}"

@@ -1390,7 +1390,7 @@
           }
         },
         {
-          "name": "03.08 Refuser une création de lot sans sortie ni pesée initiale",
+          "name": "03.08 Refuser l'ancien format de création (id_lot_origine seul)",
           "event": [
             {
               "listen": "test",
@@ -1400,7 +1400,8 @@
                   "{",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
-                  "pm.test(\"Erreur sur id_lot_origine\", function () { pm.expect(data).to.have.property(\"id_lot_origine\"); });",
+                  "pm.test(\"Erreur sur id_lot (requis)\", function () { pm.expect(data).to.have.property(\"id_lot\"); });",
+                  "pm.test(\"Erreur sur id_bassin_destination (requis)\", function () { pm.expect(data).to.have.property(\"id_bassin_destination\"); });",
                   "}"
                 ]
               }
@@ -3391,7 +3392,7 @@
           }
         },
         {
-          "name": "06.36 Pesée valide de A seul (25.375 → 25.38 g)",
+          "name": "06.36 Pesée valide de A (25.375 → 25.38 g)",
           "event": [
             {
               "listen": "test",
@@ -3402,8 +3403,10 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ps_pesee_1\", String(data.id));",
-                  "const l = data.lignes[0];",
-                  "pm.test(\"Une ligne pour le lot A\", function () { pm.expect(data.lignes.length).to.eql(1); pm.expect(l.id_lot_grossissement).to.eql(Number(pm.collectionVariables.get(\"ps_lot_gross_a\"))); pm.expect(l.reference_lot).to.eql(pm.collectionVariables.get(\"ps_code_a\")); });",
+                  "const l = data;",
+                  "pm.test(\"Lot A, espèce et bassin déduits\", function () { pm.expect(data.id_lot_grossissement).to.eql(Number(pm.collectionVariables.get(\"ps_lot_gross_a\"))); pm.expect(data.reference_lot).to.eql(pm.collectionVariables.get(\"ps_code_a\")); pm.expect(data.espece).to.eql(\"CARPE\"); });",
+                  "pm.test(\"Pourcentage réel = 100 / 1000 = 10.00 %\", function () { pm.expect(l.pourcentage_reel).to.eql(\"10.00\"); });",
+                  "pm.test(\"Pesée valide\", function () { pm.expect(data.statut).to.eql(\"VALIDEE\"); pm.expect(data.created_at).to.be.a(\"string\"); pm.expect(data.updated_at).to.be.a(\"string\"); });",
                   "pm.test(\"Pourcentage par défaut du lot\", function () { pm.expect(l.pourcentage_echantillon).to.eql(\"10.00\"); });",
                   "pm.test(\"Effectif vivant copié du registre\", function () { pm.expect(l.effectif_vivant).to.eql(1000); });",
                   "pm.test(\"Cible = ceil(1000 × 10 %) = 100\", function () { pm.expect(l.taille_echantillon_cible).to.eql(100); });",
@@ -3428,7 +3431,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j30}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"2537.50\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j30}}\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"2537.50\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3438,27 +3441,7 @@
           }
         },
         {
-          "name": "06.37 Pesée valide de A et T dans le même bassin",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
-                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_pesee_2\", String(data.id));",
-                  "const parLot = Object.fromEntries(data.lignes.map(l => [String(l.id_lot_grossissement), l]));",
-                  "const a = parLot[pm.collectionVariables.get(\"ps_lot_gross_a\")], t = parLot[pm.collectionVariables.get(\"ps_lot_gross_t\")];",
-                  "pm.test(\"Deux lignes\", function () { pm.expect(data.lignes.length).to.eql(2); pm.expect(a).to.exist; pm.expect(t).to.exist; });",
-                  "pm.test(\"Lot A : 30.00 g\", function () { pm.expect(a.poids_moyen).to.eql(\"30.00\"); pm.expect(a.effectif_vivant).to.eql(1000); });",
-                  "pm.test(\"Lot T : 500 vivants, cible 20 % = 100, 15.00 g\", function () { pm.expect(t.effectif_vivant).to.eql(500); pm.expect(t.taille_echantillon_cible).to.eql(100); pm.expect(t.poids_moyen).to.eql(\"15.00\"); pm.expect(t.echantillon_conforme).to.eql(true); });",
-                  "}"
-                ]
-              }
-            }
-          ],
+          "name": "06.37 Pesée de A à J-25 (10 %)",
           "request": {
             "method": "POST",
             "header": [
@@ -3471,14 +3454,71 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j25}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"pourcentage_echantillon\": 10,\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"3000.00\"\n    },\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_t}}\",\n      \"pourcentage_echantillon\": 20,\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"1500.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j25}}\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"3000.00\",\n  \"pourcentage_echantillon\": 10,\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_pesee_2\", String(data.id));",
+                  "pm.test(\"Lot A : 30.00 g\", function () { pm.expect(data.poids_moyen).to.eql(\"30.00\"); pm.expect(data.effectif_vivant).to.eql(1000); });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06.37b Pesée de T le même jour dans le même bassin (20 %)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_t}}\",\n  \"date\": \"{{ps_j25}}\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"1500.00\",\n  \"pourcentage_echantillon\": 20,\n  \"observation\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"ps_pesee_t\", String(data.id));",
+                  "pm.test(\"Lot T : 500 vivants, cible 20 % = 100, 15.00 g\", function () { pm.expect(data.effectif_vivant).to.eql(500); pm.expect(data.taille_echantillon_cible).to.eql(100); pm.expect(data.poids_moyen).to.eql(\"15.00\"); pm.expect(data.echantillon_conforme).to.eql(true); });",
+                  "pm.test(\"Pourcentage réel = 100 / 500 = 20.00 %\", function () { pm.expect(data.pourcentage_reel).to.eql(\"20.00\"); });",
+                  "pm.test(\"Espèce du lot T\", function () { pm.expect(data.espece).to.eql(\"TILAPIA\"); });",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "06.38 Refuser un échantillon inférieur à la cible sans confirmation",
@@ -3510,7 +3550,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j20}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 80,\n      \"poids_total_g\": \"2800.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j20}}\",\n  \"nombre_poissons_peses\": 80,\n  \"poids_total_g\": \"2800.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3531,7 +3571,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ps_pesee_3\", String(data.id));",
-                  "pm.test(\"Échantillon non conforme enregistré\", function () { const l = data.lignes[0]; pm.expect(l.echantillon_conforme).to.eql(false); pm.expect(l.poids_moyen).to.eql(\"35.00\"); });",
+                  "pm.test(\"Échantillon non conforme enregistré\", function () { const l = data; pm.expect(l.echantillon_conforme).to.eql(false); pm.expect(l.poids_moyen).to.eql(\"35.00\"); });",
                   "}"
                 ]
               }
@@ -3549,7 +3589,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j20}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 80,\n      \"poids_total_g\": \"2800.00\"\n    }\n  ],\n  \"confirmer_echantillon_non_conforme\": true\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j20}}\",\n  \"nombre_poissons_peses\": 80,\n  \"poids_total_g\": \"2800.00\",\n  \"observation\": \"\",\n  \"confirmer_echantillon_non_conforme\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3570,7 +3610,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "pm.test(\"Erreur sur nombre_poissons_peses\", function () { pm.expect(data).to.have.property(\"nombre_poissons_peses\"); });",
-                  "pm.test(\"Le lot est cité\", function () { pm.expect(String(data.nombre_poissons_peses)).to.include(pm.collectionVariables.get(\"ps_code_a\")); });",
+                  "pm.test(\"L'effectif vivant est rappelé\", function () { pm.expect(String(data.nombre_poissons_peses)).to.include(\"1000\"); });",
                   "}"
                 ]
               }
@@ -3588,7 +3628,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"observation\": \"\",\n  \"confirmer_echantillon_non_conforme\": true,\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 1001,\n      \"poids_total_g\": \"40000.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"nombre_poissons_peses\": 1001,\n  \"poids_total_g\": \"40000.00\",\n  \"observation\": \"\",\n  \"confirmer_echantillon_non_conforme\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3626,7 +3666,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j45}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"2000.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j45}}\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"2000.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3664,7 +3704,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_jplus1}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_jplus1}}\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"4000.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3702,7 +3742,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j20}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j20}}\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"4000.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3740,7 +3780,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j22}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j22}}\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"4000.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3750,22 +3790,7 @@
           }
         },
         {
-          "name": "06.45 Refuser un lot qui n'appartient pas au bassin",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
-                  "pm.test(\"Erreur sur id_lot_grossissement\", function () { pm.expect(data).to.have.property(\"id_lot_grossissement\"); });",
-                  "}"
-                ]
-              }
-            }
-          ],
+          "name": "06.45 Refuser un bassin saisi (déduit du lot)",
           "request": {
             "method": "POST",
             "header": [
@@ -3778,17 +3803,52 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_b}}\",\n      \"nombre_poissons_peses\": 20,\n      \"poids_total_g\": \"600.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"4000.00\",\n  \"id_bassin\": \"{{ps_bassin_gro1}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur id_bassin\", function () { pm.expect(data).to.have.property(\"id_bassin\"); });",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "06.46 Refuser un lot en double dans la même pesée",
+          "name": "06.46 Refuser l'ancien format par bassin (lignes)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"4000.00\",\n  \"lignes\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -3803,7 +3863,10 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "06.47 Refuser un lot de grossissement inexistant",
           "request": {
             "method": "POST",
             "header": [
@@ -3816,131 +3879,14 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    },\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": 999999999,\n  \"date\": \"{{ps_j15}}\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"4000.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          }
-        },
-        {
-          "name": "06.47 Refuser un bassin de catégorie STOCKS",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
-                  "pm.test(\"Erreur sur id_bassin\", function () { pm.expect(data).to.have.property(\"id_bassin\"); });",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/grossissement/pesees/",
-            "description": "",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_stk}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "06.48 Passer le bassin GRO3 à INACTIF",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "pm.test(\"Bassin inactif\", function () { pm.expect(data.statut).to.eql(\"INACTIF\"); });",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/bassins/{{ps_bassin_gro3}}/",
-            "description": "",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"statut\": \"INACTIF\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "06.49 Refuser un bassin inactif",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
-                  "pm.test(\"Erreur sur id_bassin\", function () { pm.expect(data).to.have.property(\"id_bassin\"); });",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/grossissement/pesees/",
-            "description": "",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro3}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "06.50 Refuser toute la pesée si un lot est invalide",
+          },
           "event": [
             {
               "listen": "test",
@@ -3955,7 +3901,89 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "06.48 Aperçu : formulaire prérempli de A (rien n'est écrit)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/apercu/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j15}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Espèce, bassin et effectif déduits\", function () { pm.expect(data.espece).to.eql(\"CARPE\"); pm.expect(data.reference_bassin).to.include(\"PS-GRO1\"); pm.expect(data.effectif_vivant).to.eql(1000); });",
+                  "pm.test(\"Cible 10 % = 100\", function () { pm.expect(data.pourcentage_echantillon).to.eql(\"10.00\"); pm.expect(data.taille_echantillon_cible).to.eql(100); });",
+                  "pm.test(\"Dernière pesée du lot à J-20\", function () { pm.expect(data.date_derniere_pesee).to.eql(pm.collectionVariables.get(\"ps_j20\")); });",
+                  "pm.test(\"Sans mesures, rien de calculé\", function () { pm.expect(data.poids_moyen).to.eql(null); pm.expect(data.pourcentage_reel).to.eql(null); pm.expect(data.echantillon_conforme).to.eql(null); });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06.49 Aperçu avec mesures : poids moyen et pourcentage réel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/apercu/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"nombre_poissons_peses\": 80,\n  \"poids_total_g\": \"3200.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"40.00 g, 8.00 %, non conforme\", function () { pm.expect(data.poids_moyen).to.eql(\"40.00\"); pm.expect(data.pourcentage_reel).to.eql(\"8.00\"); pm.expect(data.echantillon_conforme).to.eql(false); });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06.50 Refuser un champ calculé en entrée (poids_moyen)",
           "request": {
             "method": "POST",
             "header": [
@@ -3968,17 +3996,32 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4000.00\"\n    },\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_b}}\",\n      \"nombre_poissons_peses\": 20,\n      \"poids_total_g\": \"600.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j15}}\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"4000.00\",\n  \"poids_moyen\": \"40.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur poids_moyen\", function () { pm.expect(data).to.have.property(\"poids_moyen\"); });",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "06.51 Vérifier qu'aucune ligne n'a été enregistrée",
+          "name": "06.51 Vérifier qu'aucune pesée n'a été enregistrée par les refus et l'aperçu",
           "event": [
             {
               "listen": "test",
@@ -4021,7 +4064,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "const liste = Array.isArray(data) ? data : (data.results || []);",
-                  "pm.test(\"Deux pesées entre J-25 et J-20\", function () { pm.expect(liste.map(p => p.id)).to.eql([Number(pm.collectionVariables.get(\"ps_pesee_3\")), Number(pm.collectionVariables.get(\"ps_pesee_2\"))]); });",
+                  "pm.test(\"Trois pesées entre J-25 et J-20 (A, T, A)\", function () { pm.expect(liste.map(p => p.id)).to.eql([Number(pm.collectionVariables.get(\"ps_pesee_3\")), Number(pm.collectionVariables.get(\"ps_pesee_t\")), Number(pm.collectionVariables.get(\"ps_pesee_2\"))]); });",
                   "}"
                 ]
               }
@@ -4040,7 +4083,27 @@
           }
         },
         {
-          "name": "06.53 Refuser la suppression d'une pesée qui n'est pas la dernière",
+          "name": "06.53 Refuser l'annulation d'une pesée qui n'est pas la dernière",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_2}}/annuler/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motif\": \"Erreur de saisie\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -4055,21 +4118,30 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "06.54 Refuser une annulation sans motif",
           "request": {
-            "method": "DELETE",
+            "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_2}}/",
-            "description": ""
-          }
-        },
-        {
-          "name": "06.54 Supprimer la dernière pesée du lot",
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_3}}/annuler/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motif\": \" \"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -4078,26 +4150,36 @@
                 "exec": [
                   "{",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Statut HTTP 204\", function () { pm.response.to.have.status(204); });",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur motif\", function () { pm.expect(data).to.have.property(\"motif\"); });",
                   "}"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "06.54b Annuler la dernière pesée du lot (motif obligatoire)",
           "request": {
-            "method": "DELETE",
+            "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_3}}/",
-            "description": ""
-          }
-        },
-        {
-          "name": "06.55 Vérifier la suppression",
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_3}}/annuler/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motif\": \"Erreur de saisie\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -4106,12 +4188,17 @@
                 "exec": [
                   "{",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Statut HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Pesée annulée et tracée\", function () { pm.expect(data.statut).to.eql(\"ANNULEE\"); pm.expect(data.motif_annulation).to.eql(\"Erreur de saisie\"); pm.expect(data.annulee_le).to.be.a(\"string\"); pm.expect(data.id_user_annulation).to.be.a(\"number\"); });",
+                  "pm.test(\"Instantané supprimé\", function () { pm.expect(data.indicateurs).to.eql(null); });",
                   "}"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "06.55 La pesée annulée reste consultable",
           "request": {
             "method": "GET",
             "header": [
@@ -4122,10 +4209,7 @@
             ],
             "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_3}}/",
             "description": ""
-          }
-        },
-        {
-          "name": "06.56 Modifier la dernière pesée (gestionnaire) : poids moyen recalculé",
+          },
           "event": [
             {
               "listen": "test",
@@ -4135,9 +4219,54 @@
                   "{",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "const parLot = Object.fromEntries(data.lignes.map(l => [String(l.id_lot_grossissement), l]));",
-                  "pm.test(\"A recalculé à 31.00 g\", function () { pm.expect(parLot[pm.collectionVariables.get(\"ps_lot_gross_a\")].poids_moyen).to.eql(\"31.00\"); });",
-                  "pm.test(\"T inchangé\", function () { pm.expect(parLot[pm.collectionVariables.get(\"ps_lot_gross_t\")].poids_moyen).to.eql(\"15.00\"); });",
+                  "pm.test(\"Statut ANNULEE\", function () { pm.expect(data.statut).to.eql(\"ANNULEE\"); });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06.55b Refuser la suppression physique (DELETE)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_2}}/",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 405\", function () { pm.response.to.have.status(405); });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06.56 Corriger la dernière pesée (gestionnaire) : poids moyen recalculé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"A recalculé à 31.00 g\", function () { pm.expect(data.poids_moyen).to.eql(\"31.00\"); });",
+                  "pm.test(\"Date figée\", function () { pm.expect(data.date).to.eql(pm.collectionVariables.get(\"ps_j25\")); });",
                   "pm.test(\"Observation modifiée\", function () { pm.expect(data.observation).to.eql(\"Correction du poids total\"); });",
                   "}"
                 ]
@@ -4156,7 +4285,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"observation\": \"Correction du poids total\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"poids_total_g\": \"3100.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"observation\": \"Correction du poids total\",\n  \"poids_total_g\": \"3100.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4205,7 +4334,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 50\n    }\n  ]\n}",
+              "raw": "{\n  \"nombre_poissons_peses\": 50\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4263,7 +4392,7 @@
                   "{",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
-                  "pm.test(\"Erreur sur lignes\", function () { pm.expect(data).to.have.property(\"lignes\"); });",
+                  "pm.test(\"Erreur sur poids_moyen\", function () { pm.expect(data).to.have.property(\"poids_moyen\"); });",
                   "}"
                 ]
               }
@@ -4281,7 +4410,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"poids_moyen\": \"99.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"poids_moyen\": \"99.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4301,8 +4430,7 @@
                   "{",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "const a = data.lignes.find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ps_lot_gross_a\"));",
-                  "pm.test(\"100 poissons, 31.00 g\", function () { pm.expect(a.nombre_poissons_peses).to.eql(100); pm.expect(a.poids_moyen).to.eql(\"31.00\"); });",
+                  "pm.test(\"100 poissons, 31.00 g\", function () { pm.expect(data.nombre_poissons_peses).to.eql(100); pm.expect(data.poids_moyen).to.eql(\"31.00\"); });",
                   "}"
                 ]
               }
@@ -4332,7 +4460,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ps_pesee_emp\", String(data.id));",
-                  "pm.test(\"45.00 g\", function () { pm.expect(data.lignes[0].poids_moyen).to.eql(\"45.00\"); });",
+                  "pm.test(\"45.00 g\", function () { pm.expect(data.poids_moyen).to.eql(\"45.00\"); });",
                   "}"
                 ]
               }
@@ -4350,7 +4478,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro1}}\",\n  \"date\": \"{{ps_j10}}\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4500.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_a}}\",\n  \"date\": \"{{ps_j10}}\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"4500.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4455,7 +4583,37 @@
           }
         },
         {
-          "name": "06.64 Employé : suppression refusée",
+          "name": "06.64 Employé : annulation refusée",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_emp}}/annuler/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motif\": \"Tentative\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ps_token_employe}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -4469,28 +4627,7 @@
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_emp}}/",
-            "description": "",
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{ps_token_employe}}",
-                  "type": "string"
-                }
-              ]
-            }
-          }
+          ]
         },
         {
           "name": "06.65 Non connecté : liste refusée",
@@ -4621,7 +4758,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro2}}\",\n  \"date\": \"{{ps_j3}}\",\n  \"observation\": \"\",\n  \"confirmer_echantillon_non_conforme\": true,\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_b}}\",\n      \"nombre_poissons_peses\": 10,\n      \"poids_total_g\": \"300.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_b}}\",\n  \"date\": \"{{ps_j3}}\",\n  \"nombre_poissons_peses\": 10,\n  \"poids_total_g\": \"300.00\",\n  \"observation\": \"\",\n  \"confirmer_echantillon_non_conforme\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4697,7 +4834,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ps_bassin_gro2}}\",\n  \"date\": \"{{ps_j2}}\",\n  \"observation\": \"\",\n  \"confirmer_echantillon_non_conforme\": true,\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ps_lot_gross_b}}\",\n      \"nombre_poissons_peses\": 10,\n      \"poids_total_g\": \"300.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ps_lot_gross_b}}\",\n  \"date\": \"{{ps_j2}}\",\n  \"nombre_poissons_peses\": 10,\n  \"poids_total_g\": \"300.00\",\n  \"observation\": \"\",\n  \"confirmer_echantillon_non_conforme\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4744,7 +4881,7 @@
           }
         },
         {
-          "name": "06.72 Vérifier que le lot A reste actif",
+          "name": "06.72 Fiche du lot A : actif, poids moyen actuel et indicateurs",
           "event": [
             {
               "listen": "test",
@@ -4755,6 +4892,10 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "pm.test(\"Lot A actif\", function () { pm.expect(data.statut).to.eql(\"ACTIF\"); });",
+                  "pm.test(\"Poids moyen actuel = dernière pesée valide (45.00 g)\", function () { pm.expect(data.poids_moyen_actuel).to.eql(\"45.00\"); });",
+                  "pm.test(\"Date de la dernière pesée\", function () { pm.expect(data.date_derniere_pesee).to.eql(pm.collectionVariables.get(\"ps_j10\")); });",
+                  "pm.test(\"Derniers indicateurs exposés\", function () { pm.expect(data.derniers_indicateurs).to.have.property(\"biomasse_kg\"); });",
+                  "pm.test(\"Calendrier indicatif exposé\", function () { pm.expect(data).to.have.property(\"pesee_en_retard\"); pm.expect(data.prochaine_echeance_pesee).to.be.a(\"string\"); });",
                   "}"
                 ]
               }
@@ -6680,8 +6821,8 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ix_s1_p1\", String(data.id));",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
-                  "pm.test(\"Effectif vivant 980 et poids moyen 45.00\", function () { pm.expect(data.lignes[0].effectif_vivant).to.eql(980); pm.expect(data.lignes[0].poids_moyen).to.eql(\"45.00\"); });",
+                  "const ind = data.indicateurs || {};",
+                  "pm.test(\"Effectif vivant 980 et poids moyen 45.00\", function () { pm.expect(data.effectif_vivant).to.eql(980); pm.expect(data.poids_moyen).to.eql(\"45.00\"); });",
                   "pm.test(\"S1 P1 : jour_de_cycle = 30\", function () { pm.expect(ind.jour_de_cycle).to.eql(30); });",
                   "pm.test(\"S1 P1 : biomasse_kg = 44.100\", function () { pm.expect(ind.biomasse_kg).to.eql(\"44.100\"); });",
                   "pm.test(\"S1 P1 : gmq_periode = 0.83\", function () { pm.expect(ind.gmq_periode).to.eql(\"0.83\"); });",
@@ -6706,7 +6847,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"date\": \"2026-01-31\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n      \"nombre_poissons_peses\": 98,\n      \"poids_total_g\": \"4410.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n  \"date\": \"2026-01-31\",\n  \"nombre_poissons_peses\": 98,\n  \"poids_total_g\": \"4410.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6727,8 +6868,8 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ix_s1_p2\", String(data.id));",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
-                  "pm.test(\"Effectif vivant 950\", function () { pm.expect(data.lignes[0].effectif_vivant).to.eql(950); });",
+                  "const ind = data.indicateurs || {};",
+                  "pm.test(\"Effectif vivant 950\", function () { pm.expect(data.effectif_vivant).to.eql(950); });",
                   "pm.test(\"S1 P2 : jour_de_cycle = 60\", function () { pm.expect(ind.jour_de_cycle).to.eql(60); });",
                   "pm.test(\"S1 P2 : biomasse_kg = 76.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"76.000\"); });",
                   "pm.test(\"S1 P2 : gmq_periode = 1.17\", function () { pm.expect(ind.gmq_periode).to.eql(\"1.17\"); });",
@@ -6753,7 +6894,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"date\": \"2026-03-02\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n      \"nombre_poissons_peses\": 95,\n      \"poids_total_g\": \"7600.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n  \"date\": \"2026-03-02\",\n  \"nombre_poissons_peses\": 95,\n  \"poids_total_g\": \"7600.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6812,7 +6953,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ix_s1_p3\", String(data.id));",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
+                  "const ind = data.indicateurs || {};",
                   "pm.test(\"S3 : biomasse_kg = 57.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"57.000\"); });",
                   "pm.test(\"S3 : gmq_periode = -1.11\", function () { pm.expect(ind.gmq_periode).to.eql(\"-1.11\"); });",
                   "pm.test(\"S3 : provende_periode_kg = 10.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"10.000\"); });",
@@ -6836,7 +6977,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"date\": \"2026-03-20\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n      \"nombre_poissons_peses\": 95,\n      \"poids_total_g\": \"5700.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n  \"date\": \"2026-03-20\",\n  \"nombre_poissons_peses\": 95,\n  \"poids_total_g\": \"5700.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6857,7 +6998,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ix_s1_p4\", String(data.id));",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
+                  "const ind = data.indicateurs || {};",
                   "pm.test(\"S4 : biomasse_kg = 95.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"95.000\"); });",
                   "pm.test(\"S4 : gmq_periode = 3.33\", function () { pm.expect(ind.gmq_periode).to.eql(\"3.33\"); });",
                   "pm.test(\"S4 : provende_periode_kg = 0.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"0.000\"); });",
@@ -6881,7 +7022,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"date\": \"2026-04-01\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n      \"nombre_poissons_peses\": 95,\n      \"poids_total_g\": \"9500.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n  \"date\": \"2026-04-01\",\n  \"nombre_poissons_peses\": 95,\n  \"poids_total_g\": \"9500.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6901,8 +7042,8 @@
                   "{",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
-                  "pm.test(\"Poids moyen recalculé à 95.00\", function () { pm.expect(data.lignes[0].poids_moyen).to.eql(\"95.00\"); });",
+                  "const ind = data.indicateurs || {};",
+                  "pm.test(\"Poids moyen recalculé à 95.00\", function () { pm.expect(data.poids_moyen).to.eql(\"95.00\"); });",
                   "pm.test(\"S6 : biomasse_kg = 90.250\", function () { pm.expect(ind.biomasse_kg).to.eql(\"90.250\"); });",
                   "pm.test(\"S6 : gmq_periode = 2.92\", function () { pm.expect(ind.gmq_periode).to.eql(\"2.92\"); });",
                   "pm.test(\"S6 : gmq_cumule = 0.83\", function () { pm.expect(ind.gmq_cumule).to.eql(\"0.83\"); });",
@@ -6927,7 +7068,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n      \"poids_total_g\": \"9025.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"poids_total_g\": \"9025.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6937,7 +7078,7 @@
           }
         },
         {
-          "name": "07.57 S7 : supprimer la dernière pesée",
+          "name": "07.57 S7 : annuler la dernière pesée (motif obligatoire)",
           "event": [
             {
               "listen": "test",
@@ -6946,26 +7087,36 @@
                 "exec": [
                   "{",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Statut HTTP 204\", function () { pm.response.to.have.status(204); });",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Pesée annulée\", function () { pm.expect(data.statut).to.eql(\"ANNULEE\"); });",
                   "}"
                 ]
               }
             }
           ],
           "request": {
-            "method": "DELETE",
+            "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ix_s1_p4}}/",
-            "description": ""
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ix_s1_p4}}/annuler/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motif\": \"Pesée erronée\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "07.58 S7 : la pesée supprimée et son instantané ont disparu",
+          "name": "07.58 S7 : la pesée annulée reste consultable, sans instantané",
           "event": [
             {
               "listen": "test",
@@ -6974,7 +7125,8 @@
                 "exec": [
                   "{",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Statut HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Statut ANNULEE et instantané supprimé\", function () { pm.expect(data.statut).to.eql(\"ANNULEE\"); pm.expect(data.indicateurs).to.eql(null); });",
                   "}"
                 ]
               }
@@ -7003,7 +7155,7 @@
                   "{",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
+                  "const ind = data.indicateurs || {};",
                   "pm.test(\"S7 P3 : biomasse_kg = 57.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"57.000\"); });",
                   "pm.test(\"S7 P3 : gmq_periode = -1.11\", function () { pm.expect(ind.gmq_periode).to.eql(\"-1.11\"); });",
                   "pm.test(\"S7 P3 : provende_periode_kg = 10.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"10.000\"); });",
@@ -7039,7 +7191,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ix_s1_p4b\", String(data.id));",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_s1\")) || {}).indicateurs || {};",
+                  "const ind = data.indicateurs || {};",
                   "pm.test(\"S7 nouvelle : biomasse_kg = 95.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"95.000\"); });",
                   "pm.test(\"S7 nouvelle : gmq_periode = 2.50\", function () { pm.expect(ind.gmq_periode).to.eql(\"2.50\"); });",
                   "pm.test(\"S7 nouvelle : gmq_cumule = 0.85\", function () { pm.expect(ind.gmq_cumule).to.eql(\"0.85\"); });",
@@ -7064,7 +7216,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind1}}\",\n  \"date\": \"2026-04-05\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n      \"nombre_poissons_peses\": 95,\n      \"poids_total_g\": \"9500.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ix_lot_gross_s1}}\",\n  \"date\": \"2026-04-05\",\n  \"nombre_poissons_peses\": 95,\n  \"poids_total_g\": \"9500.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7274,7 +7426,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ix_a_p1\", String(data.id));",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_a\")) || {}).indicateurs || {};",
+                  "const ind = data.indicateurs || {};",
                   "pm.test(\"S2 A1 : jour_de_cycle = 30\", function () { pm.expect(ind.jour_de_cycle).to.eql(30); });",
                   "pm.test(\"S2 A1 : biomasse_kg = 45.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"45.000\"); });",
                   "pm.test(\"S2 A1 : gmq_periode = 0.83\", function () { pm.expect(ind.gmq_periode).to.eql(\"0.83\"); });",
@@ -7299,7 +7451,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"date\": \"2026-01-31\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"4500.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ix_lot_gross_a}}\",\n  \"date\": \"2026-01-31\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"4500.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7320,8 +7472,8 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ix_a_p2\", String(data.id));",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_a\")) || {}).indicateurs || {};",
-                  "pm.test(\"Effectif vivant de A : 950\", function () { pm.expect(data.lignes[0].effectif_vivant).to.eql(950); });",
+                  "const ind = data.indicateurs || {};",
+                  "pm.test(\"Effectif vivant de A : 950\", function () { pm.expect(data.effectif_vivant).to.eql(950); });",
                   "pm.test(\"S2 A2 : biomasse_kg = 85.500\", function () { pm.expect(ind.biomasse_kg).to.eql(\"85.500\"); });",
                   "pm.test(\"S2 A2 : gmq_periode = 1.50\", function () { pm.expect(ind.gmq_periode).to.eql(\"1.50\"); });",
                   "pm.test(\"S2 A2 : gmq_cumule = 1.17\", function () { pm.expect(ind.gmq_cumule).to.eql(\"1.17\"); });",
@@ -7344,7 +7496,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"date\": \"2026-03-02\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_a}}\",\n      \"nombre_poissons_peses\": 95,\n      \"poids_total_g\": \"8550.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ix_lot_gross_a}}\",\n  \"date\": \"2026-03-02\",\n  \"nombre_poissons_peses\": 95,\n  \"poids_total_g\": \"8550.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7365,7 +7517,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ix_b_p1\", String(data.id));",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_b\")) || {}).indicateurs || {};",
+                  "const ind = data.indicateurs || {};",
                   "pm.test(\"S2 B1 : biomasse_kg = 40.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"40.000\"); });",
                   "pm.test(\"S2 B1 : gmq_periode = 1.33\", function () { pm.expect(ind.gmq_periode).to.eql(\"1.33\"); });",
                   "pm.test(\"S2 B1 : provende_periode_kg = 50.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"50.000\"); });",
@@ -7387,7 +7539,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"date\": \"2026-01-31\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_b}}\",\n      \"nombre_poissons_peses\": 50,\n      \"poids_total_g\": \"4000.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ix_lot_gross_b}}\",\n  \"date\": \"2026-01-31\",\n  \"nombre_poissons_peses\": 50,\n  \"poids_total_g\": \"4000.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7407,7 +7559,7 @@
                   "{",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_a\")) || {}).indicateurs || {};",
+                  "const ind = data.indicateurs || {};",
                   "pm.test(\"S2 A2 recalculée : provende_periode_kg = 61.993\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"61.993\"); });",
                   "pm.test(\"S2 A2 recalculée : ic_periode = 1.53\", function () { pm.expect(ind.ic_periode).to.eql(\"1.53\"); });",
                   "pm.test(\"S2 A2 recalculée : ic_cumule = 1.71\", function () { pm.expect(ind.ic_cumule).to.eql(\"1.71\"); });",
@@ -7440,7 +7592,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ix_b_p2\", String(data.id));",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_b\")) || {}).indicateurs || {};",
+                  "const ind = data.indicateurs || {};",
                   "pm.test(\"S2 B2 : biomasse_kg = 70.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"70.000\"); });",
                   "pm.test(\"S2 B2 : gmq_periode = 2.00\", function () { pm.expect(ind.gmq_periode).to.eql(\"2.00\"); });",
                   "pm.test(\"S2 B2 : gmq_cumule = 1.67\", function () { pm.expect(ind.gmq_cumule).to.eql(\"1.67\"); });",
@@ -7464,7 +7616,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind2}}\",\n  \"date\": \"2026-03-02\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_b}}\",\n      \"nombre_poissons_peses\": 50,\n      \"poids_total_g\": \"7000.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ix_lot_gross_b}}\",\n  \"date\": \"2026-03-02\",\n  \"nombre_poissons_peses\": 50,\n  \"poids_total_g\": \"7000.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7485,7 +7637,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "const liste = Array.isArray(data) ? data : (data.results || []);",
-                  "const lignes = liste.flatMap(p => p.lignes.map(l => ({ date: p.date, lot: String(l.id_lot_grossissement), ind: l.indicateurs })));",
+                  "const lignes = liste.map(p => ({ date: p.date, lot: String(p.id_lot_grossissement), ind: p.indicateurs }));",
                   "const lotA = pm.collectionVariables.get(\"ix_lot_gross_a\"), lotB = pm.collectionVariables.get(\"ix_lot_gross_b\");",
                   "const part = (lot, date) => Number((lignes.find(l => l.lot === lot && l.date === date) || { ind: {} }).ind.provende_periode_kg);",
                   "pm.test(\"Quatre instantanés, deux par lot\", function () { pm.expect(lignes.length).to.eql(4); pm.expect(lignes.filter(l => l.lot === lotA).length).to.eql(2); pm.expect(lignes.filter(l => l.lot === lotB).length).to.eql(2); });",
@@ -7551,7 +7703,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "if (data.id !== undefined) pm.collectionVariables.set(\"ix_c_p1\", String(data.id));",
-                  "const ind = ((data.lignes || []).find(l => String(l.id_lot_grossissement) === pm.collectionVariables.get(\"ix_lot_gross_c\")) || {}).indicateurs || {};",
+                  "const ind = data.indicateurs || {};",
                   "pm.test(\"S5 : jour_de_cycle = 0\", function () { pm.expect(ind.jour_de_cycle).to.eql(0); });",
                   "pm.test(\"S5 : biomasse_kg = 20.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"20.000\"); });",
                   "pm.test(\"S5 : gmq_periode = null\", function () { pm.expect(ind.gmq_periode).to.eql(null); });",
@@ -7576,7 +7728,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_bassin\": \"{{ix_bassin_ind3}}\",\n  \"date\": \"2026-01-01\",\n  \"observation\": \"\",\n  \"lignes\": [\n    {\n      \"id_lot_grossissement\": \"{{ix_lot_gross_c}}\",\n      \"nombre_poissons_peses\": 100,\n      \"poids_total_g\": \"2000.00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{ix_lot_gross_c}}\",\n  \"date\": \"2026-01-01\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"2000.00\",\n  \"observation\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -9068,7 +9220,7 @@
                   "{",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "pm.test(\"Lot d'origine\", function () { pm.expect(String(data.id_lot)).to.eql(\"{{sg_lot_n}}\"); });",
+                  "pm.test(\"Lot d'origine\", function () { pm.expect(String(data.id_lot)).to.eql(pm.variables.get(\"sg_lot_n\")); });",
                   "pm.test(\"Espèce\", function () { pm.expect(data.espece).to.eql(\"CARPE\"); });",
                   "pm.test(\"Quantité sortie\", function () { pm.expect(data.quantite_sortie).to.eql(2000); });",
                   "pm.test(\"Taille cible\", function () { pm.expect(data.taille_echantillon_cible).to.eql(200); });",
@@ -11455,7 +11607,7 @@
                   "pm.test(\"Quantité sortie\", function () { pm.expect(data.effectif_sortant).to.eql(2000); });",
                   "pm.test(\"Effectif initial = effectif entrant\", function () { pm.expect(data.effectif_initial).to.eql(2000); });",
                   "pm.test(\"Poids moyen initial calculé depuis P0\", function () { pm.expect(data.poids_moyen_initial).to.eql(\"20.00\"); });",
-                  "pm.test(\"Code saisi\", function () { pm.expect(data.code).to.eql(\"{{sg_code_perso}}\"); });",
+                  "pm.test(\"Code saisi\", function () { pm.expect(data.code).to.eql(pm.variables.get(\"sg_code_perso\")); });",
                   "}"
                 ]
               }

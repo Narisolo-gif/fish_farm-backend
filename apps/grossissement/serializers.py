@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
-from .models import IndicateurLot, LotGrossissement, Pesee, PeseeLot
-from .services import modifier_lot_grossissement
+from .models import IndicateurLot, LotGrossissement, Pesee
+from .services import derniere_pesee_valide, modifier_lot_grossissement
 
 
 # Le poids moyen initial et la trace de la pesée initiale (P0) ne sont jamais
@@ -66,6 +66,11 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
     age_jours = serializers.IntegerField(read_only=True)
     etape_courante = serializers.IntegerField(read_only=True, allow_null=True)
     prochaine_echeance_pesee = serializers.DateField(read_only=True, allow_null=True)
+    # Suivi : dernière pesée valide (sinon P0), calculé, jamais stocké sur le lot.
+    poids_moyen_actuel = serializers.SerializerMethodField()
+    date_derniere_pesee = serializers.SerializerMethodField()
+    derniers_indicateurs = serializers.SerializerMethodField()
+    pesee_en_retard = serializers.SerializerMethodField()
 
     class Meta:
         model = LotGrossissement
@@ -98,6 +103,10 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
             "age_jours",
             "etape_courante",
             "prochaine_echeance_pesee",
+            "pesee_en_retard",
+            "poids_moyen_actuel",
+            "date_derniere_pesee",
+            "derniers_indicateurs",
             "id_user",
             "created_at",
         ]
@@ -128,6 +137,33 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         return modifier_lot_grossissement(instance.pk, validated_data)
+
+    def _derniere_pesee(self, obj):
+        # `pesees_valides` est préchargé par le viewset (triées par date décroissante).
+        if hasattr(obj, "pesees_valides"):
+            return obj.pesees_valides[0] if obj.pesees_valides else None
+        return derniere_pesee_valide(obj)
+
+    def get_poids_moyen_actuel(self, obj):
+        derniere = self._derniere_pesee(obj)
+        poids = derniere.poids_moyen if derniere is not None else obj.poids_moyen_initial
+        return _decimal_ou_none(poids)
+
+    def get_date_derniere_pesee(self, obj):
+        derniere = self._derniere_pesee(obj)
+        return derniere.date.isoformat() if derniere is not None else None
+
+    def get_derniers_indicateurs(self, obj):
+        derniere = self._derniere_pesee(obj)
+        return _indicateurs(derniere) if derniere is not None else None
+
+    def get_pesee_en_retard(self, obj):
+        if obj.statut != LotGrossissement.Statut.ACTIF:
+            return False
+        derniere = self._derniere_pesee(obj)
+        return obj.calendrier_pesees(
+            derniere.date if derniere is not None else None
+        )["pesee_en_retard"]
 
 
 CHAMPS_SORTIE_GROSSISSEMENT = {
@@ -320,104 +356,103 @@ class OrigineLotGrossissementSerializer(serializers.Serializer):
 
 # --- Pesée sur échantillon -------------------------------------------------
 
+# Saisis par l'utilisateur ; le lot, l'espèce, le bassin, l'effectif vivant,
+# les valeurs calculées et l'utilisateur sont renseignés automatiquement.
 CHAMPS_PESEE_CREATION = {
-    "id_bassin",
-    "date",
-    "observation",
-    "confirmer_echantillon_non_conforme",
-    "lignes",
-}
-CHAMPS_PESEE_MODIFICATION = {
-    "observation",
-    "confirmer_echantillon_non_conforme",
-    "lignes",
-}
-CHAMPS_LIGNE_PESEE = {
     "id_lot_grossissement",
-    "pourcentage_echantillon",
+    "date",
     "nombre_poissons_peses",
     "poids_total_g",
+    "pourcentage_echantillon",
+    "observation",
+    "confirmer_echantillon_non_conforme",
+}
+# La date et le lot d'une pesée sont figés : seules les mesures se corrigent.
+CHAMPS_PESEE_MODIFICATION = {
+    "nombre_poissons_peses",
+    "poids_total_g",
+    "pourcentage_echantillon",
+    "observation",
+    "confirmer_echantillon_non_conforme",
 }
 
 
-class LignePeseeEcritureSerializer(serializers.Serializer):
+def _refuser_champs_inconnus(initial_data, autorises, message):
+    inconnus = set(initial_data) - autorises
+    if inconnus:
+        raise serializers.ValidationError({
+            champ: message for champ in sorted(inconnus)
+        })
+
+
+class PeseeEcritureSerializer(serializers.Serializer):
+    """Entrée de la création (POST), de l'aperçu et de la correction (PATCH).
+
+    Le caractère obligatoire du nombre et du poids est contrôlé par le
+    service (facultatifs à l'aperçu, requis à la création).
+    """
+
     id_lot_grossissement = serializers.IntegerField(min_value=1)
+    date = serializers.DateField(required=False)
+    nombre_poissons_peses = serializers.IntegerField(required=False)
+    poids_total_g = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        required=False,
+    )
     pourcentage_echantillon = serializers.DecimalField(
         max_digits=5,
         decimal_places=2,
         required=False,
     )
-    nombre_poissons_peses = serializers.IntegerField()
-    poids_total_g = serializers.DecimalField(max_digits=12, decimal_places=2)
-
-    def validate_pourcentage_echantillon(self, value):
-        if value <= 0 or value > 100:
-            raise serializers.ValidationError(
-                "Le pourcentage doit être supérieur à 0 et inférieur ou égal à 100."
-            )
-        return value
-
-    def validate_nombre_poissons_peses(self, value):
-        if value <= 0:
-            raise serializers.ValidationError(
-                "Le nombre de poissons pesés doit être strictement positif."
-            )
-        return value
-
-    def validate_poids_total_g(self, value):
-        if value <= 0:
-            raise serializers.ValidationError(
-                "Le poids total doit être strictement positif."
-            )
-        return value
-
-
-class PeseeEcritureSerializer(serializers.Serializer):
-    """Entrée de création (POST) et de modification limitée (PATCH)."""
-
-    id_bassin = serializers.IntegerField(min_value=1)
-    date = serializers.DateField()
     observation = serializers.CharField(required=False, allow_blank=True)
     confirmer_echantillon_non_conforme = serializers.BooleanField(
         required=False,
         write_only=True,
     )
-    lignes = LignePeseeEcritureSerializer(many=True)
+
+    def __init__(self, *args, creation=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.creation = creation
+        if creation:
+            for champ in ("date", "nombre_poissons_peses", "poids_total_g"):
+                self.fields[champ].required = True
 
     def validate(self, attrs):
-        autorises = (
-            CHAMPS_PESEE_MODIFICATION if self.partial else CHAMPS_PESEE_CREATION
-        )
-        interdits = set(self.initial_data) - autorises
-        if interdits:
-            raise serializers.ValidationError({
-                champ: "Ce champ est en lecture seule."
-                for champ in sorted(interdits)
-            })
-        for ligne in self.initial_data.get("lignes") or []:
-            interdits_ligne = set(ligne) - CHAMPS_LIGNE_PESEE
-            if interdits_ligne:
-                raise serializers.ValidationError({
-                    "lignes": (
-                        "Champs en lecture seule : "
-                        f"{', '.join(sorted(interdits_ligne))}."
-                    )
-                })
         if self.partial:
-            for ligne in attrs.get("lignes") or []:
-                if "id_lot_grossissement" not in ligne:
-                    raise serializers.ValidationError({
-                        "lignes": "Chaque ligne modifiée doit indiquer id_lot_grossissement."
-                    })
+            _refuser_champs_inconnus(
+                self.initial_data,
+                CHAMPS_PESEE_MODIFICATION,
+                "Ce champ n'est pas modifiable.",
+            )
+        else:
+            _refuser_champs_inconnus(
+                self.initial_data,
+                CHAMPS_PESEE_CREATION,
+                "Ce champ n'est pas accepté.",
+            )
         return attrs
 
 
+class AnnulationPeseeSerializer(serializers.Serializer):
+    motif = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+
 class IndicateurLotSerializer(serializers.ModelSerializer):
-    """Instantané en lecture seule ; les valeurs non calculables valent null."""
+    """Instantané en lecture seule ; les valeurs non calculables valent null.
+
+    `effectif_vivant` est relu dans le registre au dernier recalcul.
+    """
 
     class Meta:
         model = IndicateurLot
         fields = [
+            "effectif_vivant",
+            "poids_moyen",
             "biomasse_kg",
             "gmq_periode",
             "gmq_cumule",
@@ -429,7 +464,15 @@ class IndicateurLotSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class PeseeLotSerializer(serializers.ModelSerializer):
+def _indicateurs(pesee):
+    try:
+        indicateur = pesee.indicateur
+    except IndicateurLot.DoesNotExist:
+        return None
+    return IndicateurLotSerializer(indicateur).data
+
+
+class PeseeSerializer(serializers.ModelSerializer):
     id_lot_grossissement = serializers.IntegerField(
         source="lot_grossissement_id",
         read_only=True,
@@ -438,54 +481,84 @@ class PeseeLotSerializer(serializers.ModelSerializer):
         source="lot_grossissement.code",
         read_only=True,
     )
-    echantillon_conforme = serializers.BooleanField(read_only=True)
-    indicateurs = serializers.SerializerMethodField()
-
-    class Meta:
-        model = PeseeLot
-        fields = [
-            "id",
-            "id_lot_grossissement",
-            "reference_lot",
-            "pourcentage_echantillon",
-            "effectif_vivant",
-            "taille_echantillon_cible",
-            "nombre_poissons_peses",
-            "poids_total_g",
-            "poids_moyen",
-            "echantillon_conforme",
-            "indicateurs",
-        ]
-        read_only_fields = fields
-
-    def get_indicateurs(self, obj):
-        try:
-            indicateur = obj.indicateur
-        except IndicateurLot.DoesNotExist:
-            return None
-        return IndicateurLotSerializer(indicateur).data
-
-
-class PeseeSerializer(serializers.ModelSerializer):
+    espece = serializers.CharField(
+        source="lot_grossissement.espece",
+        read_only=True,
+    )
     id_bassin = serializers.IntegerField(source="bassin_id", read_only=True)
     reference_bassin = serializers.CharField(
         source="bassin.reference",
         read_only=True,
     )
+    echantillon_conforme = serializers.BooleanField(read_only=True)
+    indicateurs = serializers.SerializerMethodField()
     id_user = serializers.IntegerField(source="utilisateur_id", read_only=True)
-    lignes = PeseeLotSerializer(many=True, read_only=True)
+    id_user_annulation = serializers.IntegerField(
+        source="annulee_par_id",
+        read_only=True,
+        allow_null=True,
+    )
 
     class Meta:
         model = Pesee
         fields = [
             "id",
+            "id_lot_grossissement",
+            "reference_lot",
+            "espece",
             "id_bassin",
             "reference_bassin",
             "date",
+            "effectif_vivant",
+            "pourcentage_echantillon",
+            "taille_echantillon_cible",
+            "nombre_poissons_peses",
+            "pourcentage_reel",
+            "poids_total_g",
+            "poids_moyen",
+            "echantillon_conforme",
+            "indicateurs",
             "observation",
+            "statut",
+            "motif_annulation",
+            "id_user_annulation",
+            "annulee_le",
             "id_user",
-            "lignes",
             "created_at",
             "updated_at",
         ]
         read_only_fields = fields
+
+    def get_indicateurs(self, obj):
+        return _indicateurs(obj)
+
+
+class ApercuPeseeSerializer(serializers.Serializer):
+    """Formulaire de pesée prérempli : valeurs lues et calculées, rien d'écrit."""
+
+    def to_representation(self, contexte):
+        lot = contexte["lot"]
+        return {
+            "id_lot_grossissement": lot.pk,
+            "reference_lot": lot.code,
+            "espece": lot.espece,
+            "id_bassin": lot.bassin_id,
+            "reference_bassin": lot.bassin.reference,
+            "date": contexte["date"].isoformat(),
+            "date_min": contexte["date_min"].isoformat(),
+            "date_derniere_pesee": (
+                contexte["date_derniere_pesee"].isoformat()
+                if contexte["date_derniere_pesee"] is not None
+                else None
+            ),
+            "effectif_vivant": contexte["effectif_vivant"],
+            "pourcentage_echantillon": _decimal_ou_none(
+                contexte["pourcentage_echantillon"]
+            ),
+            "taille_echantillon_cible": contexte["taille_echantillon_cible"],
+            "nombre_poissons_peses": contexte["nombre_poissons_peses"],
+            "pourcentage_reel": _decimal_ou_none(contexte["pourcentage_reel"]),
+            "poids_total_g": _decimal_ou_none(contexte["poids_total_g"]),
+            "poids_moyen": _decimal_ou_none(contexte["poids_moyen"]),
+            "echantillon_conforme": contexte["echantillon_conforme"],
+        }
