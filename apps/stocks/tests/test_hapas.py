@@ -16,7 +16,6 @@ from apps.effectifs.models import (
     MouvementEffectif,
 )
 from apps.effectifs.services import (
-    enregistrer_evenement_mortalite_perte,
     enregistrer_mouvement,
     hapa_est_bloque,
 )
@@ -28,6 +27,7 @@ from apps.stocks.serializers import MiseEnStockSerializer
 from apps.stocks.services import creer_mise_en_stock, supprimer_mise_en_stock
 from apps.traitement.models import Traitement
 from apps.traitement.services import cloturer_traitement, creer_traitement
+from apps.effectifs.tests.outils import enregistrer_mortalite_perte
 
 
 User = get_user_model()
@@ -158,7 +158,8 @@ class MiseEnStockHapaTests(TestCase):
                         hapa,
                         quantity=initial - final_hapa,
                     )
-        traitement = cloturer_traitement(traitement.pk)
+            # Sans hapas, le traitement est créé déjà clôturé ci-dessus.
+            traitement = cloturer_traitement(traitement.pk)
         return lot, traitement
 
     def _creer_mise(
@@ -202,7 +203,7 @@ class MiseEnStockHapaTests(TestCase):
         quantity=1,
     ):
         self.mortality_counter += 1
-        return enregistrer_evenement_mortalite_perte(
+        return enregistrer_mortalite_perte(
             bassin=bassin,
             hapa=hapa,
             espece=espece,
@@ -262,13 +263,14 @@ class MiseEnStockHapaTests(TestCase):
             ),
             0,
         )
+        # 6 poissons entrés dans chaque hapa de stock (lignes ci-dessus).
         self.assertEqual(
             effectif_vivant(self.stock.pk, lot.espece, hapa_id=self.stock_hapa1.pk),
-            5,
+            6,
         )
         self.assertEqual(
             effectif_vivant(self.stock.pk, lot.espece, hapa_id=self.stock_hapa2.pk),
-            7,
+            6,
         )
 
     def test_total_inferieur_est_justifie_et_ecart_calcule_depuis_les_lignes(self):

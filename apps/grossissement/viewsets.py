@@ -2,7 +2,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import MethodNotAllowed, ValidationError
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -10,27 +10,38 @@ from apps.core.permissions import (
     IsAdministrateurOuGestionnaire,
     IsTousRolesActifs,
 )
-from apps.effectifs.models import SortieStock
 from apps.lots.models import Lot
 
 from .models import LotGrossissement, Pesee
 from .serializers import (
+    ApercuSortieGrossissementSerializer,
     ClotureLotGrossissementSerializer,
     LotGrossissementSerializer,
     OrigineLotGrossissementSerializer,
     PeseeEcritureSerializer,
     PeseeSerializer,
+    SortieGrossissementSerializer,
 )
 from .services import (
     EchantillonNonConforme,
+    apercu_sortie_grossissement,
     cloturer_lot_grossissement,
     creer_pesee,
     modifier_pesee,
     supprimer_pesee,
+    valider_sortie_grossissement,
 )
 
 
 class LotGrossissementViewSet(viewsets.ModelViewSet):
+    """
+    Lots de grossissement.
+
+    POST / : sortie totale du stock et création du lot, en une seule transaction.
+    POST /apercu-sortie/ : mêmes contrôles, valeurs préremplies, rien n'est écrit.
+    Administrateur, Gestionnaire : écriture. Employé : lecture.
+    """
+
     queryset = (
         LotGrossissement.objects.select_related(
             "lot_origine",
@@ -52,10 +63,34 @@ class LotGrossissementViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in {"list", "retrieve", "origine"}:
             return [IsAuthenticated(), IsTousRolesActifs()]
-        return [IsAuthenticated(), IsAdministrateurOuGestionnaire()]
+        return [
+            IsAuthenticated(),
+            IsTousRolesActifs(),
+            IsAdministrateurOuGestionnaire(),
+        ]
 
     def create(self, request, *args, **kwargs):
-        raise MethodNotAllowed("POST")
+        serializer = SortieGrossissementSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            lot = valider_sortie_grossissement(
+                serializer.validated_data,
+                utilisateur=request.user,
+            )
+        except EchantillonNonConforme as exc:
+            return _reponse_echantillon_non_conforme(exc)
+        lot = self.queryset.get(pk=lot.pk)
+        return Response(
+            self.get_serializer(lot).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], url_path="apercu-sortie")
+    def apercu_sortie(self, request):
+        serializer = SortieGrossissementSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        contexte = apercu_sortie_grossissement(serializer.validated_data)
+        return Response(ApercuSortieGrossissementSerializer(contexte).data)
 
     def get_queryset(self):
         queryset = super().get_queryset()

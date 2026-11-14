@@ -1,8 +1,6 @@
-from django.utils import timezone
 from rest_framework import serializers
 
 from apps.bassins.models import Bassin, Hapa
-from apps.lots.models import Lot
 
 from .models import (
     CategoriePerte,
@@ -12,12 +10,7 @@ from .models import (
     SortieStock,
     SortieStockLigne,
 )
-from .services import (
-    calculer_lignes_sortie,
-    creer_sortie,
-    enregistrer_evenement,
-    modifier_sortie,
-)
+from .services import enregistrer_evenement
 
 
 class MouvementEffectifSerializer(serializers.ModelSerializer):
@@ -120,14 +113,13 @@ class SortieStockLigneSerializer(serializers.ModelSerializer):
 
 
 class SortieStockSerializer(serializers.ModelSerializer):
-    id_lot = serializers.PrimaryKeyRelatedField(
-        source="lot",
-        queryset=Lot.objects.all(),
-    )
+    """Lecture seule : la sortie est écrite par le service de grossissement."""
+
+    id_lot = serializers.IntegerField(source="lot_id", read_only=True)
     reference_lot = serializers.CharField(source="lot.reference", read_only=True)
-    id_bassin_destination = serializers.PrimaryKeyRelatedField(
-        source="bassin_destination",
-        queryset=Bassin.objects.all(),
+    id_bassin_destination = serializers.IntegerField(
+        source="bassin_destination_id",
+        read_only=True,
     )
     reference_bassin_source = serializers.SerializerMethodField()
     id_bassin_source = serializers.SerializerMethodField()
@@ -136,7 +128,6 @@ class SortieStockSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     id_user = serializers.IntegerField(source="utilisateur_id", read_only=True)
-    date_sortie = serializers.DateTimeField(required=False)
     ecart_effectif = serializers.IntegerField(read_only=True, allow_null=True)
     lignes = SortieStockLigneSerializer(many=True, read_only=True)
 
@@ -166,51 +157,13 @@ class SortieStockSerializer(serializers.ModelSerializer):
             "motif_annulation",
             "created_at",
         ]
-        read_only_fields = [
-            "id",
-            "type_sortie",
-            "reference_lot",
-            "espece",
-            "id_bassin_source",
-            "reference_bassin_source",
-            "reference_bassin_destination",
-            "statut",
-            "effectif_sortant",
-            "effectif_entrant",
-            "ecart_effectif",
-            "justification_ecart",
-            "lignes",
-            "id_user",
-            "validee_le",
-            "annulee_le",
-            "motif_annulation",
-            "created_at",
-        ]
-        extra_kwargs = {
-            "observation": {"required": False, "allow_blank": True},
-        }
-
-    def get_fields(self):
-        fields = super().get_fields()
-        if self.instance is not None:
-            fields["id_lot"].read_only = True
-        return fields
+        read_only_fields = fields
 
     def _hapa_source(self, instance):
+        # Une sortie validée a toujours ses lignes ; une ancienne sortie annulée
+        # sans ligne (ex-brouillon) n'a pas de bassin source.
         ligne = instance.lignes.select_related("hapa", "hapa__bassin").first()
-        if ligne is not None:
-            return ligne.hapa
-        # Brouillon : la source est recalculée. Si le lot n'est plus sortable
-        # (hapa vidé, inactif, partagé…), on renvoie null au lieu de faire
-        # échouer toute la liste ; l'erreur reste levée à l'aperçu et à la validation.
-        try:
-            lignes = calculer_lignes_sortie(
-                instance.lot,
-                timezone.localtime(instance.date_sortie).date(),
-            )
-        except serializers.ValidationError:
-            return None
-        return lignes[0]["hapa"] if lignes else None
+        return ligne.hapa if ligne is not None else None
 
     def get_id_bassin_source(self, instance):
         hapa = self._hapa_source(instance)
@@ -219,43 +172,6 @@ class SortieStockSerializer(serializers.ModelSerializer):
     def get_reference_bassin_source(self, instance):
         hapa = self._hapa_source(instance)
         return hapa.bassin.reference if hapa is not None else None
-
-    def create(self, validated_data):
-        return creer_sortie(
-            validated_data,
-            utilisateur=self.context["request"].user,
-        )
-
-    def update(self, instance, validated_data):
-        return modifier_sortie(instance.pk, validated_data)
-
-
-class ValidationSortieSerializer(serializers.Serializer):
-    effectif_entrant = serializers.IntegerField(
-        required=False,
-        allow_null=True,
-        min_value=1,
-    )
-    justification_ecart = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        trim_whitespace=True,
-    )
-    # Poids moyen initial (g) du lot de grossissement créé par la validation ;
-    # son caractère obligatoire est contrôlé par le module grossissement.
-    poids_initial_g = serializers.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        required=False,
-        allow_null=True,
-    )
-
-    def validate_poids_initial_g(self, value):
-        if value is not None and value <= 0:
-            raise serializers.ValidationError(
-                "Le poids moyen initial doit être strictement positif."
-            )
-        return value
 
 
 class AnnulationSortieStockSerializer(serializers.Serializer):

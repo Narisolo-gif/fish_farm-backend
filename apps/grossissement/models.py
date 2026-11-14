@@ -45,7 +45,8 @@ class LotGrossissement(models.Model):
     )
     date_mise_en_place = models.DateTimeField()
     effectif_initial = models.PositiveIntegerField()
-    poids_initial_g = models.DecimalField(
+    # Poids moyen (g) mesuré à la pesée initiale P0 ; point de départ des indicateurs.
+    poids_moyen_initial = models.DecimalField(
         max_digits=8,
         decimal_places=2,
         null=True,
@@ -55,6 +56,25 @@ class LotGrossissement(models.Model):
         max_digits=5,
         decimal_places=2,
         default=10,
+    )
+    # Trace de la pesée initiale (P0), faite avant la mise en bassin. Seule la
+    # validation de la sortie les renseigne ; nullables pour les lots antérieurs.
+    date_pesee_initiale = models.DateField(null=True, blank=True)
+    pourcentage_echantillon_initial = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    nombre_poissons_peses_initial = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
+    poids_total_initial_g = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
     )
     statut = models.CharField(
         max_length=10,
@@ -92,10 +112,10 @@ class LotGrossissement(models.Model):
             ),
             models.CheckConstraint(
                 condition=(
-                    models.Q(poids_initial_g__isnull=True)
-                    | models.Q(poids_initial_g__gt=0)
+                    models.Q(poids_moyen_initial__isnull=True)
+                    | models.Q(poids_moyen_initial__gt=0)
                 ),
-                name="lot_gross_poids_initial_positif",
+                name="lot_gross_poids_moyen_initial_positif",
             ),
             models.CheckConstraint(
                 condition=(
@@ -125,10 +145,36 @@ class LotGrossissement(models.Model):
                 fields=["lot_origine"],
                 name="lot_gross_origine_unique",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(pourcentage_echantillon_initial__isnull=True)
+                    | (
+                        models.Q(pourcentage_echantillon_initial__gt=0)
+                        & models.Q(pourcentage_echantillon_initial__lte=100)
+                    )
+                ),
+                name="lot_gross_pourcentage_initial_valide",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(nombre_poissons_peses_initial__isnull=True)
+                    | models.Q(nombre_poissons_peses_initial__gt=0)
+                ),
+                name="lot_gross_nombre_peses_initial_positif",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(poids_total_initial_g__isnull=True)
+                    | models.Q(poids_total_initial_g__gt=0)
+                ),
+                name="lot_gross_poids_total_initial_positif",
+            ),
         ]
 
     def save(self, *args, **kwargs):
-        if self._state.adding:
+        # Sans code fourni (référence saisie à la validation de la sortie), le
+        # code est généré au format GR-AAAA-NNNN à partir de l'identifiant.
+        if self._state.adding and not self.code:
             self.code = f"TMP-{uuid4().hex[:16]}"
             super().save(*args, **kwargs)
             annee = timezone.localtime(self.date_mise_en_place).year

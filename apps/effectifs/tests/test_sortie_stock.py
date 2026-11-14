@@ -2,14 +2,22 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.bassins.models import Bassin, Hapa
 from apps.ecloserie.models import Eclosion
+from rest_framework.exceptions import ValidationError
+
 from apps.effectifs.models import MouvementEffectif, SortieStock
-from apps.effectifs.services import enregistrer_mouvement, effectif_vivant
+from apps.effectifs.services import (
+    effectif_vivant,
+    enregistrer_mouvement,
+    enregistrer_sortie_stock_validee,
+    preparer_sortie_stock,
+)
 from apps.lots.models import Lot
 from apps.reproduction.models import Ponte, Reproduction
 from apps.stocks.models import MiseEnStock
@@ -19,6 +27,9 @@ User = get_user_model()
 
 
 class SortieStockTests(TestCase):
+    """Sortie totale du registre ; la création du lot de grossissement est testée
+    dans apps.grossissement (flux en une seule transaction, sans brouillon)."""
+
     def setUp(self):
         role = User._meta.get_field("role").remote_field.model.objects.create(
             libelle="Administrateur",
@@ -119,28 +130,28 @@ class SortieStockTests(TestCase):
             )
         return lot
 
-    def _creer_sortie(self, lot, *, destination=None, date_sortie=None):
-        data = {
-            "id_lot": lot.pk,
-            "id_bassin_destination": (
-                destination or self.bassin_destination
-            ).pk,
-        }
-        if date_sortie is not None:
-            data["date_sortie"] = date_sortie.isoformat()
-        return self.client.post(
-            "/api/v1/effectifs/sorties-stock/",
-            data,
-            format="json",
+    def _preparer(self, lot, *, destination=None, date_locale=None):
+        return preparer_sortie_stock(
+            lot,
+            destination or self.bassin_destination,
+            date_locale or self.today,
         )
 
-    def _valider(self, sortie_id, data=None):
-        # Le lot de grossissement créé à la validation exige un poids initial.
-        return self.client.post(
-            f"/api/v1/effectifs/sorties-stock/{sortie_id}/valider/",
-            {"poids_initial_g": "20.00", **(data or {})},
-            format="json",
-        )
+    def _sortie_validee(self, lot, *, effectif_entrant=None, justification=""):
+        with transaction.atomic():
+            preparation = self._preparer(lot)
+            return enregistrer_sortie_stock_validee(
+                lot=lot,
+                preparation=preparation,
+                date_sortie=timezone.now(),
+                effectif_entrant=(
+                    preparation["effectif_sortant"]
+                    if effectif_entrant is None
+                    else effectif_entrant
+                ),
+                justification_ecart=justification,
+                utilisateur=self.user,
+            )
 
     def _mouvements_operation(self, sortie):
         return MouvementEffectif.objects.filter(
@@ -150,16 +161,20 @@ class SortieStockTests(TestCase):
             operation_source_object_id=sortie.pk,
         )
 
+    def _assert_refus(self, champ, fonction, *args, **kwargs):
+        with self.assertRaises(ValidationError) as ctx:
+            with transaction.atomic():
+                fonction(*args, **kwargs)
+        self.assertIn(champ, ctx.exception.detail)
+        return ctx.exception.detail
+
     def test_validation_nominale_transfere_le_lot_entier(self):
         lot = self._mettre_en_stock("LOT-NOMINAL", {self.hapa_a: 10})
-        draft = self._creer_sortie(lot)
-        self.assertEqual(draft.status_code, 201, draft.data)
 
-        response = self._valider(draft.data["id"])
+        sortie = self._sortie_validee(lot)
 
-        self.assertEqual(response.status_code, 200, response.data)
-        sortie = SortieStock.objects.get(pk=draft.data["id"])
         self.assertEqual(sortie.statut, SortieStock.Statut.VALIDEE)
+        self.assertEqual(sortie.validee_par, self.user)
         self.assertEqual(sortie.ecart_effectif, 0)
         movements = self._mouvements_operation(sortie)
         source = movements.get(type_mouvement="SORTIE")
@@ -176,46 +191,42 @@ class SortieStockTests(TestCase):
             "LOT-DEUX-HAPAS",
             {self.hapa_a: 7, self.hapa_b: 5},
         )
-        draft = self._creer_sortie(lot)
-        response = self._valider(draft.data["id"])
 
-        self.assertEqual(response.status_code, 200, response.data)
-        sorties = self._mouvements_operation(
-            SortieStock.objects.get(pk=draft.data["id"])
-        ).filter(type_mouvement="SORTIE")
+        sortie = self._sortie_validee(lot)
+
+        sorties = self._mouvements_operation(sortie).filter(type_mouvement="SORTIE")
         self.assertEqual(
             set(sorties.values_list("hapa_id", "quantite")),
             {(self.hapa_a.pk, 7), (self.hapa_b.pk, 5)},
         )
-        self.assertEqual(response.data["effectif_sortant"], 12)
+        self.assertEqual(sortie.effectif_sortant, 12)
 
     def test_ecart_partiel_obligatoire_et_plafonne(self):
         lot = self._mettre_en_stock("LOT-ECART", {self.hapa_a: 10})
-        draft = self._creer_sortie(lot)
-        sortie_id = draft.data["id"]
         initial_count = MouvementEffectif.objects.count()
 
-        sans_justification = self._valider(
-            sortie_id,
-            {"effectif_entrant": 7},
+        self._assert_refus(
+            "justification_ecart",
+            self._sortie_validee,
+            lot,
+            effectif_entrant=7,
         )
-        au_dessus = self._valider(
-            sortie_id,
-            {"effectif_entrant": 11},
+        # Écart en plus refusé, même justifié.
+        self._assert_refus(
+            "effectif_entrant",
+            self._sortie_validee,
+            lot,
+            effectif_entrant=11,
+            justification="Recomptage",
         )
-        accepte = self._valider(
-            sortie_id,
-            {
-                "effectif_entrant": 7,
-                "justification_ecart": "Écart constaté au comptage",
-            },
-        )
+        self.assertEqual(MouvementEffectif.objects.count(), initial_count)
+        self.assertFalse(SortieStock.objects.exists())
 
-        self.assertEqual(sans_justification.status_code, 400)
-        self.assertEqual(au_dessus.status_code, 400)
-        self.assertEqual(MouvementEffectif.objects.count(), initial_count + 2)
-        self.assertEqual(accepte.status_code, 200, accepte.data)
-        sortie = SortieStock.objects.get(pk=sortie_id)
+        sortie = self._sortie_validee(
+            lot,
+            effectif_entrant=7,
+            justification="Écart constaté au comptage",
+        )
         self.assertEqual(sortie.ecart_effectif, -3)
         self.assertEqual(
             self._mouvements_operation(sortie).get(type_mouvement="ENTREE").quantite,
@@ -230,79 +241,81 @@ class SortieStockTests(TestCase):
                     {self.hapa_a: 5},
                     finalite=finalite,
                 )
-                response = self._creer_sortie(lot)
-                self.assertEqual(response.status_code, 400, response.data)
-                self.assertIn("id_lot", response.data)
+                self._assert_refus("id_lot", self._preparer, lot)
 
     def test_hapa_partage_refuse_sans_mouvement(self):
         lot = self._mettre_en_stock("LOT-PARTAGE-A", {self.hapa_a: 6})
         self._mettre_en_stock("LOT-PARTAGE-B", {self.hapa_a: 4})
-        draft = self._creer_sortie(lot)
-        self.assertEqual(draft.status_code, 400, draft.data)
-        self.assertIn("partage le hapa", str(draft.data["id_lot"]))
+
+        detail = self._assert_refus("id_lot", self._preparer, lot)
+
+        self.assertIn("partage le hapa", str(detail["id_lot"]))
         self.assertFalse(
             MouvementEffectif.objects.filter(
                 operation_source_object_id__isnull=False,
             ).exists()
         )
 
-    def test_liste_tolere_un_brouillon_devenu_invalide(self):
-        lot = self._mettre_en_stock("LOT-BROUILLON-A", {self.hapa_a: 6})
-        draft = self._creer_sortie(lot)
-        self.assertEqual(draft.status_code, 201, draft.data)
-        # Un autre lot arrive dans le hapa après la création du brouillon.
-        self._mettre_en_stock("LOT-BROUILLON-B", {self.hapa_a: 4})
-
-        liste = self.client.get(f"/api/v1/effectifs/sorties-stock/?lot={lot.pk}")
-        self.assertEqual(liste.status_code, 200, liste.data)
-        resultats = liste.data["results"] if isinstance(liste.data, dict) else liste.data
-        self.assertIsNone(resultats[0]["id_bassin_source"])
-        self.assertIsNone(resultats[0]["reference_bassin_source"])
-
-        preview = self.client.get(
-            f"/api/v1/effectifs/sorties-stock/{draft.data['id']}/apercu/"
-        )
-        self.assertEqual(preview.status_code, 400, preview.data)
-        self.assertIn("partage le hapa", str(preview.data["id_lot"]))
-
     def test_destination_invalide_et_lot_absent_sont_refuses(self):
         lot = self._mettre_en_stock("LOT-DESTINATION", {self.hapa_a: 5})
-        response = self._creer_sortie(lot, destination=self.bassin_reproduction)
-        self.assertEqual(response.status_code, 400, response.data)
-        self.assertIn("id_bassin_destination", response.data)
+        self._assert_refus(
+            "id_bassin_destination",
+            self._preparer,
+            lot,
+            destination=self.bassin_reproduction,
+        )
 
         absent = self._lot("LOT-ABSENT")
-        absent_response = self._creer_sortie(absent)
-        self.assertEqual(absent_response.status_code, 400, absent_response.data)
-        self.assertIn("id_lot", absent_response.data)
+        self._assert_refus("id_lot", self._preparer, absent)
         self.assertEqual(MouvementEffectif.objects.count(), 1)
 
-    def test_sortie_active_unique_et_double_validation_refusees(self):
+    def test_sortie_active_unique(self):
         lot = self._mettre_en_stock("LOT-UNIQUE", {self.hapa_a: 5})
-        first = self._creer_sortie(lot)
-        second = self._creer_sortie(lot)
-        self.assertEqual(first.status_code, 201, first.data)
-        self.assertEqual(second.status_code, 400, second.data)
-
-        validated = self._valider(first.data["id"])
+        self._sortie_validee(lot)
         count_after_validation = MouvementEffectif.objects.count()
-        repeated = self._valider(first.data["id"])
-        self.assertEqual(validated.status_code, 200, validated.data)
-        self.assertEqual(repeated.status_code, 400, repeated.data)
+
+        self._assert_refus("id_lot", self._sortie_validee, lot)
+
         self.assertEqual(MouvementEffectif.objects.count(), count_after_validation)
+        self.assertEqual(SortieStock.objects.filter(lot=lot).count(), 1)
+
+    def test_ancien_flux_brouillon_et_validation_supprime(self):
+        lot = self._mettre_en_stock("LOT-ANCIEN-FLUX", {self.hapa_a: 5})
+        sortie = self._sortie_validee(lot)
+        base = "/api/v1/effectifs/sorties-stock/"
+
+        creation = self.client.post(
+            base,
+            {"id_lot": lot.pk, "id_bassin_destination": self.bassin_destination.pk},
+            format="json",
+        )
+        modification = self.client.patch(
+            f"{base}{sortie.pk}/",
+            {"observation": "Modification"},
+            format="json",
+        )
+        validation = self.client.post(
+            f"{base}{sortie.pk}/valider/",
+            {"poids_initial_g": "20.00"},
+            format="json",
+        )
+
+        self.assertEqual(creation.status_code, 405, creation.data)
+        self.assertEqual(modification.status_code, 405, modification.data)
+        self.assertEqual(validation.status_code, 404)
+        self.assertEqual(self.client.get(f"{base}{sortie.pk}/").status_code, 200)
 
     def test_annulation_restaure_les_effectifs_et_echoue_si_destination_vide(self):
         lot = self._mettre_en_stock("LOT-ANNULATION-A", {self.hapa_a: 5})
-        draft = self._creer_sortie(lot)
-        self.assertEqual(self._valider(draft.data["id"]).status_code, 200)
+        sortie = self._sortie_validee(lot)
         sans_motif = self.client.post(
-            f"/api/v1/effectifs/sorties-stock/{draft.data['id']}/annuler/",
+            f"/api/v1/effectifs/sorties-stock/{sortie.pk}/annuler/",
             {"motif": "   "},
             format="json",
         )
         self.assertEqual(sans_motif.status_code, 400, sans_motif.data)
         cancelled = self.client.post(
-            f"/api/v1/effectifs/sorties-stock/{draft.data['id']}/annuler/",
+            f"/api/v1/effectifs/sorties-stock/{sortie.pk}/annuler/",
             {"motif": "Correction"},
             format="json",
         )
@@ -325,8 +338,7 @@ class SortieStockTests(TestCase):
             "LOT-ANNULATION-B",
             {self.hapa_b: 5},
         )
-        second = self._creer_sortie(second_lot)
-        self.assertEqual(self._valider(second.data["id"]).status_code, 200)
+        second = self._sortie_validee(second_lot)
         enregistrer_mouvement(
             bassin=self.bassin_destination,
             espece=second_lot.espece,
@@ -336,33 +348,33 @@ class SortieStockTests(TestCase):
             saisi_par=self.user,
         )
         failed = self.client.post(
-            f"/api/v1/effectifs/sorties-stock/{second.data['id']}/annuler/",
+            f"/api/v1/effectifs/sorties-stock/{second.pk}/annuler/",
             {"motif": "Destination vidée"},
             format="json",
         )
         self.assertEqual(failed.status_code, 400, failed.data)
         self.assertEqual(
-            SortieStock.objects.get(pk=second.data["id"]).statut,
+            SortieStock.objects.get(pk=second.pk).statut,
             SortieStock.Statut.VALIDEE,
         )
 
-    def test_date_future_et_patch_apres_validation_sont_refuses(self):
+    def test_date_future_refusee(self):
         lot = self._mettre_en_stock("LOT-DATE", {self.hapa_a: 5})
-        future = self._creer_sortie(
-            lot,
-            date_sortie=timezone.now() + timedelta(days=1),
-        )
-        self.assertEqual(future.status_code, 400, future.data)
-        self.assertIn("date_sortie", future.data)
 
-        draft = self._creer_sortie(lot)
-        self.assertEqual(self._valider(draft.data["id"]).status_code, 200)
-        patched = self.client.patch(
-            f"/api/v1/effectifs/sorties-stock/{draft.data['id']}/",
-            {"observation": "Modification"},
-            format="json",
-        )
-        self.assertEqual(patched.status_code, 400, patched.data)
+        with self.assertRaises(ValidationError) as ctx:
+            with transaction.atomic():
+                preparation = self._preparer(lot)
+                enregistrer_sortie_stock_validee(
+                    lot=lot,
+                    preparation=preparation,
+                    date_sortie=timezone.now() + timedelta(days=1),
+                    effectif_entrant=5,
+                    justification_ecart="",
+                    utilisateur=self.user,
+                )
+
+        self.assertIn("date_sortie", ctx.exception.detail)
+        self.assertFalse(SortieStock.objects.exists())
 
     def test_prelevement_tient_compte_de_la_mortalite_precedente(self):
         lot = self._mettre_en_stock("LOT-MORTALITE", {self.hapa_a: 10})
@@ -376,15 +388,10 @@ class SortieStockTests(TestCase):
             lot_origine=lot,
             hapa=self.hapa_a,
         )
-        draft = self._creer_sortie(lot)
-        preview = self.client.get(
-            f"/api/v1/effectifs/sorties-stock/{draft.data['id']}/apercu/"
-        )
-        self.assertEqual(preview.status_code, 200, preview.data)
-        self.assertEqual(preview.data["effectif_sortant"], 7)
-        response = self._valider(draft.data["id"])
-        self.assertEqual(response.status_code, 200, response.data)
-        mouvement = self._mouvements_operation(
-            SortieStock.objects.get(pk=draft.data["id"])
-        ).get(type_mouvement="SORTIE")
+        with transaction.atomic():
+            self.assertEqual(self._preparer(lot)["effectif_sortant"], 7)
+
+        sortie = self._sortie_validee(lot)
+
+        mouvement = self._mouvements_operation(sortie).get(type_mouvement="SORTIE")
         self.assertEqual(mouvement.quantite, 7)

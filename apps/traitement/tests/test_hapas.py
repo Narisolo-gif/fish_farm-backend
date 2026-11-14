@@ -12,7 +12,6 @@ from apps.effectifs.models import (
     MouvementEffectif,
 )
 from apps.effectifs.services import (
-    enregistrer_evenement_mortalite_perte,
     enregistrer_mouvement,
     hapa_est_bloque,
     enregistrer_mouvement_operation,
@@ -26,6 +25,7 @@ from apps.traitement.services import (
     creer_traitement,
     supprimer_traitement,
 )
+from apps.effectifs.tests.outils import enregistrer_mortalite_perte
 
 
 User = get_user_model()
@@ -213,7 +213,7 @@ class TraitementHapaTests(TestCase):
         traitement = self._creer_traitement(hapas=self._hapas_data())
         cause = CauseMortalite.objects.create(libelle="Cause hapas")
         for hapa, quantity in ((self.hapa1, 1), (self.hapa2, 2)):
-            enregistrer_evenement_mortalite_perte(
+            enregistrer_mortalite_perte(
                 bassin=self.bassin,
                 hapa=hapa,
                 espece=Lot.Espece.CARPE,
@@ -294,7 +294,7 @@ class TraitementHapaTests(TestCase):
         traitement_suivant = self._creer_traitement(
             hapas=self._hapas_data(),
         )
-        enregistrer_evenement_mortalite_perte(
+        enregistrer_mortalite_perte(
             bassin=self.bassin,
             hapa=self.hapa1,
             espece=Lot.Espece.CARPE,

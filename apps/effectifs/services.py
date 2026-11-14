@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta
+from datetime import timedelta
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError, transaction
@@ -325,59 +325,6 @@ def solde_bassin_espece_date(bassin_id: int, espece: str, date_reference):
     for mouvement in mouvements:
         cumul += int(mouvement.sens) * int(mouvement.quantite)
     return cumul
-
-
-@transaction.atomic
-def enregistrer_evenement_mortalite_perte(
-    *,
-    bassin,
-    espece: str,
-    type_evenement: str,
-    quantite: int,
-    date_evenement,
-    saisi_par,
-    hapa=None,
-    cause_mortalite=None,
-    categorie_perte=None,
-    justification: str = "",
-):
-    if not isinstance(date_evenement, datetime):
-        date_evenement = timezone.make_aware(
-            datetime.combine(date_evenement, time.min),
-            timezone.get_current_timezone(),
-        )
-    return enregistrer_evenement(
-        validated_data={
-            "bassin": bassin,
-            "hapa": hapa,
-            "espece": espece,
-            "type_evenement": type_evenement,
-            "quantite": quantite,
-            "date_evenement": date_evenement,
-            "cause_mortalite": cause_mortalite,
-            "categorie_perte": categorie_perte,
-            "justification": justification,
-        },
-        utilisateur=saisi_par,
-    )
-
-
-@transaction.atomic
-def annuler_evenement_mortalite_perte(
-    evenement_id: int,
-    *,
-    motif_annulation: str,
-    saisi_par,
-):
-    evenement = annuler_evenement(
-        evenement_id,
-        motif=motif_annulation,
-        utilisateur=saisi_par,
-    )
-    mouvement_annulation = MouvementEffectif.objects.get(
-        annule_mouvement_id=evenement.mouvement_id,
-    )
-    return evenement, mouvement_annulation
 
 
 @transaction.atomic
@@ -815,118 +762,36 @@ def calculer_lignes_sortie(lot, date_locale):
     return lignes
 
 
-def _verifier_presence_lot(lot, date_sortie):
-    return calculer_lignes_sortie(
-        lot,
-        timezone.localtime(date_sortie).date(),
-    )
-
-
-@transaction.atomic
-def creer_sortie(validated_data, utilisateur):
-    lot = Lot.objects.select_for_update().get(pk=validated_data["lot"].pk)
-    bassin_destination = Bassin.objects.select_for_update().get(
-        pk=validated_data["bassin_destination"].pk
-    )
-    _verifier_bassin_destination(bassin_destination)
-    date_sortie = _normaliser_date_sortie(validated_data.get("date_sortie"))
-    _verifier_presence_lot(lot, date_sortie)
-    try:
-        with transaction.atomic():
-            return SortieStock.objects.create(
-                type_sortie=SortieStock.TypeSortie.GROSSISSEMENT,
-                lot=lot,
-                bassin_destination=bassin_destination,
-                espece=lot.espece,
-                date_sortie=date_sortie,
-                observation=validated_data.get("observation", ""),
-                utilisateur=utilisateur,
+def verifier_ecart_sortie(effectif_sortant, effectif_entrant, justification_ecart):
+    """Règle d'écart d'une sortie : entrant positif, plafonné au sortant, écart justifié."""
+    if effectif_entrant is None or effectif_entrant <= 0:
+        raise ValidationError({
+            "effectif_entrant": "L’effectif entrant doit être positif."
+        })
+    if effectif_entrant > effectif_sortant:
+        raise ValidationError({
+            "effectif_entrant": (
+                f"L’effectif entrant ({effectif_entrant}) ne peut pas dépasser "
+                f"la quantité sortie ({effectif_sortant})."
             )
-    except IntegrityError as exc:
-        cause = exc.__cause__
-        constraint_name = getattr(
-            getattr(cause, "diag", None),
-            "constraint_name",
-            None,
-        )
-        if (
-            constraint_name == "sortie_stock_lot_active_unique"
-            or "UNIQUE constraint failed: effectifs_sortiestock.lot_id"
-            in str(cause)
-        ):
-            raise ValidationError({
-                "id_lot": "Une sortie active existe déjà pour ce lot."
-            }) from exc
-        raise
+        })
+    if effectif_entrant != effectif_sortant and not (justification_ecart or "").strip():
+        raise ValidationError({
+            "justification_ecart": "Une justification est obligatoire en cas d’écart."
+        })
 
 
-@transaction.atomic
-def modifier_sortie(sortie_id, validated_data):
-    sortie = SortieStock.objects.select_for_update().get(pk=sortie_id)
-    if sortie.statut != SortieStock.Statut.BROUILLON:
-        raise ValidationError({"statut": "Seul un brouillon peut être modifié."})
-    lot = Lot.objects.select_for_update().get(pk=sortie.lot_id)
-    bassin_destination = Bassin.objects.select_for_update().get(
-        pk=validated_data.get(
-            "bassin_destination",
-            sortie.bassin_destination,
-        ).pk
-    )
-    _verifier_bassin_destination(bassin_destination)
-    date_sortie = _normaliser_date_sortie(
-        validated_data.get("date_sortie", sortie.date_sortie)
-    )
-    _verifier_presence_lot(lot, date_sortie)
-    sortie.bassin_destination = bassin_destination
-    sortie.date_sortie = date_sortie
-    if "observation" in validated_data:
-        sortie.observation = validated_data["observation"]
-    sortie.save()
-    return sortie
+def preparer_sortie_stock(lot, bassin_destination, date_locale):
+    """Verrouille et contrôle une sortie totale du lot, sans rien écrire.
 
-
-def _apres_validation_grossissement(sortie, poids_initial_g=None):
-    from .signals import sortie_stock_validee
-
-    # Le poids est transmis tel quel : sa règle vit chez le récepteur.
-    sortie_stock_validee.send(
-        sender=SortieStock,
-        sortie=sortie,
-        utilisateur=sortie.validee_par,
-        poids_initial_g=poids_initial_g,
-    )
-
-
-def _avant_annulation_grossissement(sortie, utilisateur):
-    from .signals import sortie_stock_avant_annulation
-
-    sortie_stock_avant_annulation.send(
-        sender=SortieStock,
-        sortie=sortie,
-        utilisateur=utilisateur,
-    )
-
-
-@transaction.atomic
-def valider_sortie(
-    sortie_id,
-    effectif_entrant=None,
-    justification_ecart="",
-    *,
-    utilisateur,
-    poids_initial_g=None,
-):
-    sortie = SortieStock.objects.select_for_update().get(pk=sortie_id)
-    if sortie.statut != SortieStock.Statut.BROUILLON:
-        raise ValidationError({"statut": "Seul un brouillon peut être validé."})
-    lot = Lot.objects.select_for_update().get(pk=sortie.lot_id)
-    date_sortie = _normaliser_date_sortie(sortie.date_sortie)
-    lignes_calculees = calculer_lignes_sortie(
-        lot,
-        timezone.localtime(date_sortie).date(),
-    )
-    bassin_source_id = lignes_calculees[0]["hapa"].bassin_id
-    bassin_ids = sorted({bassin_source_id, sortie.bassin_destination_id})
+    Le lot doit être verrouillé par l'appelant. Renvoie les lignes calculées
+    (une par hapa), le bassin source et le bassin destination verrouillés,
+    et la quantité sortie.
+    """
+    lignes = calculer_lignes_sortie(lot, date_locale)
+    bassin_source_id = lignes[0]["hapa"].bassin_id
+    bassin_ids = sorted({bassin_source_id, bassin_destination.pk})
+    # Ordre de verrouillage fixe (par identifiant) pour éviter les interblocages.
     bassins = {
         bassin.pk: bassin
         for bassin in Bassin.objects.select_for_update()
@@ -936,11 +801,12 @@ def valider_sortie(
     if len(bassins) != len(bassin_ids):
         raise ValidationError({"id_bassin_destination": "Un bassin est introuvable."})
     bassin_source = bassins[bassin_source_id]
-    bassin_destination = bassins[sortie.bassin_destination_id]
+    bassin_destination = bassins[bassin_destination.pk]
     if bassin_source.categorie != Bassin.Categorie.STOCKS:
         raise ValidationError({"id_lot": "Le lot n’est pas dans un bassin de stock."})
     _verifier_bassin_destination(bassin_destination)
-    hapa_ids = sorted(ligne["hapa"].pk for ligne in lignes_calculees)
+
+    hapa_ids = sorted(ligne["hapa"].pk for ligne in lignes)
     hapas_verrouilles = list(
         Hapa.objects.select_for_update()
         .filter(pk__in=hapa_ids)
@@ -948,23 +814,86 @@ def valider_sortie(
     )
     if len(hapas_verrouilles) != len(hapa_ids):
         raise ValidationError({"id_lot": "Un hapa du lot est introuvable."})
-    date_locale = timezone.localtime(date_sortie).date()
-    lignes_calculees = calculer_lignes_sortie(lot, date_locale)
-    effectif_sortant = sum(ligne["quantite"] for ligne in lignes_calculees)
+    for hapa in hapas_verrouilles:
+        if hapa_est_bloque(hapa.pk):
+            raise ValidationError({
+                "id_lot": f"Le hapa {hapa.nom} est bloqué : aucune sortie n’est possible."
+            })
+
+    if SortieStock.objects.filter(
+        lot=lot,
+        statut=SortieStock.Statut.VALIDEE,
+    ).exists():
+        raise ValidationError({
+            "id_lot": "Une sortie active existe déjà pour ce lot."
+        })
+
+    # Recalcul sous verrou : l'effectif a pu changer depuis la première lecture.
+    lignes = calculer_lignes_sortie(lot, date_locale)
+    effectif_sortant = sum(ligne["quantite"] for ligne in lignes)
     if effectif_sortant <= 0:
         raise ValidationError({"id_lot": "L’effectif sortant doit être positif."})
-    if effectif_entrant is None:
-        effectif_entrant = effectif_sortant
-    if effectif_entrant <= 0:
-        raise ValidationError({"effectif_entrant": "L’effectif entrant doit être positif."})
-    if effectif_entrant > effectif_sortant:
-        raise ValidationError({
-            "effectif_entrant": "L’effectif entrant ne peut pas dépasser l’effectif sortant."
-        })
-    if effectif_entrant != effectif_sortant and not justification_ecart.strip():
-        raise ValidationError({
-            "justification_ecart": "Une justification est obligatoire en cas d’écart."
-        })
+    return {
+        "lignes": lignes,
+        "bassin_source": bassin_source,
+        "bassin_destination": bassin_destination,
+        "effectif_sortant": effectif_sortant,
+    }
+
+
+@transaction.atomic
+def enregistrer_sortie_stock_validee(
+    *,
+    lot,
+    preparation,
+    date_sortie,
+    effectif_entrant,
+    justification_ecart,
+    utilisateur,
+    observation="",
+):
+    """Écrit une sortie totale validée : sortie, lignes et mouvements du registre.
+
+    `preparation` vient de `preparer_sortie_stock`, appelée dans la même
+    transaction. Aucun brouillon ni signal : l'appelant enchaîne ses propres
+    écritures dans la même transaction.
+    """
+    date_sortie = _normaliser_date_sortie(date_sortie)
+    date_locale = timezone.localtime(date_sortie).date()
+    effectif_sortant = preparation["effectif_sortant"]
+    verifier_ecart_sortie(effectif_sortant, effectif_entrant, justification_ecart)
+    bassin_source = preparation["bassin_source"]
+    bassin_destination = preparation["bassin_destination"]
+
+    try:
+        with transaction.atomic():
+            sortie = SortieStock.objects.create(
+                type_sortie=SortieStock.TypeSortie.GROSSISSEMENT,
+                lot=lot,
+                bassin_destination=bassin_destination,
+                espece=lot.espece,
+                date_sortie=date_sortie,
+                statut=SortieStock.Statut.VALIDEE,
+                observation=observation or "",
+                effectif_sortant=effectif_sortant,
+                effectif_entrant=effectif_entrant,
+                justification_ecart=(justification_ecart or "").strip(),
+                utilisateur=utilisateur,
+                validee_par=utilisateur,
+                validee_le=timezone.now(),
+            )
+    except IntegrityError as exc:
+        cause = exc.__cause__
+        constraint_name = getattr(
+            getattr(cause, "diag", None),
+            "constraint_name",
+            None,
+        )
+        if constraint_name == "sortie_stock_lot_active_unique":
+            raise ValidationError({
+                "id_lot": "Une sortie active existe déjà pour ce lot."
+            }) from exc
+        raise
 
     SortieStockLigne.objects.bulk_create([
         SortieStockLigne(
@@ -972,9 +901,9 @@ def valider_sortie(
             hapa=ligne["hapa"],
             quantite=ligne["quantite"],
         )
-        for ligne in lignes_calculees
+        for ligne in preparation["lignes"]
     ])
-    for ligne in lignes_calculees:
+    for ligne in preparation["lignes"]:
         enregistrer_mouvement_operation(
             operation=sortie,
             bassin=bassin_source,
@@ -996,93 +925,89 @@ def valider_sortie(
         saisi_par=utilisateur,
         lot_origine=lot,
     )
-
-    sortie.date_sortie = date_sortie
-    sortie.effectif_sortant = effectif_sortant
-    sortie.effectif_entrant = effectif_entrant
-    sortie.justification_ecart = justification_ecart.strip()
-    sortie.statut = SortieStock.Statut.VALIDEE
-    sortie.validee_par = utilisateur
-    sortie.validee_le = timezone.now()
-    sortie.save()
-    _apres_validation_grossissement(sortie, poids_initial_g)
     return sortie
+
+
+def _avant_annulation_grossissement(sortie, utilisateur):
+    from .signals import sortie_stock_avant_annulation
+
+    sortie_stock_avant_annulation.send(
+        sender=SortieStock,
+        sortie=sortie,
+        utilisateur=utilisateur,
+    )
 
 
 @transaction.atomic
 def annuler_sortie(sortie_id, motif, utilisateur):
     sortie = SortieStock.objects.select_for_update().get(pk=sortie_id)
-    if sortie.statut not in {
-        SortieStock.Statut.BROUILLON,
-        SortieStock.Statut.VALIDEE,
-    }:
+    if sortie.statut != SortieStock.Statut.VALIDEE:
         raise ValidationError({
-            "statut": "Seul un brouillon ou une sortie validée peut être annulé."
+            "statut": "Seule une sortie validée peut être annulée."
         })
     if not motif or not motif.strip():
         raise ValidationError({"motif": "Le motif d’annulation est obligatoire."})
 
-    if sortie.statut == SortieStock.Statut.VALIDEE:
-        _avant_annulation_grossissement(sortie, utilisateur)
-        content_type = ContentType.objects.get_for_model(sortie)
-        mouvements = MouvementEffectif.objects.filter(
-            operation_source_content_type=content_type,
-            operation_source_object_id=sortie.pk,
+    _avant_annulation_grossissement(sortie, utilisateur)
+    content_type = ContentType.objects.get_for_model(sortie)
+    mouvements = MouvementEffectif.objects.filter(
+        operation_source_content_type=content_type,
+        operation_source_object_id=sortie.pk,
+    )
+    mouvements_operation = list(
+        mouvements.filter(
+            type_mouvement__in=[
+                MouvementEffectif.TypeMouvement.ENTREE,
+                MouvementEffectif.TypeMouvement.SORTIE,
+            ]
         )
-        mouvements_operation = list(
-            mouvements.filter(
-                type_mouvement__in=[
-                    MouvementEffectif.TypeMouvement.ENTREE,
-                    MouvementEffectif.TypeMouvement.SORTIE,
-                ]
-            )
-            .select_for_update()
-            .select_related("bassin")
-            .order_by("id")
+        .select_for_update()
+        .select_related("bassin")
+        .order_by("id")
+    )
+    mouvements_destination = [
+        mouvement
+        for mouvement in mouvements_operation
+        if (
+            mouvement.bassin_id == sortie.bassin_destination_id
+            and mouvement.type_mouvement
+            == MouvementEffectif.TypeMouvement.ENTREE
         )
-        mouvements_destination = [
-            mouvement
-            for mouvement in mouvements_operation
-            if (
-                mouvement.bassin_id == sortie.bassin_destination_id
-                and mouvement.type_mouvement
-                == MouvementEffectif.TypeMouvement.ENTREE
-            )
-        ]
-        mouvements_source = [
-            mouvement
-            for mouvement in mouvements_operation
-            if mouvement.type_mouvement == MouvementEffectif.TypeMouvement.SORTIE
-        ]
-        if len(mouvements_source) != sortie.lignes.count():
-            raise ValidationError({
-                "detail": "Les mouvements de sortie source sont incomplets."
-            })
-        if len(mouvements_destination) != 1:
-            raise ValidationError({
-                "detail": "Mouvement d’entrée de destination introuvable."
-            })
-        bassin_ids = sorted({
-            sortie.bassin_destination_id,
-            *(mouvement.bassin_id for mouvement in mouvements_source),
+    ]
+    mouvements_source = [
+        mouvement
+        for mouvement in mouvements_operation
+        if mouvement.type_mouvement == MouvementEffectif.TypeMouvement.SORTIE
+    ]
+    if len(mouvements_source) != sortie.lignes.count():
+        raise ValidationError({
+            "detail": "Les mouvements de sortie source sont incomplets."
         })
-        list(
-            Bassin.objects.select_for_update()
-            .filter(pk__in=bassin_ids)
-            .order_by("pk")
+    if len(mouvements_destination) != 1:
+        raise ValidationError({
+            "detail": "Mouvement d’entrée de destination introuvable."
+        })
+    bassin_ids = sorted({
+        sortie.bassin_destination_id,
+        *(mouvement.bassin_id for mouvement in mouvements_source),
+    })
+    list(
+        Bassin.objects.select_for_update()
+        .filter(pk__in=bassin_ids)
+        .order_by("pk")
+    )
+    for mouvement_destination in reversed(mouvements_destination):
+        annuler_mouvement(
+            mouvement_destination.pk,
+            motif_annulation=motif,
+            saisi_par=utilisateur,
         )
-        for mouvement_destination in reversed(mouvements_destination):
-            annuler_mouvement(
-                mouvement_destination.pk,
-                motif_annulation=motif,
-                saisi_par=utilisateur,
-            )
-        for mouvement_source in reversed(mouvements_source):
-            annuler_mouvement(
-                mouvement_source.pk,
-                motif_annulation=motif,
-                saisi_par=utilisateur,
-            )
+    for mouvement_source in reversed(mouvements_source):
+        annuler_mouvement(
+            mouvement_source.pk,
+            motif_annulation=motif,
+            saisi_par=utilisateur,
+        )
 
     sortie.statut = SortieStock.Statut.ANNULEE
     sortie.motif_annulation = motif.strip()

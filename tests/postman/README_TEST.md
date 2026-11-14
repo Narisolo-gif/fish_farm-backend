@@ -56,7 +56,7 @@ Les soldes sont lus dans le registre et récapitulés dans la console Postman/Ne
 
 - `Lot.eclosion` est un `OneToOneField` : le parcours crée une ponte/éclosion distincte par lot au lieu de rattacher les trois lots à une seule éclosion.
 - Pour vérifier la neutralité d'un hapa après vidage, le parcours annule l'entrée registre du lot de test VENTE sur STK_4, puis y entre le lot C GROSSISSEMENT.
-- La sortie du lot B de finalité `VENTE` est refusée par le service de sortie; aucun brouillon ne peut donc être créé puis annulé. La collection vérifie ce refus.
+- La sortie du lot B de finalité `VENTE` est refusée (aperçu et validation, 400 sur `id_lot`). Il n'existe plus de brouillon de sortie.
 - La liste des mouvements ne filtre pas `type_mouvement` (le paramètre est ignoré). Le test demandé d'un filtre `ENTREE` est conservé et peut échouer.
 - Un événement de mortalité ou une distribution sans hapa est accepté en bassin ayant du poisson, malgré les refus attendus dans le scénario. Les assertions sont conservées; si l'API accepte, le test annule ensuite l'enregistrement inattendu.
 - Aucun endpoint santé dédié n'existe dans les URLs consultées; la préparation vérifie la disponibilité par une lecture authentifiée réelle.
@@ -79,15 +79,49 @@ npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.j
 
 Valeur à vérifier à la main : le lot A compte 1 000 poissons ; à 10 %, la cible est de 100 poissons ; 100 poissons pour 2 537,50 g donnent 25,375 g, soit **25,38 g** après arrondi.
 
-## Poids initial obligatoire à la validation d'une sortie
+## Sortie vers le grossissement en une seule transaction
 
-Le lot de grossissement est créé à la validation de la sortie de stock ; son poids moyen initial est désormais **obligatoire** dans le body de `POST /api/v1/effectifs/sorties-stock/{id}/valider/` :
+Il n'y a plus de brouillon ni de validation en deux temps. Deux appels, réservés à l'Administrateur et au Gestionnaire :
+
+- `POST /api/v1/grossissement/lots-grossissement/apercu-sortie/` : aperçu en lecture seule (quantité sortie, lignes par hapa, code proposé, taille cible, poids moyen initial calculé, conformité de l'échantillon, écart). Mêmes contrôles que la validation ; rien n'est écrit.
+- `POST /api/v1/grossissement/lots-grossissement/` : sortie totale du stock, mouvements `SORTIE` et `ENTREE`, lot d'origine `EN_GROSSISSEMENT` et création du lot, dans une seule transaction.
 
 ```json
-{ "poids_initial_g": "20.00" }
+{
+  "id_lot": 12,
+  "id_bassin_destination": 4,
+  "date_pesee_initiale": "2026-03-01",
+  "pourcentage_echantillon": "10",
+  "nombre_poissons_peses": 200,
+  "poids_total_g": "4000.00",
+  "confirmer_echantillon_non_conforme": false,
+  "code": "",
+  "date_mise_en_place": "2026-03-02",
+  "effectif_entrant": 2000,
+  "justification_ecart": ""
+}
 ```
 
-Sans ce champ (ou avec une valeur ≤ 0), la validation est refusée en 400 sur `poids_initial_g` et la sortie reste en brouillon. Toutes les validations des deux collections envoient `"poids_initial_g": "20.00"`. Le poids reste corrigeable ensuite par `PATCH` du lot de grossissement.
+`code` vide : le code proposé (`GR-AAAA-NNNN`) est retenu. Le champ `poids_initial_g` est renommé `poids_moyen_initial` (migration `0006`). Ni l'un ni l'autre n'est accepté en écriture, à la validation comme en `PATCH` du lot : le poids moyen initial est calculé depuis la pesée initiale (P0) et tracé, en lecture seule, avec `date_pesee_initiale`, `pourcentage_echantillon_initial`, `nombre_poissons_peses_initial` et `poids_total_initial_g`. Les anciennes routes `POST /api/v1/effectifs/sorties-stock/` et `PATCH …/{id}/` répondent 405, `…/{id}/valider/` répond 404 ; la lecture et `…/{id}/annuler/` restent disponibles.
+
+Les requêtes adaptées des dossiers 03 à 07 (collection grossissement) et 08 à 10 (collection E2E) envoient un échantillon P0 à la taille cible (10 %) pesant 20 g par poisson (40 g pour le lot B du dossier 07), soit un `poids_moyen_initial` de 20,00 g, comme l'ancien `poids_initial_g`.
+
+### Dossier « 08 Sortie grossissement »
+
+Dossier indépendant de `grossissement_sortie_lot.postman_collection.json` : il se connecte avec les trois comptes de l'environnement et crée ses bassins, ses cinq lots (2 000 poissons chacun) et leurs stocks, à dates fixes (stock le 2026-02-10, pesée initiale le 2026-03-01, mise en bassin le 2026-03-02) et à références uniques par exécution.
+
+```powershell
+npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "08 Sortie grossissement"
+```
+
+Scénarios couverts : aperçu sans écriture ; cas nominal (200 poissons pesés pour 4 000 g, soit 20,00 g, aucune `Pesee`) ; écart en moins justifié ; écart sans justification ; écart en plus refusé ; échantillon non conforme (150 pour une cible de 200) refusé puis accepté avec confirmation ; échantillon supérieur à l'effectif entrant ; dates (mise en bassin avant la pesée, date future) ; bassin d'une autre catégorie, avec hapa, déjà à deux lots, de même espèce ; deux espèces dans un même bassin ; code déjà utilisé puis code saisi ; ancien flux refusé ; permissions (employé, sans authentification, compte désactivé) ; trace P0 en lecture seule. Après chaque refus, le dossier vérifie que rien n'a été écrit : aucune sortie, aucun lot de grossissement, stade `EN_STOCK`, effectif du hapa de stock intact.
+
+Écarts avec le scénario demandé :
+
+- **Écart en plus** : refusé, même justifié (décision du 2026-11-14 : l'effectif entrant ne dépasse jamais la quantité sortie, contrainte `sortie_stock_entrant_lte_sortant` conservée).
+- **Date bloquée par le blocage de saisie** : non reproductible par l'API. Le blocage porte sur les hapas d'un traitement clôturé, jamais sur un hapa de stock, et `JOURS_SAISIE_RETROACTIVE` est désactivé (`None`). Les deux contrôles sont appliqués par le service, sans requête dédiée.
+- **Autres finalités de sortie** : la sortie de stock n'a que le type `GROSSISSEMENT` ; il n'existe pas d'autre finalité à valider « comme avant ».
+- **Bassin avec hapa** : l'API refuse la création d'un hapa en bassin de grossissement. Le dossier crée le bassin en `REPRODUCTION`, y ajoute un hapa, puis le passe en `GROSSISSEMENT`.
 
 ## Indicateurs (collection grossissement)
 

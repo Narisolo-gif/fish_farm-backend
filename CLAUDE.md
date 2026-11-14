@@ -36,11 +36,12 @@ Tests E2E Postman : `tests/postman/` (collection séquentielle 00→12, base vid
 - `MouvementEffectif` est un journal **append-only** : `save()` sur un objet existant et `delete()` lèvent une erreur. Une correction se fait **uniquement** par un mouvement `ANNULATION` lié (`annule_mouvement`), via `annuler_mouvement`.
 - Les effectifs ne sont jamais stockés : ils se calculent avec Σ(sens × quantité) dans `apps/effectifs/calculs.py` (`effectif_vivant`, `effectifs_du_bassin`, `effectifs_par_hapa`, `lots_presents_dans_hapa`).
 - Toute opération qui fait bouger des poissons (traitement, mise en stock, mortalité/perte, sortie) écrit ses mouvements via `apps/effectifs/services.py` (`enregistrer_mouvement_operation`), dans la même transaction.
-- La mortalité, la perte et les sorties de stock sont **centralisées dans `effectifs`**, et la consommation dans `provende.ConsommationProvende`. Il n'y a pas de modèle de mortalité ou de consommation par domaine : `architecture_backend.md` est obsolète sur ce point.
-- `effectifs` ne doit pas importer `grossissement` : il passe par les signaux `sortie_stock_validee` et `sortie_stock_avant_annulation` (`apps/effectifs/signals.py`), consommés par `apps/grossissement/receivers.py`.
+- La mortalité, la perte et les sorties de stock sont **centralisées dans `effectifs`**, et la consommation dans `provende.ConsommationProvende`. Il n'y a pas de modèle de mortalité ou de consommation par domaine.
+- `effectifs` ne doit pas importer `grossissement` : il passe par les signaux `sortie_stock_avant_annulation` et `mouvement_avant_annulation` (`apps/effectifs/signals.py`), consommés par `apps/grossissement/receivers.py`.
+- La sortie vers le grossissement est faite par `grossissement.services.valider_sortie_grossissement` (une transaction, sans brouillon ni signal ; `SortieStock.statut` vaut `VALIDEE` ou `ANNULEE`), qui s'appuie sur `effectifs.services.preparer_sortie_stock` et `enregistrer_sortie_stock_validee`. Aperçu : `apercu_sortie_grossissement`.
 
 ## Cycle de vie d'un lot (`Lot.stade`)
-`CREEE` → `EN_TRAITEMENT` (seulement si `parcours_production = TRAITEMENT_REQUIS` ; bassin de catégorie TRAITEMENT, hapas obligatoires) → `EN_STOCK` → (SortieStock BROUILLON → VALIDEE) `EN_GROSSISSEMENT` → `CLOTUREE`.
+`CREEE` → `EN_TRAITEMENT` (seulement si `parcours_production = TRAITEMENT_REQUIS` ; bassin de catégorie TRAITEMENT, hapas obligatoires) → `EN_STOCK` → (sortie totale validée et création du lot, une transaction) `EN_GROSSISSEMENT` → `CLOTUREE`.
 
 ## Conventions
 - Chaîne des couches : `models` (contraintes en base : `CheckConstraint`, `UniqueConstraint` conditionnelles) → `serializers` → `viewsets` minces → `services.py` pour la logique métier.
@@ -51,4 +52,3 @@ Tests E2E Postman : `tests/postman/` (collection séquentielle 00→12, base vid
 ## Points connus à corriger
 - `config/settings.py` : `SECRET_KEY` en dur, `DEBUG=True`, `ALLOWED_HOSTS=[]` ; durée de vie du jeton d'accès JWT (15 j) supérieure à celle du refresh (7 j).
 - `apps.core.urls` est inclus deux fois (`/api/` et `/api/v1/auth/`).
-- Restes : dossier `fish_farm-backend/` (app vide, non installée), `db.sqlite3` et `_test_settings_effectifs.py` vides.

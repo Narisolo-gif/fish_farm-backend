@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -18,10 +19,12 @@ from apps.effectifs.services import (
     effectif_vivant,
     enregistrer_mouvement,
 )
-from apps.grossissement.models import LotGrossissement
+from apps.grossissement.calculs import taille_echantillon_cible
+from apps.grossissement.models import LotGrossissement, Pesee
 from apps.grossissement.services import (
     cloturer_lot_grossissement,
     creer_pesee,
+    valider_sortie_grossissement,
     verifier_capacite_bassin,
 )
 from apps.lots.models import Lot
@@ -33,6 +36,9 @@ from apps.traitement.services import cloturer_traitement, creer_traitement
 
 
 User = get_user_model()
+
+URL_LOTS = "/api/v1/grossissement/lots-grossissement/"
+URL_APERCU = f"{URL_LOTS}apercu-sortie/"
 
 
 class LotGrossissementTests(TestCase):
@@ -173,28 +179,37 @@ class LotGrossissementTests(TestCase):
         )
         return lot, mise_en_stock
 
-    def _creer_sortie(self, lot, *, il_y_a_jours=0, destination=None):
-        data = {
+    def _donnees_sortie(
+        self,
+        lot,
+        quantite,
+        *,
+        il_y_a_jours=0,
+        destination=None,
+        entree=None,
+        poids_moyen=Decimal("20"),
+        **extra,
+    ):
+        """Données complètes : sortie, pesée initiale P0 (cible atteinte) et lot."""
+        jour = (self.today - timedelta(days=il_y_a_jours)).isoformat()
+        nombre = taille_echantillon_cible(quantite, 10)
+        donnees = {
             "id_lot": lot.pk,
             "id_bassin_destination": (destination or self.bassin_destination).pk,
+            "date_pesee_initiale": jour,
+            "pourcentage_echantillon": "10",
+            "nombre_poissons_peses": nombre,
+            "poids_total_g": str(poids_moyen * nombre),
+            "date_mise_en_place": jour,
+            "effectif_entrant": quantite if entree is None else entree,
         }
-        if il_y_a_jours:
-            data["date_sortie"] = (
-                timezone.now() - timedelta(days=il_y_a_jours)
-            ).isoformat()
-        return self.client.post(
-            "/api/v1/effectifs/sorties-stock/",
-            data,
-            format="json",
-        )
+        if entree is not None and entree != quantite:
+            donnees["justification_ecart"] = "Écart constaté au comptage"
+        donnees.update(extra)
+        return donnees
 
-    def _valider(self, sortie_id, data=None):
-        # Le poids initial est obligatoire à la création du lot de grossissement.
-        return self.client.post(
-            f"/api/v1/effectifs/sorties-stock/{sortie_id}/valider/",
-            {"poids_initial_g": "20.00", **(data or {})},
-            format="json",
-        )
+    def _valider(self, donnees):
+        return self.client.post(URL_LOTS, donnees, format="json")
 
     def _annuler(self, sortie_id, motif="Correction"):
         return self.client.post(
@@ -202,6 +217,18 @@ class LotGrossissementTests(TestCase):
             {"motif": motif},
             format="json",
         )
+
+    def _etat(self):
+        """Compteurs servant à vérifier qu'un refus n'a rien écrit."""
+        return (
+            MouvementEffectif.objects.count(),
+            SortieStock.objects.count(),
+            LotGrossissement.objects.count(),
+        )
+
+    def _assert_rien_ecrit(self, etat_avant, lot):
+        self.assertEqual(self._etat(), etat_avant)
+        self.assertEqual(Lot.objects.get(pk=lot.pk).stade, Lot.Stade.EN_STOCK)
 
     def _sortie_validee(
         self,
@@ -219,21 +246,15 @@ class LotGrossissementTests(TestCase):
             traiter=traiter,
             il_y_a_jours=il_y_a_jours + 1 if il_y_a_jours else 0,
         )
-        draft = self._creer_sortie(
+        validated = self._valider(self._donnees_sortie(
             lot,
+            quantite,
             il_y_a_jours=il_y_a_jours,
             destination=destination,
-        )
-        self.assertEqual(draft.status_code, 201, draft.data)
-        data = {}
-        if entree is not None:
-            data = {
-                "effectif_entrant": entree,
-                "justification_ecart": "Écart constaté au comptage",
-            }
-        validated = self._valider(draft.data["id"], data)
-        self.assertEqual(validated.status_code, 200, validated.data)
-        return lot, mise_en_stock, draft.data["id"], validated.data
+            entree=entree,
+        ))
+        self.assertEqual(validated.status_code, 201, validated.data)
+        return lot, mise_en_stock, validated.data["id_sortie_stock"], validated.data
 
     def test_validation_cree_lot_grossissement_et_change_le_stade(self):
         lot, _, sortie_id, payload = self._sortie_validee("LOT-VALIDATION", 10)
@@ -245,10 +266,31 @@ class LotGrossissementTests(TestCase):
         self.assertEqual(grossissement.espece, lot.espece)
         self.assertEqual(grossissement.effectif_initial, 10)
         self.assertEqual(grossissement.statut, LotGrossissement.Statut.ACTIF)
-        # Le poids initial est saisi à la validation de la sortie (obligatoire).
-        self.assertEqual(grossissement.poids_initial_g, Decimal("20.00"))
+        # Poids moyen initial calculé depuis la pesée initiale P0, tracée sur le lot.
+        self.assertEqual(grossissement.poids_moyen_initial, Decimal("20.00"))
+        self.assertEqual(grossissement.date_pesee_initiale, self.today)
+        self.assertEqual(grossissement.pourcentage_echantillon_initial, Decimal("10"))
+        self.assertEqual(grossissement.nombre_poissons_peses_initial, 1)
+        self.assertEqual(grossissement.poids_total_initial_g, Decimal("20.00"))
+        self.assertEqual(payload["poids_moyen_initial"], "20.00")
+        self.assertFalse(Pesee.objects.exists())
         lot.refresh_from_db()
         self.assertEqual(lot.stade, Lot.Stade.EN_GROSSISSEMENT)
+        sortie = SortieStock.objects.get(pk=sortie_id)
+        self.assertEqual(sortie.statut, SortieStock.Statut.VALIDEE)
+        self.assertEqual(sortie.effectif_sortant, 10)
+        # Mouvements de la sortie seulement (l'ENTREE de la mise en stock porte aussi le lot).
+        mouvements = MouvementEffectif.objects.filter(
+            operation_source_content_type=ContentType.objects.get_for_model(SortieStock),
+            operation_source_object_id=sortie.pk,
+        )
+        self.assertEqual(
+            set(mouvements.values_list("type_mouvement", "bassin_id", "quantite")),
+            {
+                ("SORTIE", self.bassin_stock.pk, 10),
+                ("ENTREE", self.bassin_destination.pk, 10),
+            },
+        )
 
     def test_ecart_effectif_initial_est_base_sur_entree(self):
         lot, _, sortie_id, _ = self._sortie_validee(
@@ -260,19 +302,216 @@ class LotGrossissementTests(TestCase):
         self.assertEqual(grossissement.effectif_initial, 7)
         self.assertNotEqual(grossissement.effectif_initial, 10)
 
-    def test_lot_non_en_stock_annule_la_validation_et_ses_mouvements(self):
+    def test_lot_non_en_stock_refuse_sans_rien_ecrire(self):
         lot, _ = self._mettre_en_stock("LOT-MAUVAIS-STade", 10)
         lot.stade = Lot.Stade.CREEE
         lot.save(update_fields=["stade"])
-        draft = self._creer_sortie(lot)
-        self.assertEqual(draft.status_code, 201, draft.data)
-        mouvements_avant = MouvementEffectif.objects.count()
+        etat = self._etat()
 
-        response = self._valider(draft.data["id"])
+        response = self._valider(self._donnees_sortie(lot, 10))
 
         self.assertEqual(response.status_code, 400, response.data)
-        self.assertEqual(MouvementEffectif.objects.count(), mouvements_avant)
-        self.assertFalse(LotGrossissement.objects.exists())
+        self.assertIn("id_lot", response.data)
+        self.assertEqual(self._etat(), etat)
+
+    def test_ecart_sans_justification_ou_en_plus_refuse_sans_rien_ecrire(self):
+        lot, _ = self._mettre_en_stock("LOT-ECART-REFUS", 10)
+        etat = self._etat()
+
+        sans_justification = self._valider(
+            self._donnees_sortie(lot, 10, entree=9, justification_ecart="")
+        )
+        # Écart en plus : refusé, même justifié (effectif entrant ≤ quantité sortie).
+        en_plus = self._valider(self._donnees_sortie(lot, 10, entree=11))
+
+        self.assertEqual(sans_justification.status_code, 400, sans_justification.data)
+        self.assertIn("justification_ecart", sans_justification.data)
+        self.assertEqual(en_plus.status_code, 400, en_plus.data)
+        self.assertIn("effectif_entrant", en_plus.data)
+        self._assert_rien_ecrit(etat, lot)
+
+    def test_echantillon_non_conforme_exige_une_confirmation(self):
+        lot, _ = self._mettre_en_stock("LOT-ECHANTILLON", 20)
+        donnees = self._donnees_sortie(
+            lot,
+            20,
+            nombre_poissons_peses=1,
+            poids_total_g="21.00",
+        )
+        etat = self._etat()
+
+        refuse = self._valider(donnees)
+
+        self.assertEqual(refuse.status_code, 400, refuse.data)
+        self.assertIn("echantillon_non_conforme", refuse.data)
+        self.assertEqual(
+            refuse.data["lignes_non_conformes"][0]["taille_echantillon_cible"],
+            2,
+        )
+        self._assert_rien_ecrit(etat, lot)
+
+        accepte = self._valider({**donnees, "confirmer_echantillon_non_conforme": True})
+        self.assertEqual(accepte.status_code, 201, accepte.data)
+        self.assertEqual(accepte.data["poids_moyen_initial"], "21.00")
+
+    def test_echantillon_superieur_a_l_effectif_entrant_refuse(self):
+        lot, _ = self._mettre_en_stock("LOT-ECHANTILLON-GRAND", 10)
+        etat = self._etat()
+
+        response = self._valider(self._donnees_sortie(
+            lot,
+            10,
+            entree=5,
+            nombre_poissons_peses=6,
+            poids_total_g="120.00",
+        ))
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn("nombre_poissons_peses", response.data)
+        self._assert_rien_ecrit(etat, lot)
+
+    def test_dates_incoherentes_refusees(self):
+        lot, _ = self._mettre_en_stock("LOT-DATES", 10, il_y_a_jours=5)
+        hier = (self.today - timedelta(days=1)).isoformat()
+        demain = (self.today + timedelta(days=1)).isoformat()
+        etat = self._etat()
+
+        for champ, donnees in (
+            # Pesée initiale postérieure à la mise en bassin.
+            ("date_pesee_initiale", {
+                "date_pesee_initiale": self.today.isoformat(),
+                "date_mise_en_place": hier,
+            }),
+            ("date_mise_en_place", {"date_mise_en_place": demain}),
+        ):
+            with self.subTest(champ=champ):
+                response = self._valider(self._donnees_sortie(lot, 10, **donnees))
+                self.assertEqual(response.status_code, 400, response.data)
+                self.assertIn(champ, response.data)
+        self._assert_rien_ecrit(etat, lot)
+
+    def test_champs_obligatoires_et_poids_initial_g_refuses(self):
+        lot, _ = self._mettre_en_stock("LOT-SANS-POIDS", 10)
+        complet = self._donnees_sortie(lot, 10)
+        etat = self._etat()
+
+        for champ in (
+            "date_pesee_initiale",
+            "nombre_poissons_peses",
+            "poids_total_g",
+            "date_mise_en_place",
+            "effectif_entrant",
+        ):
+            with self.subTest(champ=champ):
+                donnees = {cle: valeur for cle, valeur in complet.items() if cle != champ}
+                response = self._valider(donnees)
+                self.assertEqual(response.status_code, 400, response.data)
+                self.assertIn(champ, response.data)
+        # Une seule voie d'entrée : l'ancien poids saisi seul est refusé.
+        ancien = self._valider({**complet, "poids_initial_g": "20.00"})
+        self.assertEqual(ancien.status_code, 400, ancien.data)
+        self.assertIn("poids_initial_g", ancien.data)
+        self._assert_rien_ecrit(etat, lot)
+
+    def test_code_saisi_modifiable_et_unique(self):
+        lot_a, _ = self._mettre_en_stock("LOT-CODE-A", 10)
+        cree = self._valider(self._donnees_sortie(lot_a, 10, code="GR-PERSO-01"))
+        self.assertEqual(cree.status_code, 201, cree.data)
+        self.assertEqual(cree.data["code"], "GR-PERSO-01")
+
+        lot_b, _ = self._mettre_en_stock(
+            "LOT-CODE-B",
+            10,
+            espece=Lot.Espece.TILAPIA,
+            hapa=self._hapa(self.bassin_stock, "STOCK-CODE"),
+        )
+        etat = self._etat()
+        doublon = self._valider(self._donnees_sortie(lot_b, 10, code="GR-PERSO-01"))
+
+        self.assertEqual(doublon.status_code, 400, doublon.data)
+        self.assertIn("code", doublon.data)
+        self._assert_rien_ecrit(etat, lot_b)
+
+    def test_apercu_retourne_les_valeurs_et_n_ecrit_rien(self):
+        # quantite_initiale du lot de test : 20 poissons au plus.
+        lot, _ = self._mettre_en_stock("LOT-APERCU", 20)
+        etat = self._etat()
+
+        partiel = self.client.post(
+            URL_APERCU,
+            {"id_lot": lot.pk, "id_bassin_destination": self.bassin_destination.pk},
+            format="json",
+        )
+        complet = self.client.post(
+            URL_APERCU,
+            {
+                **self._donnees_sortie(lot, 20),
+                "nombre_poissons_peses": 1,
+                "poids_total_g": "20.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(partiel.status_code, 200, partiel.data)
+        self.assertEqual(partiel.data["quantite_sortie"], 20)
+        self.assertEqual(partiel.data["taille_echantillon_cible"], 2)
+        self.assertEqual(partiel.data["reference_lot_origine"], lot.reference)
+        self.assertRegex(partiel.data["code_propose"], r"^GR-\d{4}-\d{4,}$")
+        self.assertIsNone(partiel.data["poids_moyen_initial"])
+        self.assertEqual(complet.status_code, 200, complet.data)
+        self.assertEqual(complet.data["poids_moyen_initial"], "20.00")
+        # L'aperçu signale la non-conformité sans la refuser.
+        self.assertFalse(complet.data["echantillon_conforme"])
+        self._assert_rien_ecrit(etat, lot)
+
+    def test_erreur_apres_les_premieres_ecritures_annule_tout(self):
+        lot, _ = self._mettre_en_stock("LOT-ATOMICITE", 10)
+        donnees = self._donnees_sortie(lot, 10)
+        donnees["date_pesee_initiale"] = self.today
+        donnees["date_mise_en_place"] = self.today
+        donnees["poids_total_g"] = Decimal(donnees["poids_total_g"])
+        donnees["pourcentage_echantillon"] = Decimal("10")
+        etat = self._etat()
+
+        with patch(
+            "apps.grossissement.services.LotGrossissement.objects.create",
+            side_effect=RuntimeError("panne simulée"),
+        ):
+            with self.assertRaises(RuntimeError):
+                valider_sortie_grossissement(donnees, utilisateur=self.user)
+
+        self._assert_rien_ecrit(etat, lot)
+
+    def test_permissions_et_ancien_flux(self):
+        lot, _ = self._mettre_en_stock("LOT-PERMISSIONS", 10)
+        employe = User.objects.create_user(
+            username="grossissement-employe",
+            password="test-password",
+            role=Role.objects.create(libelle="Employé"),
+            statut="ACTIF",
+        )
+        client_employe = APIClient()
+        client_employe.force_authenticate(employe)
+        etat = self._etat()
+
+        self.assertEqual(
+            client_employe.post(URL_LOTS, self._donnees_sortie(lot, 10), format="json").status_code,
+            403,
+        )
+        self.assertEqual(
+            client_employe.post(URL_APERCU, self._donnees_sortie(lot, 10), format="json").status_code,
+            403,
+        )
+        self.assertEqual(client_employe.get(URL_LOTS).status_code, 200)
+        self.assertEqual(APIClient().get(URL_LOTS).status_code, 401)
+        # Plus de brouillon ni de validation en deux temps.
+        ancien = self.client.post(
+            "/api/v1/effectifs/sorties-stock/",
+            {"id_lot": lot.pk, "id_bassin_destination": self.bassin_destination.pk},
+            format="json",
+        )
+        self.assertEqual(ancien.status_code, 405, ancien.data)
+        self._assert_rien_ecrit(etat, lot)
 
     def test_annulation_supprime_le_lot_et_restaure_effectifs_et_stade(self):
         lot, _, sortie_id, _ = self._sortie_validee("LOT-ANNULATION", 10)
@@ -292,33 +531,19 @@ class LotGrossissementTests(TestCase):
             10,
         )
 
-    def test_validation_sans_poids_initial_refusee_sans_effet(self):
-        lot, _ = self._mettre_en_stock("LOT-SANS-POIDS", 10)
-        draft = self._creer_sortie(lot)
-        count_mouvements = MouvementEffectif.objects.count()
-        for data in ({}, {"poids_initial_g": None}):
-            refused = self.client.post(
-                f"/api/v1/effectifs/sorties-stock/{draft.data['id']}/valider/",
-                data,
-                format="json",
-            )
-            self.assertEqual(refused.status_code, 400, refused.data)
-            self.assertIn("poids_initial_g", refused.data)
-        nul = self._valider(draft.data["id"], {"poids_initial_g": "0"})
-        self.assertEqual(nul.status_code, 400, nul.data)
-        self.assertIn("poids_initial_g", nul.data)
-        self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
-        self.assertFalse(LotGrossissement.objects.filter(lot_origine=lot).exists())
-        self.assertEqual(
-            SortieStock.objects.get(pk=draft.data["id"]).statut,
-            SortieStock.Statut.BROUILLON,
-        )
-        self.assertEqual(Lot.objects.get(pk=lot.pk).stade, Lot.Stade.EN_STOCK)
-
-    def test_validation_enregistre_le_poids_initial(self):
-        _, _, sortie_id, _ = self._sortie_validee("LOT-POIDS-SAISI", 10)
-        gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
-        self.assertEqual(gross.poids_initial_g, Decimal("20.00"))
+    def test_validation_calcule_le_poids_moyen_initial(self):
+        lot, _ = self._mettre_en_stock("LOT-POIDS-SAISI", 15)
+        # Cible : arrondi supérieur de 10 % de 15 = 2 poissons ; 41 g / 2 = 20,50 g.
+        response = self._valider(self._donnees_sortie(
+            lot,
+            15,
+            nombre_poissons_peses=2,
+            poids_total_g="41.00",
+        ))
+        self.assertEqual(response.status_code, 201, response.data)
+        gross = LotGrossissement.objects.get(pk=response.data["id"])
+        self.assertEqual(gross.poids_moyen_initial, Decimal("20.50"))
+        self.assertEqual(gross.nombre_poissons_peses_initial, 2)
 
     def test_annulation_refuse_historique_ou_lot_cloture_sans_changement(self):
         lot_a, _, sortie_a, _ = self._sortie_validee("LOT-POIDS", 10)
@@ -365,11 +590,9 @@ class LotGrossissementTests(TestCase):
         first_code = LotGrossissement.objects.get(sortie_stock_id=first_id).code
         self.assertEqual(self._annuler(first_id).status_code, 200)
 
-        draft = self._creer_sortie(lot)
-        self.assertEqual(draft.status_code, 201, draft.data)
-        validated = self._valider(draft.data["id"])
-        self.assertEqual(validated.status_code, 200, validated.data)
-        second = LotGrossissement.objects.get(sortie_stock_id=draft.data["id"])
+        validated = self._valider(self._donnees_sortie(lot, 10))
+        self.assertEqual(validated.status_code, 201, validated.data)
+        second = LotGrossissement.objects.get(pk=validated.data["id"])
 
         self.assertNotEqual(first_code, second.code)
         self.assertEqual(LotGrossissement.objects.filter(code=second.code).count(), 1)
@@ -509,42 +732,35 @@ class LotGrossissementTests(TestCase):
         self.assertEqual(gross.statut, LotGrossissement.Statut.ACTIF)
         self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
 
-    def _sortie_brouillon(self, reference, *, espece=Lot.Espece.CARPE, hapa=None):
+    def _lot_a_sortir(self, reference, *, espece=Lot.Espece.CARPE, hapa=None):
         lot, _ = self._mettre_en_stock(reference, 10, espece=espece, hapa=hapa)
-        draft = self._creer_sortie(lot)
-        self.assertEqual(draft.status_code, 201, draft.data)
-        return lot, draft.data["id"]
+        return lot
 
     def test_creation_refuse_meme_espece_dans_le_bassin(self):
         self._sortie_validee("LOT-CARPE-1", 10)
-        lot, sortie_id = self._sortie_brouillon(
+        lot = self._lot_a_sortir(
             "LOT-CARPE-2",
             hapa=self._hapa(self.bassin_stock, "STOCK-B"),
         )
-        count_mouvements = MouvementEffectif.objects.count()
+        etat = self._etat()
 
-        refused = self._valider(sortie_id)
+        refused = self._valider(self._donnees_sortie(lot, 10))
 
         self.assertEqual(refused.status_code, 400, refused.data)
         self.assertIn("id_bassin_destination", refused.data)
-        self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
-        self.assertEqual(
-            SortieStock.objects.get(pk=sortie_id).statut,
-            SortieStock.Statut.BROUILLON,
-        )
-        self.assertEqual(Lot.objects.get(pk=lot.pk).stade, Lot.Stade.EN_STOCK)
+        self._assert_rien_ecrit(etat, lot)
 
     def test_creation_accepte_deux_especes_differentes(self):
         self._sortie_validee("LOT-MIXTE-CARPE", 10)
-        _, sortie_id = self._sortie_brouillon(
+        lot = self._lot_a_sortir(
             "LOT-MIXTE-TILAPIA",
             espece=Lot.Espece.TILAPIA,
             hapa=self._hapa(self.bassin_stock, "STOCK-T"),
         )
 
-        validated = self._valider(sortie_id)
+        validated = self._valider(self._donnees_sortie(lot, 10))
 
-        self.assertEqual(validated.status_code, 200, validated.data)
+        self.assertEqual(validated.status_code, 201, validated.data)
         self.assertEqual(
             LotGrossissement.objects.filter(
                 bassin=self.bassin_destination,
@@ -561,14 +777,14 @@ class LotGrossissementTests(TestCase):
             poids_final_g=Decimal("250"),
             utilisateur=self.user,
         )
-        _, sortie_id = self._sortie_brouillon(
+        lot = self._lot_a_sortir(
             "LOT-APRES-CLOTURE",
             hapa=self._hapa(self.bassin_stock, "STOCK-C"),
         )
 
-        validated = self._valider(sortie_id)
+        validated = self._valider(self._donnees_sortie(lot, 10))
 
-        self.assertEqual(validated.status_code, 200, validated.data)
+        self.assertEqual(validated.status_code, 201, validated.data)
 
     def test_creation_refuse_mise_en_place_anterieure_a_la_cloture(self):
         _, _, premiere, _ = self._sortie_validee("LOT-CLOS-AUJOURDHUI", 10)
@@ -584,15 +800,13 @@ class LotGrossissementTests(TestCase):
             il_y_a_jours=4,
             hapa=self._hapa(self.bassin_stock, "STOCK-D"),
         )
-        draft = self._creer_sortie(lot, il_y_a_jours=3)
-        self.assertEqual(draft.status_code, 201, draft.data)
-        count_mouvements = MouvementEffectif.objects.count()
+        etat = self._etat()
 
-        refused = self._valider(draft.data["id"])
+        refused = self._valider(self._donnees_sortie(lot, 10, il_y_a_jours=3))
 
         self.assertEqual(refused.status_code, 400, refused.data)
-        self.assertIn("date_sortie", refused.data)
-        self.assertEqual(MouvementEffectif.objects.count(), count_mouvements)
+        self.assertIn("date_mise_en_place", refused.data)
+        self._assert_rien_ecrit(etat, lot)
 
     def test_annulation_mouvement_refusee_apres_cloture(self):
         _, _, sortie_id, _ = self._sortie_validee("LOT-FIGE", 10)
@@ -626,17 +840,19 @@ class LotGrossissementTests(TestCase):
         )
 
     def test_creation_refuse_bassin_avec_hapa_actif(self):
-        _, sortie_id = self._sortie_brouillon("LOT-HAPA-GROSS")
+        lot = self._lot_a_sortir("LOT-HAPA-GROSS")
         Hapa.objects.create(
             bassin=self.bassin_destination,
             nom="GROSS-HAPA",
             statut=Hapa.Statut.ACTIF,
         )
+        etat = self._etat()
 
-        refused = self._valider(sortie_id)
+        refused = self._valider(self._donnees_sortie(lot, 10))
 
         self.assertEqual(refused.status_code, 400, refused.data)
         self.assertIn("hapa", str(refused.data["id_bassin_destination"]))
+        self._assert_rien_ecrit(etat, lot)
 
     def test_capacite_refuse_un_troisieme_lot(self):
         for reference in ("LOT-CAP-1", "LOT-CAP-2"):
@@ -648,28 +864,28 @@ class LotGrossissementTests(TestCase):
             verifier_capacite_bassin(self.bassin_destination, Lot.Espece.CARPE)
         self.assertIn("deux lots", str(ctx.exception.detail["id_bassin_destination"]))
 
-    def test_patch_poids_initial(self):
+    def test_patch_refuse_poids_initial_et_trace_de_la_pesee_initiale(self):
         _, _, sortie_id, _ = self._sortie_validee("LOT-POIDS-INITIAL", 10)
         gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
-        url = f"/api/v1/grossissement/lots-grossissement/{gross.pk}/"
+        url = f"{URL_LOTS}{gross.pk}/"
 
-        saisi = self.client.patch(url, {"poids_initial_g": "12.50"}, format="json")
-        nul = self.client.patch(url, {"poids_initial_g": "0"}, format="json")
-
-        self.assertEqual(saisi.status_code, 200, saisi.data)
-        self.assertEqual(saisi.data["poids_initial_g"], "12.50")
-        self.assertEqual(nul.status_code, 400, nul.data)
-        self.assertIn("poids_initial_g", nul.data)
-
-        cloturer_lot_grossissement(
-            gross.pk,
-            motif="Fin du cycle",
-            poids_final_g=Decimal("250"),
-            utilisateur=self.user,
-        )
-        clos = self.client.patch(url, {"poids_initial_g": "13"}, format="json")
-        self.assertEqual(clos.status_code, 400, clos.data)
-        self.assertIn("statut", clos.data)
+        for data in (
+            {"poids_moyen_initial": "12.50"},
+            # Ancien nom du champ : refusé lui aussi.
+            {"poids_initial_g": "12.50"},
+            {"date_pesee_initiale": self.today.isoformat()},
+            {"pourcentage_echantillon_initial": "20"},
+            {"nombre_poissons_peses_initial": 3},
+            {"poids_total_initial_g": "60.00"},
+            {"code": "GR-AUTRE"},
+        ):
+            with self.subTest(data=data):
+                refused = self.client.patch(url, data, format="json")
+                self.assertEqual(refused.status_code, 400, refused.data)
+                self.assertIn(next(iter(data)), refused.data)
+        gross.refresh_from_db()
+        self.assertEqual(gross.poids_moyen_initial, Decimal("20.00"))
+        self.assertEqual(gross.nombre_poissons_peses_initial, 1)
 
     def test_patch_modifie_champs_autorises_et_refuse_champs_figes(self):
         _, _, sortie_id, _ = self._sortie_validee("LOT-PATCH", 10)

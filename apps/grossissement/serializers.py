@@ -4,7 +4,9 @@ from .models import IndicateurLot, LotGrossissement, Pesee, PeseeLot
 from .services import modifier_lot_grossissement
 
 
-CHAMPS_MODIFIABLES = {"observation", "pourcentage_groupe_pesee", "poids_initial_g"}
+# Le poids moyen initial et la trace de la pesée initiale (P0) ne sont jamais
+# modifiables : seule la validation de la sortie les renseigne.
+CHAMPS_MODIFIABLES = {"observation", "pourcentage_groupe_pesee"}
 
 
 class ClotureLotGrossissementSerializer(serializers.Serializer):
@@ -46,6 +48,20 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
         source="bassin.reference",
         read_only=True,
     )
+    effectif_sortant = serializers.IntegerField(
+        source="sortie_stock.effectif_sortant",
+        read_only=True,
+        allow_null=True,
+    )
+    ecart_effectif = serializers.IntegerField(
+        source="sortie_stock.ecart_effectif",
+        read_only=True,
+        allow_null=True,
+    )
+    justification_ecart = serializers.CharField(
+        source="sortie_stock.justification_ecart",
+        read_only=True,
+    )
     id_user = serializers.IntegerField(source="utilisateur_id", read_only=True)
     age_jours = serializers.IntegerField(read_only=True)
     etape_courante = serializers.IntegerField(read_only=True, allow_null=True)
@@ -63,8 +79,15 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
             "reference_bassin",
             "espece",
             "date_mise_en_place",
+            "effectif_sortant",
             "effectif_initial",
-            "poids_initial_g",
+            "ecart_effectif",
+            "justification_ecart",
+            "poids_moyen_initial",
+            "date_pesee_initiale",
+            "pourcentage_echantillon_initial",
+            "nombre_poissons_peses_initial",
+            "poids_total_initial_g",
             "pourcentage_groupe_pesee",
             "statut",
             "date_cloture",
@@ -85,15 +108,7 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "observation": {"required": False, "allow_blank": True},
             "pourcentage_groupe_pesee": {"required": False},
-            "poids_initial_g": {"required": False},
         }
-
-    def validate_poids_initial_g(self, value):
-        if value is None or value <= 0:
-            raise serializers.ValidationError(
-                "Le poids initial doit être strictement positif."
-            )
-        return value
 
     def validate_pourcentage_groupe_pesee(self, value):
         if value <= 0 or value > 100:
@@ -113,6 +128,135 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         return modifier_lot_grossissement(instance.pk, validated_data)
+
+
+CHAMPS_SORTIE_GROSSISSEMENT = {
+    "id_lot",
+    "id_bassin_destination",
+    "date_pesee_initiale",
+    "pourcentage_echantillon",
+    "nombre_poissons_peses",
+    "poids_total_g",
+    "confirmer_echantillon_non_conforme",
+    "code",
+    "date_mise_en_place",
+    "effectif_entrant",
+    "justification_ecart",
+    "observation",
+}
+
+
+class SortieGrossissementSerializer(serializers.Serializer):
+    """Entrée unique de l'aperçu et de la validation de la sortie vers le grossissement.
+
+    Le caractère obligatoire des champs de la pesée initiale et du lot est
+    contrôlé par le service (facultatifs à l'aperçu, requis à la validation).
+    """
+
+    # La sortie
+    id_lot = serializers.IntegerField(min_value=1)
+    id_bassin_destination = serializers.IntegerField(min_value=1)
+    # La pesée initiale (P0)
+    date_pesee_initiale = serializers.DateField(required=False)
+    pourcentage_echantillon = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        required=False,
+    )
+    nombre_poissons_peses = serializers.IntegerField(required=False)
+    poids_total_g = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        required=False,
+    )
+    confirmer_echantillon_non_conforme = serializers.BooleanField(required=False)
+    # Le lot
+    code = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+    date_mise_en_place = serializers.DateField(required=False)
+    effectif_entrant = serializers.IntegerField(required=False)
+    justification_ecart = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+    observation = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        # Une seule voie d'entrée : le poids moyen initial est calculé depuis P0 ;
+        # tout autre champ (dont l'ancien poids_initial_g) est refusé.
+        inconnus = set(self.initial_data) - CHAMPS_SORTIE_GROSSISSEMENT
+        if inconnus:
+            raise serializers.ValidationError({
+                champ: "Ce champ n'est pas accepté."
+                for champ in sorted(inconnus)
+            })
+        return attrs
+
+
+def _decimal_ou_none(valeur, decimales=2):
+    if valeur is None:
+        return None
+    return f"{valeur:.{decimales}f}"
+
+
+class ApercuSortieGrossissementSerializer(serializers.Serializer):
+    """Représentation de l'aperçu : valeurs préremplies et calculées, rien d'écrit."""
+
+    def to_representation(self, contexte):
+        lot = contexte["lot"]
+        preparation = contexte["preparation"]
+        bassin_source = preparation["bassin_source"]
+        bassin = contexte["bassin"]
+        dates = {
+            champ: (
+                contexte[champ].isoformat()
+                if contexte[champ] is not None
+                else None
+            )
+            for champ in ("date_mise_en_place", "date_pesee_initiale")
+        }
+        effectif_entrant = contexte["effectif_entrant"]
+        return {
+            "id_lot": lot.pk,
+            "reference_lot_origine": lot.reference,
+            "espece": lot.espece,
+            "id_bassin_source": bassin_source.pk,
+            "reference_bassin_source": bassin_source.reference,
+            "id_bassin_destination": bassin.pk,
+            "reference_bassin_destination": bassin.reference,
+            "lignes": [
+                {
+                    "id_hapa": ligne["hapa"].pk,
+                    "nom_hapa": ligne["hapa"].nom,
+                    "quantite": ligne["quantite"],
+                }
+                for ligne in preparation["lignes"]
+            ],
+            "quantite_sortie": contexte["quantite_sortie"],
+            "code_propose": contexte["code_propose"],
+            "code": contexte["code"],
+            **dates,
+            "pourcentage_echantillon": _decimal_ou_none(
+                contexte["pourcentage_echantillon"]
+            ),
+            "taille_echantillon_cible": contexte["taille_echantillon_cible"],
+            "nombre_poissons_peses": contexte["nombre_poissons_peses"],
+            "poids_total_g": _decimal_ou_none(contexte["poids_total_g"]),
+            "poids_moyen_initial": _decimal_ou_none(
+                contexte["poids_moyen_initial"]
+            ),
+            "echantillon_conforme": contexte["echantillon_conforme"],
+            "effectif_entrant": effectif_entrant,
+            "ecart_effectif": contexte["ecart_effectif"],
+            "justification_requise": (
+                effectif_entrant is not None
+                and effectif_entrant != contexte["quantite_sortie"]
+            ),
+        }
 
 
 class OrigineLotGrossissementSerializer(serializers.Serializer):

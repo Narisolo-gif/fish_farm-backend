@@ -351,7 +351,6 @@ class SortieStock(models.Model):
         GROSSISSEMENT = "GROSSISSEMENT", "Grossissement"
 
     class Statut(models.TextChoices):
-        BROUILLON = "BROUILLON", "Brouillon"
         VALIDEE = "VALIDEE", "Validée"
         ANNULEE = "ANNULEE", "Annulée"
 
@@ -375,7 +374,8 @@ class SortieStock(models.Model):
     statut = models.CharField(
         max_length=10,
         choices=Statut.choices,
-        default=Statut.BROUILLON,
+        # Une sortie est écrite validée, en une seule transaction (pas de brouillon).
+        default=Statut.VALIDEE,
     )
     observation = models.TextField(blank=True)
     effectif_sortant = models.PositiveIntegerField(null=True, blank=True)
@@ -436,7 +436,7 @@ class SortieStock(models.Model):
             ),
             models.UniqueConstraint(
                 fields=["lot"],
-                condition=models.Q(statut__in=["BROUILLON", "VALIDEE"]),
+                condition=models.Q(statut="VALIDEE"),
                 name="sortie_stock_lot_active_unique",
             ),
         ]

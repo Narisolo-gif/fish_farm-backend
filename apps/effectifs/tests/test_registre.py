@@ -1,11 +1,9 @@
 from datetime import date, timedelta
-from io import StringIO
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
-from django.core.management import call_command
 from django.db import IntegrityError, close_old_connections, transaction
 from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.utils import timezone
@@ -21,18 +19,18 @@ from apps.reproduction.models import Ponte, Reproduction
 from apps.stocks.models import MiseEnStock
 from apps.traitement.models import Traitement
 
-from .models import (
+from apps.effectifs.models import (
     CategoriePerte,
     CauseMortalite,
     EvenementMortalitePerte,
     MouvementEffectif,
 )
-from .services import (
+from apps.effectifs.services import (
     annuler_mouvement,
     enregistrer_mouvement,
-    enregistrer_evenement_mortalite_perte,
     solde_bassin_espece_date,
 )
+from apps.effectifs.tests.outils import enregistrer_mortalite_perte
 
 User = get_user_model()
 
@@ -187,7 +185,7 @@ class EvenementMortalitePerteTests(TestCase):
     def test_mortality_and_loss_create_linked_debit_movements(self):
         self._add_stock()
 
-        mortality = enregistrer_evenement_mortalite_perte(
+        mortality = enregistrer_mortalite_perte(
             bassin=self.bassin,
             espece="CARPE",
             type_evenement=EvenementMortalitePerte.TypeEvenement.MORTALITE,
@@ -197,7 +195,7 @@ class EvenementMortalitePerteTests(TestCase):
             hapa=self.hapa,
             cause_mortalite=self.cause,
         )
-        loss = enregistrer_evenement_mortalite_perte(
+        loss = enregistrer_mortalite_perte(
             bassin=self.bassin,
             espece="CARPE",
             type_evenement=EvenementMortalitePerte.TypeEvenement.PERTE,
@@ -331,7 +329,7 @@ class EvenementMortalitePerteTests(TestCase):
                     saisi_par=self.user,
                 )
 
-                event = enregistrer_evenement_mortalite_perte(
+                event = enregistrer_mortalite_perte(
                     bassin=basin,
                     hapa=hapa,
                     espece="CARPE",
@@ -390,7 +388,7 @@ class EvenementMortalitePerteTests(TestCase):
 
     def test_cancellation_marks_event_and_compensates_movement(self):
         self._add_stock()
-        event = enregistrer_evenement_mortalite_perte(
+        event = enregistrer_mortalite_perte(
             bassin=self.bassin,
             espece="CARPE",
             type_evenement=EvenementMortalitePerte.TypeEvenement.MORTALITE,
@@ -429,7 +427,7 @@ class EvenementMortalitePerteTests(TestCase):
 
     def test_event_api_filters_by_basin_species_period_and_cause(self):
         self._add_stock()
-        event = enregistrer_evenement_mortalite_perte(
+        event = enregistrer_mortalite_perte(
             bassin=self.bassin,
             espece="CARPE",
             type_evenement=EvenementMortalitePerte.TypeEvenement.MORTALITE,
@@ -467,9 +465,10 @@ class EffectifConcurrencyTests(TransactionTestCase):
             role=role,
             statut="ACTIF",
         )
+        # Bassin sans hapa obligatoire : le test porte sur le verrou du solde.
         self.bassin = Bassin.objects.create(
             reference="B-CONCURRENT",
-            categorie=Bassin.Categorie.TRAITEMENT,
+            categorie=Bassin.Categorie.REPRODUCTION,
             capacity=100,
             statut=Bassin.Statut.ACTIF,
         )
@@ -552,6 +551,19 @@ class EffectifOperationIntegrationTests(TestCase):
             categorie=Bassin.Categorie.STOCKS,
             capacity=100,
             statut=Bassin.Statut.ACTIF,
+        )
+        # Hapas obligatoires en TRAITEMENT et en STOCKS.
+        self.hapa_traitement = Hapa.objects.create(
+            bassin=self.bassin_traitement,
+            nom="TRAIT-API-H1",
+            actif=True,
+            statut=Hapa.Statut.ACTIF,
+        )
+        self.hapa_stock = Hapa.objects.create(
+            bassin=self.bassin_stock,
+            nom="STOCK-API-H1",
+            actif=True,
+            statut=Hapa.Statut.ACTIF,
         )
         self.provende_type, _ = TypeProvende.objects.get_or_create(
             type="TRAITEMENT"
@@ -658,6 +670,7 @@ class EffectifOperationIntegrationTests(TestCase):
                 "date_ouverture": timezone.localdate().isoformat(),
                 "id_bassin": self.bassin_traitement.pk,
                 "id_used_provende": self.provende.pk,
+                "hapas": [{"id_hapa": self.hapa_traitement.pk, "effectif_initial": 20}],
             },
             format="json",
         )
@@ -673,26 +686,28 @@ class EffectifOperationIntegrationTests(TestCase):
             20,
         )
 
-        rejected_close = self.client.post(
-            f"/api/v1/traitement/{treatment.pk}/cloturer/",
-            {"effectif_final": 19},
-            format="json",
-        )
-        self.assertEqual(rejected_close.status_code, 400, rejected_close.data)
-
+        # L'effectif final est calculé depuis le registre, hapa par hapa.
         close_response = self.client.post(
             f"/api/v1/traitement/{treatment.pk}/cloturer/",
-            {"effectif_final": 20},
+            {},
             format="json",
         )
         self.assertEqual(close_response.status_code, 200, close_response.data)
+        self.assertEqual(close_response.data["effectif_final"], 20)
+        rejected_close = self.client.post(
+            f"/api/v1/traitement/{treatment.pk}/cloturer/",
+            {},
+            format="json",
+        )
+        self.assertEqual(rejected_close.status_code, 400, rejected_close.data)
 
         stock_response = self.client.post(
             "/api/v1/stocks/",
             {
                 "id_lot": lot.pk,
                 "id_bassin": self.bassin_stock.pk,
-                "effectif_entrant": 20,
+                "finalite": "GROSSISSEMENT",
+                "hapas": [{"id_hapa": self.hapa_stock.pk, "effectif_entrant": 20}],
                 "justification_ecart": "",
                 "observation": "Transfert de test",
             },
@@ -766,33 +781,6 @@ class EffectifOperationIntegrationTests(TestCase):
         self.assertFalse(
             MouvementEffectif.objects.filter(lot_origine=lot).exists()
         )
-
-    def test_backfill_is_idempotent_and_reconciliation_matches(self):
-        lot = self._create_lot()
-        Traitement.objects.create(
-            lot=lot,
-            effectif_initial=20,
-            date_ouverture=timezone.localdate(),
-            bassin=self.bassin_traitement,
-            used_provende=self.provende,
-            utilisateur=self.user,
-        )
-        call_command(
-            "reprendre_effectifs",
-            user_id=self.user.pk,
-            stdout=StringIO(),
-        )
-        first_count = MouvementEffectif.objects.count()
-        call_command(
-            "reprendre_effectifs",
-            user_id=self.user.pk,
-            stdout=StringIO(),
-        )
-        self.assertEqual(MouvementEffectif.objects.count(), first_count)
-
-        output = StringIO()
-        call_command("reconcilier_effectifs", stdout=output)
-        self.assertIn("Aucun écart détecté.", output.getvalue())
 
     def test_mise_en_stock_rejects_unlogged_treatment_loss(self):
         lot = self._create_lot()

@@ -12,9 +12,12 @@ from apps.grossissement.calculs import (
     allouer_provende,
     biomasse_kg,
     calculer_instantanes,
+    echantillon_conforme,
     gmq,
     ic,
+    poids_moyen_echantillon,
     repartir_provende,
+    taille_echantillon_cible,
 )
 
 
@@ -56,6 +59,34 @@ class FonctionsElementairesTests(unittest.TestCase):
 
     def test_arrondi_demi_superieur(self):
         self.assertEqual(gmq(D("0"), D("0.125"), 1), D("0.13"))
+
+
+class EchantillonTests(unittest.TestCase):
+    """Pesée sur échantillon, dont la pesée initiale P0 de la sortie vers le grossissement."""
+
+    def test_taille_echantillon_cible(self):
+        self.assertEqual(taille_echantillon_cible(2000, 10), 200)
+        self.assertEqual(taille_echantillon_cible(15, 10), 2)
+        # Minimum 1 poisson.
+        self.assertEqual(taille_echantillon_cible(5, 10), 1)
+
+    def test_taille_echantillon_cible_pourcentage_decimal(self):
+        self.assertEqual(taille_echantillon_cible(1000, D("12.5")), 125)
+        self.assertEqual(taille_echantillon_cible(1001, D("12.5")), 126)
+
+    def test_poids_moyen_echantillon(self):
+        self.assertEqual(poids_moyen_echantillon(4000, 200), D("20.00"))
+        self.assertEqual(poids_moyen_echantillon(1000, 3), D("333.33"))
+        self.assertEqual(poids_moyen_echantillon(1001, 3), D("333.67"))
+
+    def test_poids_moyen_arrondi_demi_superieur(self):
+        # 2 537,50 / 100 = 25,375 -> 25,38 (demi supérieur, pas arrondi bancaire).
+        self.assertEqual(poids_moyen_echantillon(D("2537.50"), 100), D("25.38"))
+
+    def test_echantillon_conforme(self):
+        self.assertTrue(echantillon_conforme(200, 200))
+        self.assertFalse(echantillon_conforme(199, 200))
+        self.assertTrue(echantillon_conforme(201, 200))
 
 
 class RepartitionTests(unittest.TestCase):

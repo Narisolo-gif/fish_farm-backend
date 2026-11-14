@@ -7,7 +7,7 @@ calculables valent None, jamais zéro.
 """
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 from typing import Callable, Optional
 
 
@@ -83,6 +83,24 @@ def repartir_provende(quantite_kg, biomasses_reference):
     }
     parts[principal] = quantite - sum(parts.values(), ZERO)
     return parts
+
+
+def taille_echantillon_cible(effectif, pourcentage):
+    """Nombre de poissons à peser : arrondi supérieur de pourcentage × effectif / 100, minimum 1."""
+    cible = (
+        Decimal(effectif) * Decimal(pourcentage) / Decimal(100)
+    ).to_integral_value(rounding=ROUND_CEILING)
+    return max(1, int(cible))
+
+
+def poids_moyen_echantillon(poids_total_g, nombre_poissons):
+    """Poids moyen (g) d'un échantillon, arrondi au demi supérieur à 2 décimales."""
+    return _arrondir(Decimal(poids_total_g) / Decimal(nombre_poissons), 2)
+
+
+def echantillon_conforme(nombre_poissons_peses, taille_cible):
+    """Vrai si l'échantillon atteint la taille cible."""
+    return nombre_poissons_peses >= taille_cible
 
 
 @dataclass(frozen=True)

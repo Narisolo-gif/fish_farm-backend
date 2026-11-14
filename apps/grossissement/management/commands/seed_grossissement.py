@@ -20,9 +20,11 @@ from django.urls import resolve
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from apps.grossissement.calculs import taille_echantillon_cible
 from apps.grossissement.simulation import (
     CAUSE_PAR_DEFAUT,
     CODES_SCENARIOS,
+    POURCENTAGE_ECHANTILLON,
     construire_scenarios,
 )
 
@@ -285,14 +287,22 @@ class Command(BaseCommand):
                 "date_mise_en_stock": _iso(_a_heure(entree - timedelta(days=10))),
                 "hapas": [{"id_hapa": hapa, "effectif_entrant": profil.effectif_initial}],
             })
-            sortie = client.post("/api/v1/effectifs/sorties-stock/", {
+            # Sortie totale et création du lot en un seul appel, avec la pesée
+            # initiale P0 (échantillon à la taille cible, poids moyen du profil).
+            nombre_p0 = taille_echantillon_cible(
+                profil.effectif_initial, POURCENTAGE_ECHANTILLON
+            )
+            lot_gross = client.post("/api/v1/grossissement/lots-grossissement/", {
                 "id_lot": lot_origine, "id_bassin_destination": bassin_gro,
-                "date_sortie": _iso(_a_heure(entree)), "observation": OBSERVATION,
+                "date_pesee_initiale": _iso(entree),
+                "pourcentage_echantillon": str(POURCENTAGE_ECHANTILLON),
+                "nombre_poissons_peses": nombre_p0,
+                "poids_total_g": str(profil.poids_initial * nombre_p0),
+                "date_mise_en_place": _iso(entree),
+                "effectif_entrant": profil.effectif_initial,
+                "observation": OBSERVATION,
             })["id"]
-            client.post(f"/api/v1/effectifs/sorties-stock/{sortie}/valider/", {
-                "poids_initial_g": str(profil.poids_initial),
-            })
-            lots_gross[profil.cle] = LotGrossissement.objects.get(lot_origine_id=lot_origine)
+            lots_gross[profil.cle] = LotGrossissement.objects.get(pk=lot_gross)
 
         causes = dict(CauseMortalite.objects.values_list("libelle", "id"))
         if CAUSE_PAR_DEFAUT not in causes:

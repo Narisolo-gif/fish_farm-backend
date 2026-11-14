@@ -1,62 +1,19 @@
 from django.dispatch import receiver
-from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.effectifs.signals import (
     mouvement_avant_annulation,
     sortie_stock_avant_annulation,
-    sortie_stock_validee,
 )
-from apps.bassins.models import Bassin
 from apps.lots.models import Lot
 
 from .models import LotGrossissement
-from .services import lot_a_historique, verifier_capacite_bassin
+from .services import lot_a_historique
 
 
-@receiver(
-    sortie_stock_validee,
-    dispatch_uid="grossissement.creer_lot_apres_sortie_validee",
-)
-def creer_lot_apres_sortie_validee(
-    sender,
-    *,
-    sortie,
-    utilisateur,
-    poids_initial_g=None,
-    **kwargs,
-):
-    # Le point de départ des indicateurs (biomasse, GMQ, IC) est obligatoire.
-    if poids_initial_g is None or poids_initial_g <= 0:
-        raise ValidationError({
-            "poids_initial_g": (
-                "Le poids moyen initial est obligatoire et doit être "
-                "strictement positif."
-            )
-        })
-    lot = Lot.objects.select_for_update().get(pk=sortie.lot_id)
-    if lot.stade != Lot.Stade.EN_STOCK:
-        raise ValidationError({
-            "id_lot": "Le lot d'origine doit être au stade EN_STOCK."
-        })
-    bassin = Bassin.objects.select_for_update().get(pk=sortie.bassin_destination_id)
-    verifier_capacite_bassin(
-        bassin,
-        sortie.espece,
-        timezone.localtime(sortie.date_sortie).date(),
-    )
-    LotGrossissement.objects.create(
-        lot_origine=lot,
-        sortie_stock=sortie,
-        bassin=bassin,
-        espece=sortie.espece,
-        date_mise_en_place=sortie.date_sortie,
-        effectif_initial=sortie.effectif_entrant,
-        poids_initial_g=poids_initial_g,
-        utilisateur=sortie.validee_par or utilisateur,
-    )
-    lot.stade = Lot.Stade.EN_GROSSISSEMENT
-    lot.save(update_fields=["stade", "updated_at"])
+# La création du lot de grossissement ne passe plus par un signal : elle est
+# faite par `services.valider_sortie_grossissement`, dans la même transaction
+# que la sortie de stock.
 
 
 @receiver(

@@ -4739,7 +4739,23 @@
       ],
       "item": [
         {
-          "name": "08.01 Refuser sortie du lot B finalité VENTE",
+          "name": "08.01 Aperçu : refuser la sortie du lot B (finalité VENTE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur id_lot\", function () { pm.expect(data).to.have.property(\"id_lot\"); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -4748,8 +4764,8 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
-            "description": "Vérifie 08.01 refuser sortie du lot b finalité vente.",
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/apercu-sortie/",
+            "description": "",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"id_lot\": \"{{lot_b}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\"\n}",
@@ -4759,7 +4775,10 @@
                 }
               }
             }
-          },
+          }
+        },
+        {
+          "name": "08.02 Aperçu : refuser une destination hors grossissement",
           "event": [
             {
               "listen": "test",
@@ -4767,19 +4786,15 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Erreur métier sur id_lot\", function () { pm.expect(data).to.have.property(\"id_lot\"); });",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur id_bassin_destination\", function () { pm.expect(data).to.have.property(\"id_bassin_destination\"); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
               }
             }
           ],
-          "response": []
-        },
-        {
-          "name": "08.02 Refuser destination hors grossissement",
           "request": {
             "method": "POST",
             "header": [
@@ -4788,8 +4803,8 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
-            "description": "Vérifie 08.02 refuser destination hors grossissement.",
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/apercu-sortie/",
+            "description": "",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_stk}}\"\n}",
@@ -4799,7 +4814,10 @@
                 }
               }
             }
-          },
+          }
+        },
+        {
+          "name": "08.03 Aperçu : refuser une mise en bassin future",
           "event": [
             {
               "listen": "test",
@@ -4807,19 +4825,15 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Erreur métier sur id_bassin_destination\", function () { pm.expect(data).to.have.property(\"id_bassin_destination\"); });",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur date_mise_en_place\", function () { pm.expect(data).to.have.property(\"date_mise_en_place\"); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
               }
             }
           ],
-          "response": []
-        },
-        {
-          "name": "08.03 Refuser date de sortie future",
           "request": {
             "method": "POST",
             "header": [
@@ -4828,18 +4842,21 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
-            "description": "Vérifie 08.03 refuser date de sortie future.",
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/apercu-sortie/",
+            "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_sortie\": \"{{date_future}}\"\n}",
+              "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_mise_en_place\": \"{{date_jplus_30}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
+          }
+        },
+        {
+          "name": "08.04 Aperçu de la sortie du lot A",
           "event": [
             {
               "listen": "test",
@@ -4847,19 +4864,18 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Erreur métier sur date_sortie\", function () { pm.expect(data).to.have.property(\"date_sortie\"); });",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Quantité sortie\", function () { pm.expect(data.quantite_sortie).to.eql(9770); });",
+                  "pm.test(\"Taille cible à 10 %\", function () { pm.expect(data.taille_echantillon_cible).to.eql(977); });",
+                  "pm.test(\"Code proposé\", function () { pm.expect(data.code_propose).to.be.a(\"string\").and.not.empty; });",
+                  "pm.test(\"Deux lignes (une par hapa)\", function () { pm.expect(data.lignes).to.have.length(2); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
               }
             }
           ],
-          "response": []
-        },
-        {
-          "name": "08.04 Créer brouillon de sortie du lot A",
           "request": {
             "method": "POST",
             "header": [
@@ -4868,18 +4884,21 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
-            "description": "Vérifie 08.04 créer brouillon de sortie du lot a.",
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/apercu-sortie/",
+            "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_sortie\": \"{{date_event_today}}\",\n  \"observation\": \"Sortie E2E {{run_id}}\"\n}",
+              "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_mise_en_place\": \"{{date_today}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
+          }
+        },
+        {
+          "name": "08.05 Aperçu : refuser un échantillon supérieur à la quantité sortie",
           "event": [
             {
               "listen": "test",
@@ -4887,20 +4906,96 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Brouillon créé\", function () { pm.expect(data.statut).to.eql('BROUILLON'); });",
-                  "pm.test(\"ID sortie stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"sortie_a\", String(data.id)); });",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur nombre_poissons_peses\", function () { pm.expect(data).to.have.property(\"nombre_poissons_peses\"); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
               }
             }
           ],
-          "response": []
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/apercu-sortie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_mise_en_place\": \"{{date_today}}\",\n  \"nombre_poissons_peses\": 9771,\n  \"poids_total_g\": \"195420.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         },
         {
-          "name": "08.05 Refuser second brouillon actif",
+          "name": "08.06 Aperçu complet : lignes, écart et poids moyen initial",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Prélèvement calculé depuis le registre\", function () { pm.expect(data.quantite_sortie).to.eql(9770); pm.expect(data.lignes).to.have.length(2); });",
+                  "pm.test(\"Quantités après journal\", function () { const m=Object.fromEntries(data.lignes.map(x=>[x.id_hapa,x.quantite])); pm.expect(m[Number(pm.collectionVariables.get('hapa_stk_1'))]).to.eql(4980); pm.expect(m[Number(pm.collectionVariables.get('hapa_stk_2'))]).to.eql(4790); });",
+                  "pm.test(\"Écart -10\", function () { pm.expect(data.ecart_effectif).to.eql(-10); });",
+                  "pm.test(\"Poids moyen initial\", function () { pm.expect(data.poids_moyen_initial).to.eql(\"20.00\"); });",
+                  "pm.test(\"Échantillon conforme\", function () { pm.expect(data.echantillon_conforme).to.eql(true); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/apercu-sortie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_pesee_initiale\": \"{{date_today}}\",\n  \"pourcentage_echantillon\": \"10\",\n  \"nombre_poissons_peses\": 977,\n  \"poids_total_g\": \"19540.00\",\n  \"date_mise_en_place\": \"{{date_today}}\",\n  \"effectif_entrant\": 9760,\n  \"justification_ecart\": \"Écart de comptage à l'arrivée\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "08.07 Refuser l'ancien brouillon de sortie",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 405\", function () { pm.response.to.have.status(405); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -4910,7 +5005,7 @@
               }
             ],
             "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
-            "description": "Vérifie 08.05 refuser second brouillon actif.",
+            "description": "",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\"\n}",
@@ -4920,94 +5015,26 @@
                 }
               }
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Erreur métier sur id_lot\", function () { pm.expect(data).to.have.property(\"id_lot\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "response": []
-        },
-        {
-          "name": "08.06 Aperçu des lignes calculées",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{sortie_a}}/apercu/",
-            "description": "Vérifie 08.06 aperçu des lignes calculées."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Prélèvement calculé depuis le registre\", function () { pm.expect(data.effectif_sortant).to.eql(9770); pm.expect(data.lignes).to.have.length(2); });",
-                  "pm.test(\"Quantités après journal\", function () { const m=Object.fromEntries(data.lignes.map(x=>[x.id_hapa,x.quantite])); pm.expect(m[Number(pm.collectionVariables.get('hapa_stk_1'))]).to.eql(4980); pm.expect(m[Number(pm.collectionVariables.get('hapa_stk_2'))]).to.eql(4790); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "response": []
-        },
-        {
-          "name": "08.07 Modifier brouillon",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{sortie_a}}/",
-            "description": "Vérifie 08.07 modifier brouillon.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"observation\": \"Brouillon modifié {{run_id}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Observation modifiée\", function () { pm.expect(data.observation).to.include('Brouillon modifié'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "response": []
+          }
         },
         {
           "name": "08.08 Refuser validation avec entrant supérieur au sortant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur effectif_entrant\", function () { pm.expect(data).to.have.property(\"effectif_entrant\"); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -5016,58 +5043,21 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{sortie_a}}/valider/",
-            "description": "Vérifie 08.08 refuser validation avec entrant supérieur au sortant.",
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/",
+            "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"effectif_entrant\": 9800,\n  \"justification_ecart\": \"Entrant trop élevé\",\n  \"poids_initial_g\": \"20.00\"\n}",
+              "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_pesee_initiale\": \"{{date_today}}\",\n  \"pourcentage_echantillon\": \"10\",\n  \"nombre_poissons_peses\": 977,\n  \"poids_total_g\": \"19540.00\",\n  \"date_mise_en_place\": \"{{date_today}}\",\n  \"effectif_entrant\": 9800,\n  \"justification_ecart\": \"Entrant trop élevé\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Erreur métier sur effectif_entrant\", function () { pm.expect(data).to.have.property(\"effectif_entrant\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "response": []
+          }
         },
         {
           "name": "08.09 Exiger justification pour écart de sortie",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{sortie_a}}/valider/",
-            "description": "Vérifie 08.09 exiger justification pour écart de sortie.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"effectif_entrant\": 9760,\n  \"poids_initial_g\": \"20.00\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
           "event": [
             {
               "listen": "test",
@@ -5075,19 +5065,15 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Erreur métier sur justification_ecart\", function () { pm.expect(data).to.have.property(\"justification_ecart\"); });",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur justification_ecart\", function () { pm.expect(data).to.have.property(\"justification_ecart\"); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
               }
             }
           ],
-          "response": []
-        },
-        {
-          "name": "08.10 Vérifier permission employé sur validation",
           "request": {
             "method": "POST",
             "header": [
@@ -5096,8 +5082,56 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{sortie_a}}/valider/",
-            "description": "Vérifie 08.10 vérifier permission employé sur validation.",
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_pesee_initiale\": \"{{date_today}}\",\n  \"pourcentage_echantillon\": \"10\",\n  \"nombre_poissons_peses\": 977,\n  \"poids_total_g\": \"19540.00\",\n  \"date_mise_en_place\": \"{{date_today}}\",\n  \"effectif_entrant\": 9760\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "08.10 Vérifier permission employé sur validation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Accès refusé\", function () { pm.expect(data).to.have.property(\"detail\"); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_pesee_initiale\": \"{{date_today}}\",\n  \"pourcentage_echantillon\": \"10\",\n  \"nombre_poissons_peses\": 977,\n  \"poids_total_g\": \"19540.00\",\n  \"date_mise_en_place\": \"{{date_today}}\",\n  \"effectif_entrant\": 9760,\n  \"justification_ecart\": \"Écart de comptage à l'arrivée\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -5107,17 +5141,11 @@
                   "type": "string"
                 }
               ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
             }
-          },
+          }
+        },
+        {
+          "name": "08.11 Valider la sortie du lot A comme gestionnaire",
           "event": [
             {
               "listen": "test",
@@ -5125,19 +5153,20 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Accès refusé\", function () { pm.expect(data).to.have.property('detail'); });",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Lot de grossissement actif\", function () { pm.expect(data.statut).to.eql(\"ACTIF\"); });",
+                  "pm.test(\"Quantité sortie\", function () { pm.expect(data.effectif_sortant).to.eql(9770); });",
+                  "pm.test(\"Effectif initial = effectif entrant\", function () { pm.expect(data.effectif_initial).to.eql(9760); });",
+                  "pm.test(\"Poids moyen initial calculé depuis P0\", function () { pm.expect(data.poids_moyen_initial).to.eql(\"20.00\"); });",
+                  "if (data.id_sortie_stock !== undefined) pm.collectionVariables.set(\"sortie_a\", String(data.id_sortie_stock));",
+                  "pm.test(\"Écart calculé\", function () { pm.expect(data.ecart_effectif).to.eql(-10); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
               }
             }
           ],
-          "response": []
-        },
-        {
-          "name": "08.11 Valider la sortie du lot A comme gestionnaire",
           "request": {
             "method": "POST",
             "header": [
@@ -5146,8 +5175,17 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{sortie_a}}/valider/",
-            "description": "Vérifie 08.11 valider la sortie du lot a comme gestionnaire.",
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_pesee_initiale\": \"{{date_today}}\",\n  \"pourcentage_echantillon\": \"10\",\n  \"nombre_poissons_peses\": 977,\n  \"poids_total_g\": \"19540.00\",\n  \"date_mise_en_place\": \"{{date_today}}\",\n  \"effectif_entrant\": 9760,\n  \"justification_ecart\": \"Écart de comptage à l'arrivée\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -5157,17 +5195,11 @@
                   "type": "string"
                 }
               ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"effectif_entrant\": 9760,\n  \"justification_ecart\": \"Écart de comptage à l'arrivée\",\n  \"poids_initial_g\": \"20.00\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
             }
-          },
+          }
+        },
+        {
+          "name": "08.12 Refuser double validation",
           "event": [
             {
               "listen": "test",
@@ -5175,20 +5207,15 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Sortie validée et écart calculé\", function () { pm.expect(data.statut).to.eql('VALIDEE'); pm.expect(data.effectif_sortant).to.eql(9770); pm.expect(data.effectif_entrant).to.eql(9760); pm.expect(data.ecart_effectif).to.eql(-10); });",
-                  "pm.test(\"Deux lignes de sortie\", function () { pm.expect(data.lignes).to.have.length(2); });",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur id_lot\", function () { pm.expect(data).to.have.property(\"id_lot\"); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
               }
             }
           ],
-          "response": []
-        },
-        {
-          "name": "08.12 Refuser double validation",
           "request": {
             "method": "POST",
             "header": [
@@ -5197,18 +5224,21 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{sortie_a}}/valider/",
-            "description": "Vérifie 08.12 refuser double validation.",
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/",
+            "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
+              "raw": "{\n  \"id_lot\": \"{{lot_a}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_pesee_initiale\": \"{{date_today}}\",\n  \"pourcentage_echantillon\": \"10\",\n  \"nombre_poissons_peses\": 977,\n  \"poids_total_g\": \"19540.00\",\n  \"date_mise_en_place\": \"{{date_today}}\",\n  \"effectif_entrant\": 9760,\n  \"justification_ecart\": \"Écart de comptage à l'arrivée\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
+          }
+        },
+        {
+          "name": "08.13 Refuser modification de sortie validée",
           "event": [
             {
               "listen": "test",
@@ -5216,19 +5246,14 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Erreur métier sur statut\", function () { pm.expect(data).to.have.property(\"statut\"); });",
+                  "pm.test(\"Statut HTTP 405\", function () { pm.response.to.have.status(405); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
               }
             }
           ],
-          "response": []
-        },
-        {
-          "name": "08.13 Refuser modification de sortie validée",
           "request": {
             "method": "PATCH",
             "header": [
@@ -5238,7 +5263,7 @@
               }
             ],
             "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{sortie_a}}/",
-            "description": "Vérifie 08.13 refuser modification de sortie validée.",
+            "description": "",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"observation\": \"Modification interdite\"\n}",
@@ -5248,24 +5273,7 @@
                 }
               }
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Erreur métier sur statut\", function () { pm.expect(data).to.have.property(\"statut\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "response": []
+          }
         },
         {
           "name": "08.14 Vérifier le stade du lot A",
@@ -5310,7 +5318,7 @@
                   "{",
                   "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Lot A créé automatiquement\", function () { const rows=Array.isArray(data)?data:data.results; const lot=rows.find(x=>x.id_sortie_stock===Number(pm.collectionVariables.get('sortie_a'))); pm.expect(lot).to.exist; pm.collectionVariables.set('lot_gross_a', String(lot.id)); pm.expect(lot.effectif_initial).to.eql(9760); pm.expect(lot.statut).to.eql('ACTIF'); pm.expect(lot.poids_initial_g).to.eql(null); });",
+                  "pm.test(\"Lot A créé automatiquement\", function () { const rows=Array.isArray(data)?data:data.results; const lot=rows.find(x=>x.id_sortie_stock===Number(pm.collectionVariables.get('sortie_a'))); pm.expect(lot).to.exist; pm.collectionVariables.set('lot_gross_a', String(lot.id)); pm.expect(lot.effectif_initial).to.eql(9760); pm.expect(lot.statut).to.eql('ACTIF'); pm.expect(lot.poids_moyen_initial).to.eql('20.00'); });",
                   "pm.test(\"Code, âge, étape et prochaine échéance\", function () { const rows=Array.isArray(data)?data:data.results; const lot=rows.find(x=>x.id_sortie_stock===Number(pm.collectionVariables.get('sortie_a'))); pm.expect(lot.code).to.match(/^GR-\\d{4}-\\d{4,}$/); pm.expect(lot.age_jours).to.eql(0); pm.expect(lot.etape_courante).to.eql(1); pm.expect(lot.prochaine_echeance_pesee).to.eql(pm.collectionVariables.get('date_jplus_30')); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
@@ -5347,7 +5355,23 @@
           "response": []
         },
         {
-          "name": "08.17 Refuser création manuelle de lot de grossissement",
+          "name": "08.17 Refuser création de lot de grossissement sans sortie",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur id_lot_origine\", function () { pm.expect(data).to.have.property(\"id_lot_origine\"); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -5357,7 +5381,7 @@
               }
             ],
             "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/",
-            "description": "Vérifie 08.17 refuser création manuelle de lot de grossissement.",
+            "description": "",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"id_lot_origine\": \"{{lot_a}}\"\n}",
@@ -5367,7 +5391,10 @@
                 }
               }
             }
-          },
+          }
+        },
+        {
+          "name": "08.18 Refuser sortie de stock du lot B (finalité VENTE)",
           "event": [
             {
               "listen": "test",
@@ -5375,19 +5402,15 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 405\", function () { pm.response.to.have.status(405); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Création interdite\", function () { pm.expect(data).to.have.property('detail'); });",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur id_lot\", function () { pm.expect(data).to.have.property(\"id_lot\"); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
               }
             }
           ],
-          "response": []
-        },
-        {
-          "name": "08.18 Refuser sortie de stock du lot B (finalité VENTE)",
           "request": {
             "method": "POST",
             "header": [
@@ -5396,35 +5419,18 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
-            "description": "Vérifie 08.18 refuser sortie de stock du lot b (finalité vente).",
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/",
+            "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_lot\": \"{{lot_b}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\"\n}",
+              "raw": "{\n  \"id_lot\": \"{{lot_b}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_pesee_initiale\": \"{{date_today}}\",\n  \"pourcentage_echantillon\": \"10\",\n  \"nombre_poissons_peses\": 200,\n  \"poids_total_g\": \"4000.00\",\n  \"date_mise_en_place\": \"{{date_today}}\",\n  \"effectif_entrant\": 2000\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Erreur métier sur id_lot\", function () { pm.expect(data).to.have.property(\"id_lot\"); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "response": []
+          }
         }
       ]
     },
@@ -5450,27 +5456,7 @@
       ],
       "item": [
         {
-          "name": "09.01 Créer brouillon de sortie du lot C",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
-            "description": "Vérifie 09.01 créer brouillon de sortie du lot c.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_lot\": \"{{lot_c}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
+          "name": "09.01 Aperçu de la sortie du lot C",
           "event": [
             {
               "listen": "test",
@@ -5478,20 +5464,17 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Brouillon C créé\", function () { pm.expect(data.statut).to.eql('BROUILLON'); });",
-                  "pm.test(\"ID stocké\", function () { if (data.id !== undefined) pm.collectionVariables.set(\"sortie_c\", String(data.id)); });",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Quantité sortie\", function () { pm.expect(data.quantite_sortie).to.eql(1000); });",
+                  "pm.test(\"Taille cible à 10 %\", function () { pm.expect(data.taille_echantillon_cible).to.eql(100); });",
+                  "pm.test(\"Code proposé\", function () { pm.expect(data.code_propose).to.be.a(\"string\").and.not.empty; });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
               }
             }
           ],
-          "response": []
-        },
-        {
-          "name": "09.02 Refuser validation employé",
           "request": {
             "method": "POST",
             "header": [
@@ -5500,8 +5483,56 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{sortie_c}}/valider/",
-            "description": "Vérifie 09.02 refuser validation employé.",
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/apercu-sortie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{lot_c}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_mise_en_place\": \"{{date_today}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.02 Refuser validation employé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Accès refusé\", function () { pm.expect(data).to.have.property(\"detail\"); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{lot_c}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_pesee_initiale\": \"{{date_today}}\",\n  \"pourcentage_echantillon\": \"10\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"2000.00\",\n  \"date_mise_en_place\": \"{{date_today}}\",\n  \"effectif_entrant\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -5511,17 +5542,11 @@
                   "type": "string"
                 }
               ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"poids_initial_g\": \"20.00\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
             }
-          },
+          }
+        },
+        {
+          "name": "09.04 Valider sortie C comme gestionnaire",
           "event": [
             {
               "listen": "test",
@@ -5529,16 +5554,50 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Accès refusé\", function () { pm.expect(data).to.have.property('detail'); });",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Lot de grossissement actif\", function () { pm.expect(data.statut).to.eql(\"ACTIF\"); });",
+                  "pm.test(\"Quantité sortie\", function () { pm.expect(data.effectif_sortant).to.eql(1000); });",
+                  "pm.test(\"Effectif initial = effectif entrant\", function () { pm.expect(data.effectif_initial).to.eql(1000); });",
+                  "pm.test(\"Poids moyen initial calculé depuis P0\", function () { pm.expect(data.poids_moyen_initial).to.eql(\"20.00\"); });",
+                  "if (data.id_sortie_stock !== undefined) pm.collectionVariables.set(\"sortie_c\", String(data.id_sortie_stock));",
+                  "pm.test(\"Écart nul\", function () { pm.expect(data.ecart_effectif).to.eql(0); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
               }
             }
           ],
-          "response": []
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{lot_c}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_pesee_initiale\": \"{{date_today}}\",\n  \"pourcentage_echantillon\": \"10\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"2000.00\",\n  \"date_mise_en_place\": \"{{date_today}}\",\n  \"effectif_entrant\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_gestionnaire}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
         },
         {
           "name": "09.03 Refuser annulation employé",
@@ -5582,56 +5641,6 @@
                   "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Accès refusé\", function () { pm.expect(data).to.have.property('detail'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "response": []
-        },
-        {
-          "name": "09.04 Valider sortie C comme gestionnaire",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{sortie_c}}/valider/",
-            "description": "Vérifie 09.04 valider sortie c comme gestionnaire.",
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token_gestionnaire}}",
-                  "type": "string"
-                }
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"effectif_entrant\": 1000,\n  \"poids_initial_g\": \"20.00\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Lot C transféré\", function () { pm.expect(data.statut).to.eql('VALIDEE'); pm.expect(data.effectif_sortant).to.eql(1000); pm.expect(data.ecart_effectif).to.eql(0); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
@@ -5866,7 +5875,25 @@
           "response": []
         },
         {
-          "name": "09.11 Recréer brouillon de sortie C",
+          "name": "09.11 Aperçu de la nouvelle sortie C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Quantité sortie\", function () { pm.expect(data.quantite_sortie).to.eql(1000); });",
+                  "pm.test(\"Taille cible à 10 %\", function () { pm.expect(data.taille_echantillon_cible).to.eql(100); });",
+                  "pm.test(\"Code proposé\", function () { pm.expect(data.code_propose).to.be.a(\"string\").and.not.empty; });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -5875,38 +5902,41 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/",
-            "description": "Vérifie 09.11 recréer brouillon de sortie c.",
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/apercu-sortie/",
+            "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id_lot\": \"{{lot_c}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\"\n}",
+              "raw": "{\n  \"id_lot\": \"{{lot_c}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_mise_en_place\": \"{{date_today}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Brouillon recréé\", function () { pm.expect(data.statut).to.eql('BROUILLON'); pm.collectionVariables.set('sortie_c_nouvelle', String(data.id)); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "response": []
+          }
         },
         {
           "name": "09.12 Revalider sortie C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Lot de grossissement actif\", function () { pm.expect(data.statut).to.eql(\"ACTIF\"); });",
+                  "pm.test(\"Quantité sortie\", function () { pm.expect(data.effectif_sortant).to.eql(1000); });",
+                  "pm.test(\"Effectif initial = effectif entrant\", function () { pm.expect(data.effectif_initial).to.eql(1000); });",
+                  "pm.test(\"Poids moyen initial calculé depuis P0\", function () { pm.expect(data.poids_moyen_initial).to.eql(\"20.00\"); });",
+                  "if (data.id_sortie_stock !== undefined) pm.collectionVariables.set(\"sortie_c_nouvelle\", String(data.id_sortie_stock));",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -5915,35 +5945,18 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/v1/effectifs/sorties-stock/{{sortie_c_nouvelle}}/valider/",
-            "description": "Vérifie 09.12 revalider sortie c.",
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/",
+            "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"effectif_entrant\": 1000,\n  \"poids_initial_g\": \"20.00\"\n}",
+              "raw": "{\n  \"id_lot\": \"{{lot_c}}\",\n  \"id_bassin_destination\": \"{{bassin_gro}}\",\n  \"date_pesee_initiale\": \"{{date_today}}\",\n  \"pourcentage_echantillon\": \"10\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"2000.00\",\n  \"date_mise_en_place\": \"{{date_today}}\",\n  \"effectif_entrant\": 1000\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Nouvelle sortie validée\", function () { pm.expect(data.statut).to.eql('VALIDEE'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "response": []
+          }
         },
         {
           "name": "09.13 Vérifier nouveau code et effectifs finaux",
@@ -6472,7 +6485,23 @@
           "response": []
         },
         {
-          "name": "10.12.1 Saisir poids initial du lot C",
+          "name": "10.12.1 Refuser la modification du poids initial du lot C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur poids_moyen_initial\", function () { pm.expect(data).to.have.property(\"poids_moyen_initial\"); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PATCH",
             "header": [
@@ -6482,34 +6511,17 @@
               }
             ],
             "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{lot_gross_c}}/",
-            "description": "Vérifie 10.13 refuser clôture sans motif.",
+            "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"poids_initial_g\": \"15.00\"\n}",
+              "raw": "{\n  \"poids_moyen_initial\": \"15.00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "{",
-                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Poids initial enregistré\", function () { pm.expect(data.poids_initial_g).to.eql('15.00'); });",
-                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "response": []
+          }
         },
         {
           "name": "10.12.2 Refuser clôture sans poids final",

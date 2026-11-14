@@ -1,21 +1,35 @@
 from bisect import bisect_right
 from collections import defaultdict
 from datetime import datetime, time, timedelta
-from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
-from django.db import transaction
-from django.db.models import ExpressionWrapper, F, IntegerField, Sum
+from django.db import IntegrityError, transaction
+from django.db.models import ExpressionWrapper, F, IntegerField, Max, Sum
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.bassins.models import Bassin, Hapa
 from apps.effectifs.calculs import effectif_vivant
 from apps.effectifs.models import MouvementEffectif
-from apps.effectifs.services import enregistrer_mouvement_operation
+from apps.effectifs import services as services_effectifs
+from apps.effectifs.services import (
+    enregistrer_mouvement_operation,
+    enregistrer_sortie_stock_validee,
+    preparer_sortie_stock,
+    verifier_ecart_sortie,
+)
 from apps.lots.models import Lot
 from apps.provende.models import ConsommationProvende
 
-from .calculs import LotCalcul, PeseeCalcul, allouer_provende, calculer_instantanes
+from .calculs import (
+    LotCalcul,
+    PeseeCalcul,
+    allouer_provende,
+    calculer_instantanes,
+    echantillon_conforme,
+    poids_moyen_echantillon,
+    taille_echantillon_cible,
+)
 from .models import IndicateurLot, LotGrossissement, Pesee, PeseeLot
 
 
@@ -134,24 +148,16 @@ def modifier_lot_grossissement(lot_id, data):
                 )
             })
         lot_grossissement.pourcentage_groupe_pesee = pourcentage
-    if "poids_initial_g" in data:
-        poids = data["poids_initial_g"]
-        if poids is None or poids <= 0:
-            raise ValidationError({
-                "poids_initial_g": "Le poids initial doit être strictement positif."
-            })
-        lot_grossissement.poids_initial_g = poids
     if "observation" in data:
         lot_grossissement.observation = data["observation"]
+    # Le poids moyen initial n'est plus modifiable : il vient de la pesée
+    # initiale (P0) saisie à la validation de la sortie.
     champs = [
         champ
-        for champ in ("pourcentage_groupe_pesee", "poids_initial_g", "observation")
+        for champ in ("pourcentage_groupe_pesee", "observation")
         if champ in data
     ]
     lot_grossissement.save(update_fields=[*champs, "updated_at"])
-    if "poids_initial_g" in data:
-        # Le point de départ change : GMQ, IC et répartition sont à recalculer.
-        recalculer_indicateurs_bassin(lot_grossissement.bassin_id)
     return lot_grossissement
 
 
@@ -191,7 +197,7 @@ def verifier_capacite_bassin(bassin, espece, date_mise_en_place=None):
         date_evenement__gt=date_mise_en_place,
     ).exists():
         raise ValidationError({
-            "date_sortie": (
+            "date_mise_en_place": (
                 "Des mouvements de cette espèce existent dans le bassin après "
                 "cette date : la mise en place ne peut pas être antérieure."
             )
@@ -217,17 +223,9 @@ class EchantillonNonConforme(Exception):
         self.lignes_non_conformes = lignes_non_conformes
 
 
-def _calculer_cible(effectif, pourcentage):
-    cible = (
-        Decimal(effectif) * Decimal(pourcentage) / Decimal(100)
-    ).to_integral_value(rounding=ROUND_CEILING)
-    return max(1, int(cible))
-
-
-def _calculer_poids_moyen(poids_total_g, nombre_poissons_peses):
-    return (
-        Decimal(poids_total_g) / Decimal(nombre_poissons_peses)
-    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+# Mêmes règles pour la pesée initiale (P0) et les pesées de suivi.
+_calculer_cible = taille_echantillon_cible
+_calculer_poids_moyen = poids_moyen_echantillon
 
 
 def _date_entree(lot):
@@ -599,7 +597,7 @@ def recalculer_indicateurs_bassin(bassin_id):
             id=lot.pk,
             date_entree=_date_entree(lot),
             effectif_initial=lot.effectif_initial,
-            poids_initial=lot.poids_initial_g,
+            poids_initial=lot.poids_moyen_initial,
             date_cloture=lot.date_cloture,
             pesees=pesees_par_lot.get(lot.pk, []),
         )
@@ -632,3 +630,288 @@ def recalculer_indicateurs_bassin(bassin_id):
                 pesee_lot_id=pesee_lot_id,
                 defaults=instantane,
             )
+
+
+# --- Sortie de stock vers le grossissement (une seule transaction) ---------
+
+POURCENTAGE_ECHANTILLON_DEFAUT = Decimal("10")
+CHAMPS_REQUIS_VALIDATION = (
+    "date_mise_en_place",
+    "date_pesee_initiale",
+    "nombre_poissons_peses",
+    "poids_total_g",
+    "effectif_entrant",
+)
+
+
+def proposer_code_lot(annee):
+    """Propose le prochain code libre au format existant GR-AAAA-NNNN.
+
+    Proposition indicative pour l'aperçu : si l'utilisateur la garde, le code
+    définitif est généré par le modèle depuis l'identifiant (séquence jamais
+    réutilisée, même après l'annulation d'une sortie qui supprime un lot).
+    """
+    numero = (LotGrossissement.objects.aggregate(dernier=Max("pk"))["dernier"] or 0) + 1
+    while True:
+        code = f"GR-{annee}-{numero:04d}"
+        if not LotGrossissement.objects.filter(code=code).exists():
+            return code
+        numero += 1
+
+
+def _verifier_date_saisie(jour, champ):
+    aujourd_hui = timezone.localdate()
+    if jour > aujourd_hui:
+        raise ValidationError({champ: "La date ne peut pas être dans le futur."})
+    # Même borne de saisie rétroactive que le journal de mortalité et de perte.
+    limite = services_effectifs.JOURS_SAISIE_RETROACTIVE
+    if limite is not None and jour < aujourd_hui - timedelta(days=limite):
+        raise ValidationError({
+            champ: "La date dépasse la période de saisie rétroactive autorisée."
+        })
+
+
+def _verifier_echantillon_initial(
+    *,
+    quantite_sortie,
+    pourcentage,
+    nombre,
+    poids_total,
+    effectif_entrant,
+):
+    if pourcentage <= 0 or pourcentage > 100:
+        raise ValidationError({
+            "pourcentage_echantillon": (
+                "Le pourcentage doit être supérieur à 0 et inférieur ou égal à 100."
+            )
+        })
+    cible = taille_echantillon_cible(quantite_sortie, pourcentage)
+    conforme = None
+    poids_moyen = None
+    if nombre is not None:
+        if nombre <= 0:
+            raise ValidationError({
+                "nombre_poissons_peses": (
+                    "Le nombre de poissons pesés doit être strictement positif."
+                )
+            })
+        if nombre > quantite_sortie:
+            raise ValidationError({
+                "nombre_poissons_peses": (
+                    f"Le nombre de poissons pesés ({nombre}) dépasse la quantité "
+                    f"sortie ({quantite_sortie})."
+                )
+            })
+        if effectif_entrant is not None and nombre > effectif_entrant:
+            raise ValidationError({
+                "nombre_poissons_peses": (
+                    f"Le nombre de poissons pesés ({nombre}) dépasse l'effectif "
+                    f"entrant ({effectif_entrant})."
+                )
+            })
+        conforme = echantillon_conforme(nombre, cible)
+    if poids_total is not None and poids_total <= 0:
+        raise ValidationError({
+            "poids_total_g": "Le poids total doit être strictement positif."
+        })
+    if nombre is not None and poids_total is not None:
+        poids_moyen = poids_moyen_echantillon(poids_total, nombre)
+        if poids_moyen <= 0:
+            raise ValidationError({
+                "poids_total_g": (
+                    "Le poids moyen calculé est nul, vérifiez le poids total."
+                )
+            })
+    return {
+        "taille_echantillon_cible": cible,
+        "echantillon_conforme": conforme,
+        "poids_moyen_initial": poids_moyen,
+    }
+
+
+def _verifier_code(code, code_propose):
+    if not code:
+        return code_propose
+    longueur_max = LotGrossissement._meta.get_field("code").max_length
+    if len(code) > longueur_max:
+        raise ValidationError({
+            "code": f"Le code ne doit pas dépasser {longueur_max} caractères."
+        })
+    if LotGrossissement.objects.filter(code=code).exists():
+        raise ValidationError({"code": "Ce code de lot est déjà utilisé."})
+    return code
+
+
+def _preparer_sortie_grossissement(donnees, *, complet):
+    """Contrôles communs à l'aperçu et à la validation, sans aucune écriture.
+
+    `complet` : validation finale (tous les champs requis, échantillon non
+    conforme refusé sans confirmation). Sinon, aperçu : les champs de la pesée
+    et du lot sont facultatifs et contrôlés seulement s'ils sont fournis.
+    Doit être appelée dans une transaction (verrous).
+    """
+    if complet:
+        manquants = {
+            champ: "Ce champ est obligatoire."
+            for champ in CHAMPS_REQUIS_VALIDATION
+            if donnees.get(champ) is None
+        }
+        if manquants:
+            raise ValidationError(manquants)
+
+    # Verrous : lot d'origine d'abord, puis bassins et hapas (preparer_sortie_stock).
+    try:
+        lot = Lot.objects.select_for_update().get(pk=donnees["id_lot"])
+    except Lot.DoesNotExist as exc:
+        raise ValidationError({"id_lot": "Lot introuvable."}) from exc
+    if lot.stade != Lot.Stade.EN_STOCK:
+        raise ValidationError({
+            "id_lot": "Le lot d'origine doit être au stade EN_STOCK."
+        })
+    try:
+        bassin = Bassin.objects.get(pk=donnees["id_bassin_destination"])
+    except Bassin.DoesNotExist as exc:
+        raise ValidationError({
+            "id_bassin_destination": "Bassin introuvable."
+        }) from exc
+
+    date_mise_en_place = donnees.get("date_mise_en_place")
+    date_pesee = donnees.get("date_pesee_initiale")
+    date_reference = date_mise_en_place or timezone.localdate()
+    if date_mise_en_place is not None:
+        _verifier_date_saisie(date_mise_en_place, "date_mise_en_place")
+    if date_pesee is not None:
+        _verifier_date_saisie(date_pesee, "date_pesee_initiale")
+        if date_pesee > date_reference:
+            raise ValidationError({
+                "date_pesee_initiale": (
+                    "La pesée initiale ne peut pas être postérieure à la mise "
+                    "en bassin."
+                )
+            })
+
+    # Sortie totale : état du stock, hapas, bassin destination (verrouillé ici).
+    preparation = preparer_sortie_stock(lot, bassin, date_reference)
+    bassin = preparation["bassin_destination"]
+    verifier_capacite_bassin(bassin, lot.espece, date_reference)
+    quantite_sortie = preparation["effectif_sortant"]
+
+    pourcentage = donnees.get("pourcentage_echantillon")
+    if pourcentage is None:
+        pourcentage = POURCENTAGE_ECHANTILLON_DEFAUT
+    effectif_entrant = donnees.get("effectif_entrant")
+    echantillon = _verifier_echantillon_initial(
+        quantite_sortie=quantite_sortie,
+        pourcentage=pourcentage,
+        nombre=donnees.get("nombre_poissons_peses"),
+        poids_total=donnees.get("poids_total_g"),
+        effectif_entrant=effectif_entrant,
+    )
+
+    justification = (donnees.get("justification_ecart") or "").strip()
+    if effectif_entrant is not None:
+        verifier_ecart_sortie(quantite_sortie, effectif_entrant, justification)
+
+    code_propose = proposer_code_lot(date_reference.year)
+    code = _verifier_code((donnees.get("code") or "").strip(), code_propose)
+
+    # En dernier : la confirmation n'a de sens qu'une fois les autres contrôles passés.
+    if (
+        complet
+        and not echantillon["echantillon_conforme"]
+        and not donnees.get("confirmer_echantillon_non_conforme", False)
+    ):
+        raise EchantillonNonConforme([{
+            "id_lot": lot.pk,
+            "reference_lot": lot.reference,
+            "nombre_poissons_peses": donnees["nombre_poissons_peses"],
+            "taille_echantillon_cible": echantillon["taille_echantillon_cible"],
+        }])
+
+    return {
+        "lot": lot,
+        "preparation": preparation,
+        "bassin": bassin,
+        "quantite_sortie": quantite_sortie,
+        "date_mise_en_place": date_mise_en_place,
+        "date_pesee_initiale": date_pesee,
+        "pourcentage_echantillon": pourcentage,
+        "nombre_poissons_peses": donnees.get("nombre_poissons_peses"),
+        "poids_total_g": donnees.get("poids_total_g"),
+        **echantillon,
+        "effectif_entrant": effectif_entrant,
+        "ecart_effectif": (
+            effectif_entrant - quantite_sortie
+            if effectif_entrant is not None
+            else None
+        ),
+        "justification_ecart": justification,
+        "code_propose": code_propose,
+        "code": code,
+        "observation": donnees.get("observation", ""),
+    }
+
+
+def apercu_sortie_grossissement(donnees):
+    """Aperçu en lecture seule : mêmes contrôles que la validation, rien n'est écrit."""
+    with transaction.atomic():
+        contexte = _preparer_sortie_grossissement(donnees, complet=False)
+        # Garantie supplémentaire : la transaction de l'aperçu est toujours annulée.
+        transaction.set_rollback(True)
+    return contexte
+
+
+@transaction.atomic
+def valider_sortie_grossissement(donnees, *, utilisateur):
+    """Sortie totale du stock, mouvements, stade du lot et lot de grossissement.
+
+    Toutes les validations précèdent les écritures ; une erreur à n'importe
+    quelle étape annule tout (aucun mouvement, stock et stade inchangés,
+    aucun lot de grossissement).
+    """
+    contexte = _preparer_sortie_grossissement(donnees, complet=True)
+    lot = contexte["lot"]
+    date_mise_en_place = timezone.make_aware(
+        datetime.combine(contexte["date_mise_en_place"], time.min),
+        timezone.get_current_timezone(),
+    )
+
+    # 1. Sortie du stock (clôture du stock) et mouvements SORTIE / ENTREE.
+    sortie = enregistrer_sortie_stock_validee(
+        lot=lot,
+        preparation=contexte["preparation"],
+        date_sortie=date_mise_en_place,
+        effectif_entrant=contexte["effectif_entrant"],
+        justification_ecart=contexte["justification_ecart"],
+        utilisateur=utilisateur,
+    )
+    # 2. Lot d'origine en grossissement.
+    lot.stade = Lot.Stade.EN_GROSSISSEMENT
+    lot.save(update_fields=["stade", "updated_at"])
+    # 3. Lot de grossissement, avec la trace de la pesée initiale.
+    # Code proposé conservé (ou absent) : génération par le modèle, sans réutiliser
+    # le code d'un lot supprimé. Seul un code réellement saisi est imposé.
+    code = "" if contexte["code"] == contexte["code_propose"] else contexte["code"]
+    try:
+        with transaction.atomic():
+            return LotGrossissement.objects.create(
+                code=code,
+                lot_origine=lot,
+                sortie_stock=sortie,
+                bassin=contexte["bassin"],
+                espece=lot.espece,
+                date_mise_en_place=date_mise_en_place,
+                effectif_initial=contexte["effectif_entrant"],
+                poids_moyen_initial=contexte["poids_moyen_initial"],
+                date_pesee_initiale=contexte["date_pesee_initiale"],
+                pourcentage_echantillon_initial=contexte["pourcentage_echantillon"],
+                nombre_poissons_peses_initial=contexte["nombre_poissons_peses"],
+                poids_total_initial_g=contexte["poids_total_g"],
+                observation=contexte["observation"] or "",
+                utilisateur=utilisateur,
+            )
+    except IntegrityError as exc:
+        # Course entre deux validations sur le même code.
+        if "code" in str(exc.__cause__ or exc):
+            raise ValidationError({"code": "Ce code de lot est déjà utilisé."}) from exc
+        raise

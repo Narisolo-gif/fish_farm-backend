@@ -29,16 +29,13 @@ from .serializers import (
     EvenementMortalitePerteSerializer,
     MouvementEffectifSerializer,
     SortieStockSerializer,
-    ValidationSortieSerializer,
 )
 from .services import (
     annuler_sortie,
     annuler_evenement,
     annuler_mouvement,
-    calculer_lignes_sortie,
     solde_bassin_espece_date,
     totaux_evenements,
-    valider_sortie,
 )
 
 
@@ -351,7 +348,14 @@ class EvenementMortalitePerteViewSet(viewsets.ModelViewSet):
         return Response(totaux_evenements(request.query_params))
 
 
-class SortieStockViewSet(viewsets.ModelViewSet):
+class SortieStockViewSet(viewsets.ReadOnlyModelViewSet):
+    """Consultation et annulation des sorties de stock.
+
+    La sortie vers le grossissement se crée et se valide en un seul appel,
+    avec la création du lot : POST /api/v1/grossissement/lots-grossissement/.
+    Il n'y a plus de brouillon ni de validation en deux temps.
+    """
+
     queryset = SortieStock.objects.select_related(
         "lot",
         "bassin_destination",
@@ -360,12 +364,16 @@ class SortieStockViewSet(viewsets.ModelViewSet):
         "annulee_par",
     ).prefetch_related("lignes__hapa__bassin").all()
     serializer_class = SortieStockSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "head", "options"]
 
     def get_permissions(self):
-        if self.action in {"list", "retrieve", "create", "apercu"}:
+        if self.action in {"list", "retrieve"}:
             return [IsAuthenticated(), IsTousRolesActifs()]
-        return [IsAuthenticated(), IsAdministrateurOuGestionnaire()]
+        return [
+            IsAuthenticated(),
+            IsTousRolesActifs(),
+            IsAdministrateurOuGestionnaire(),
+        ]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -410,22 +418,6 @@ class SortieStockViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(date_sortie__date__lte=date_max)
         return queryset.order_by("-date_sortie", "-id")
 
-    @action(detail=True, methods=["post"], url_path="valider")
-    def valider(self, request, pk=None):
-        serializer = ValidationSortieSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        sortie = valider_sortie(
-            self.get_object().pk,
-            utilisateur=request.user,
-            effectif_entrant=serializer.validated_data.get("effectif_entrant"),
-            justification_ecart=serializer.validated_data.get(
-                "justification_ecart",
-                "",
-            ),
-            poids_initial_g=serializer.validated_data.get("poids_initial_g"),
-        )
-        return Response(self.get_serializer(sortie).data)
-
     @action(detail=True, methods=["post"], url_path="annuler")
     def annuler(self, request, pk=None):
         serializer = AnnulationSortieStockSerializer(data=request.data)
@@ -436,33 +428,3 @@ class SortieStockViewSet(viewsets.ModelViewSet):
             utilisateur=request.user,
         )
         return Response(self.get_serializer(sortie).data)
-
-    @action(detail=True, methods=["get"], url_path="apercu")
-    def apercu(self, request, pk=None):
-        sortie = self.get_object()
-        if sortie.lignes.exists():
-            lignes = [
-                {
-                    "hapa": ligne.hapa,
-                    "quantite": ligne.quantite,
-                }
-                for ligne in sortie.lignes.select_related("hapa")
-            ]
-            effectif_sortant = sortie.effectif_sortant
-        else:
-            date_locale = timezone.localtime(sortie.date_sortie).date()
-            lignes = calculer_lignes_sortie(sortie.lot, date_locale)
-            effectif_sortant = sum(ligne["quantite"] for ligne in lignes)
-        return Response({
-            "lignes": [
-                {
-                    "id_hapa": ligne["hapa"].pk,
-                    "nom_hapa": ligne["hapa"].nom,
-                    "quantite": ligne["quantite"],
-                }
-                for ligne in lignes
-            ],
-            "effectif_sortant": effectif_sortant,
-            "effectif_entrant": sortie.effectif_entrant or effectif_sortant,
-            "ecart_effectif": sortie.ecart_effectif or 0,
-        })
