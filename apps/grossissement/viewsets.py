@@ -17,9 +17,11 @@ from .models import LotGrossissement, Pesee
 from .serializers import (
     ApercuSortieGrossissementSerializer,
     ClotureLotGrossissementSerializer,
+    HistoriqueClotureSerializer,
     LotGrossissementSerializer,
     OrigineLotGrossissementSerializer,
     AnnulationPeseeSerializer,
+    ApercuClotureSerializer,
     ApercuPeseeSerializer,
     PeseeEcritureSerializer,
     PeseeSerializer,
@@ -33,7 +35,9 @@ from .services import (
     apercu_sortie_grossissement,
     cloturer_lot_grossissement,
     creer_pesee,
+    evacuer_lot_grossissement,
     modifier_pesee,
+    preparer_cloture,
     valider_sortie_grossissement,
 )
 from .suivi import suivi_lot
@@ -75,7 +79,14 @@ class LotGrossissementViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "patch", "post", "head", "options"]
 
     def get_permissions(self):
-        if self.action in {"list", "retrieve", "origine", "suivi"}:
+        if self.action in {
+            "list",
+            "retrieve",
+            "origine",
+            "suivi",
+            "apercu_cloture",
+            "historique_clotures",
+        }:
             return [IsAuthenticated(), IsTousRolesActifs()]
         return [
             IsAuthenticated(),
@@ -156,19 +167,76 @@ class LotGrossissementViewSet(viewsets.ModelViewSet):
             })
         return queryset.order_by("-created_at", "-id")
 
+    @action(detail=True, methods=["get"], url_path="apercu-cloture")
+    def apercu_cloture(self, request, pk=None):
+        """Formulaire de clôture en lecture seule ; rien n'est écrit."""
+        contexte = preparer_cloture(self.get_object())
+        return Response(ApercuClotureSerializer(contexte).data)
+
     @action(detail=True, methods=["post"], url_path="cloturer")
     def cloturer(self, request, pk=None):
         serializer = ClotureLotGrossissementSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        donnees = serializer.validated_data
         lot = cloturer_lot_grossissement(
             self.get_object().pk,
-            motif=donnees["motif"],
-            poids_final_g=donnees["poids_final_g"],
-            date_cloture=donnees.get("date_cloture"),
             utilisateur=request.user,
+            observation=serializer.validated_data.get("observation", ""),
         )
-        return Response(self.get_serializer(lot).data, status=status.HTTP_200_OK)
+        lot = self.queryset.get(pk=lot.pk)
+        return Response({
+            **self.get_serializer(lot).data,
+            "message": f"Le cycle du lot {lot.code} a bien été clôturé.",
+        })
+
+    @action(detail=True, methods=["post"], url_path="evacuer")
+    def evacuer(self, request, pk=None):
+        """Évacuation du bassin, demandée après la clôture (transaction à part)."""
+        lot = evacuer_lot_grossissement(self.get_object().pk, utilisateur=request.user)
+        lot = self.queryset.get(pk=lot.pk)
+        return Response({
+            **self.get_serializer(lot).data,
+            "message": f"Le bassin du lot {lot.code} a bien été évacué.",
+        })
+
+    @action(detail=False, methods=["get"], url_path="historique-clotures")
+    def historique_clotures(self, request):
+        """Lots clôturés, du plus récent au plus ancien."""
+        lots = LotGrossissement.objects.select_related("bassin").filter(
+            statut=LotGrossissement.Statut.CLOTURE
+        )
+        params = request.query_params
+        espece = params.get("espece")
+        if espece:
+            if espece not in Lot.Espece.values:
+                raise ValidationError({"espece": "Valeur inconnue."})
+            lots = lots.filter(espece=espece)
+        bassin = params.get("bassin")
+        if bassin:
+            if not bassin.isdigit():
+                raise ValidationError({"bassin": "Identifiant invalide."})
+            lots = lots.filter(bassin_id=bassin)
+        bornes = {}
+        for parametre, lookup in (
+            ("date_min", "date_cloture__gte"),
+            ("date_max", "date_cloture__lte"),
+        ):
+            valeur = params.get(parametre)
+            if not valeur:
+                continue
+            try:
+                jour = parse_date(valeur)
+            except ValueError:
+                jour = None
+            if jour is None:
+                raise ValidationError({parametre: "Format invalide. Utilisez YYYY-MM-DD."})
+            bornes[parametre] = jour
+            lots = lots.filter(**{lookup: jour})
+        if len(bornes) == 2 and bornes["date_max"] < bornes["date_min"]:
+            raise ValidationError({
+                "date_max": "La date de fin doit être égale ou postérieure au début."
+            })
+        lots = lots.order_by("-date_cloture", "-id")
+        return Response(HistoriqueClotureSerializer(lots, many=True).data)
 
     @action(detail=True, methods=["get"], url_path="suivi")
     def suivi(self, request, pk=None):

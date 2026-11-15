@@ -6524,7 +6524,7 @@
           }
         },
         {
-          "name": "10.12.2 Refuser clôture sans poids final",
+          "name": "10.12.2 Refuser la clôture sans pesée finale au seuil",
           "request": {
             "method": "POST",
             "header": [
@@ -6537,7 +6537,7 @@
             "description": "Vérifie 10.13 refuser clôture sans motif.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"motif\": \"Fin du test E2E\"\n}",
+              "raw": "{}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6552,9 +6552,9 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Erreur métier sur poids_final_g\", function () { pm.expect(data).to.have.property(\"poids_final_g\"); });",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur poids_moyen_final\", function () { pm.expect(data).to.have.property(\"poids_moyen_final\"); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
@@ -6564,7 +6564,7 @@
           "response": []
         },
         {
-          "name": "10.13 Refuser clôture sans motif",
+          "name": "10.13 Refuser l'ancien format de clôture (motif, poids_final_g)",
           "request": {
             "method": "POST",
             "header": [
@@ -6592,9 +6592,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
-                  "pm.test(\"Erreur métier sur motif\", function () { pm.expect(data).to.have.property(\"motif\"); });",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur motif\", function () { pm.expect(data).to.have.property(\"motif\"); });",
+                  "pm.test(\"Erreur sur poids_final_g\", function () { pm.expect(data).to.have.property(\"poids_final_g\"); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
@@ -6602,6 +6603,45 @@
             }
           ],
           "response": []
+        },
+        {
+          "name": "10.13.1 Pesée finale du lot C au seuil (CARPE 300 g)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Poids moyen 300.00\", function () { pm.expect(data.poids_moyen).to.eql(\"300.00\"); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{lot_gross_c}}\",\n  \"date\": \"{{date_today}}\",\n  \"pourcentage_echantillon\": \"10\",\n  \"nombre_poissons_peses\": 1073,\n  \"poids_total_g\": \"321900.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         },
         {
           "name": "10.14 Clôturer le lot grossi C",
@@ -6617,7 +6657,7 @@
             "description": "Vérifie 10.14 clôturer le lot grossi c.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"motif\": \"Fin du test E2E\",\n  \"poids_final_g\": \"250.00\"\n}",
+              "raw": "{\n  \"observation\": \"Fin du test E2E\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6632,10 +6672,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "{",
-                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "pm.test(\"Lot clôturé\", function () { pm.expect(data.statut).to.eql('CLOTURE'); pm.expect(data.date_cloture).to.eql(pm.collectionVariables.get('date_today')); });",
-                  "pm.test(\"Poids et effectif finaux\", function () { pm.expect(data.poids_final_g).to.eql('250.00'); pm.expect(data.effectif_final).to.eql(10730); });",
+                  "pm.test(\"Poids et effectif finaux\", function () { pm.expect(data.poids_moyen_final).to.eql('300.00'); pm.expect(data.effectif_final).to.eql(10730); pm.expect(data.evacuation_requise).to.eql(true); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]
@@ -6643,6 +6683,45 @@
             }
           ],
           "response": []
+        },
+        {
+          "name": "10.14.1 Évacuer le bassin du lot C",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Évacué\", function () { pm.expect(data.evacuation_requise).to.eql(false); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{lot_gross_c}}/evacuer/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         },
         {
           "name": "10.15 Refuser double clôture",
@@ -6658,7 +6737,7 @@
             "description": "Vérifie 10.15 refuser double clôture.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"motif\": \"Seconde clôture\",\n  \"poids_final_g\": \"250.00\"\n}",
+              "raw": "{}",
               "options": {
                 "raw": {
                   "language": "json"

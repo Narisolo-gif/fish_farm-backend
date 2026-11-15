@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.utils import timezone
 from rest_framework import serializers
 
+from .calculs import ecart_poids_pourcentage, taux_survie
 from .models import IndicateurLot, LotGrossissement, Pesee
 from .services import derniere_pesee_valide, modifier_lot_grossissement
 
@@ -14,24 +15,23 @@ CHAMPS_MODIFIABLES = {"observation", "pourcentage_groupe_pesee"}
 
 
 class ClotureLotGrossissementSerializer(serializers.Serializer):
-    motif = serializers.CharField(
-        required=True,
-        allow_blank=False,
+    """Confirmation de la clôture : la date, l'effectif et le poids finaux sont
+    déterminés par le service ; seule une observation peut être jointe."""
+
+    observation = serializers.CharField(
+        required=False,
+        allow_blank=True,
         trim_whitespace=True,
     )
-    poids_final_g = serializers.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        required=True,
-    )
-    date_cloture = serializers.DateField(required=False)
 
-    def validate_poids_final_g(self, value):
-        if value <= 0:
-            raise serializers.ValidationError(
-                "Le poids final doit être strictement positif."
-            )
-        return value
+    def validate(self, attrs):
+        inconnus = set(self.initial_data) - {"observation"}
+        if inconnus:
+            raise serializers.ValidationError({
+                champ: "Ce champ n'est pas accepté : la valeur est déterminée à la clôture."
+                for champ in sorted(inconnus)
+            })
+        return attrs
 
 
 class LotGrossissementSerializer(serializers.ModelSerializer):
@@ -75,6 +75,7 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
     date_derniere_pesee = serializers.SerializerMethodField()
     derniers_indicateurs = serializers.SerializerMethodField()
     pesee_en_retard = serializers.BooleanField(read_only=True)
+    evacuation_requise = serializers.BooleanField(read_only=True)
     # Sélection du lot dans la page de suivi : date d'entrée et jour de cycle
     # (figé à la clôture ; `age_jours` est conservé pour les clients existants).
     date_entree = serializers.DateField(read_only=True)
@@ -105,8 +106,10 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
             "statut",
             "date_cloture",
             "effectif_final",
-            "poids_final_g",
+            "poids_moyen_final",
             "motif_cloture",
+            "evacue_le",
+            "evacuation_requise",
             "observation",
             "age_jours",
             "date_entree",
@@ -591,3 +594,76 @@ class SuiviLotSerializer(serializers.Serializer):
 
     def to_representation(self, contexte):
         return _en_json(contexte)
+
+
+# --- Clôture --------------------------------------------------------------------
+
+class ApercuClotureSerializer(serializers.Serializer):
+    """Résumé en lecture seule du formulaire de clôture."""
+
+    def to_representation(self, contexte):
+        lot = contexte["lot"]
+        return _en_json({
+            "id_lot_grossissement": lot.pk,
+            "code": lot.code,
+            "espece": lot.espece,
+            "statut": lot.statut,
+            "date_cloture": contexte["date_cloture"],
+            "effectif_initial": contexte["effectif_initial"],
+            "effectif_final": contexte["effectif_final"],
+            "poids_moyen_initial": contexte["poids_moyen_initial"],
+            "poids_moyen_final": contexte["poids_moyen_final"],
+            "date_derniere_pesee": contexte["date_derniere_pesee"],
+            "seuil_poids_vente_g": contexte["seuil_poids_vente_g"],
+            "ecart_poids_pourcentage": contexte["ecart_poids_pourcentage"],
+            "cloturable": contexte["cloturable"],
+            "raison_refus": contexte["raison_refus"],
+        })
+
+
+class HistoriqueClotureSerializer(serializers.ModelSerializer):
+    """Une ligne de l'historique des clôtures ; le détail est dans le suivi du lot."""
+
+    id_bassin = serializers.IntegerField(source="bassin_id", read_only=True)
+    reference_bassin = serializers.CharField(source="bassin.reference", read_only=True)
+    date_entree = serializers.DateField(read_only=True)
+    duree_cycle_jours = serializers.SerializerMethodField()
+    taux_survie = serializers.SerializerMethodField()
+    ecart_poids_pourcentage = serializers.SerializerMethodField()
+    evacue = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LotGrossissement
+        fields = [
+            "id",
+            "code",
+            "espece",
+            "id_bassin",
+            "reference_bassin",
+            "date_entree",
+            "date_cloture",
+            "duree_cycle_jours",
+            "effectif_initial",
+            "effectif_final",
+            "taux_survie",
+            "poids_moyen_initial",
+            "poids_moyen_final",
+            "ecart_poids_pourcentage",
+            "evacue",
+            "evacue_le",
+        ]
+        read_only_fields = fields
+
+    def get_duree_cycle_jours(self, obj):
+        return (obj.date_cloture - obj.date_entree).days
+
+    def get_taux_survie(self, obj):
+        return _decimal_ou_none(taux_survie(obj.effectif_initial, obj.effectif_final))
+
+    def get_ecart_poids_pourcentage(self, obj):
+        return _decimal_ou_none(
+            ecart_poids_pourcentage(obj.poids_moyen_initial, obj.poids_moyen_final)
+        )
+
+    def get_evacue(self, obj):
+        return not obj.evacuation_requise

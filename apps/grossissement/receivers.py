@@ -1,8 +1,11 @@
+from django.contrib.contenttypes.models import ContentType
 from django.dispatch import receiver
 from rest_framework.exceptions import ValidationError
 
+from apps.effectifs.models import MouvementEffectif
 from apps.effectifs.signals import (
     mouvement_avant_annulation,
+    mouvement_avant_enregistrement,
     sortie_stock_avant_annulation,
 )
 from apps.lots.models import Lot
@@ -67,5 +70,63 @@ def refuser_annulation_lot_cloture(sender, *, mouvement, date_annulation, **kwar
                 "detail": (
                     "Ce mouvement appartient à un lot de grossissement clôturé : "
                     "il ne peut plus être annulé."
+                )
+            })
+
+
+@receiver(
+    mouvement_avant_enregistrement,
+    dispatch_uid="grossissement.figer_registre_lot_cloture",
+)
+def refuser_mouvement_lot_cloture(
+    sender,
+    *,
+    bassin,
+    espece,
+    type_mouvement,
+    date_evenement,
+    operation_source_content_type,
+    operation_source_object_id,
+    **kwargs,
+):
+    """Un lot clôturé ne reçoit plus d'enregistrement.
+
+    Bassin + espèce identifient le lot. Sont refusés : tout mouvement daté de
+    la période du lot (mise en place → clôture), et tout mouvement postérieur
+    tant que le bassin n'est pas évacué. Seule l'évacuation du lot passe ; après
+    elle, un nouveau lot peut entrer dès le jour de la clôture.
+    """
+    lots_clotures = LotGrossissement.objects.filter(
+        bassin=bassin,
+        espece=espece,
+        statut=LotGrossissement.Statut.CLOTURE,
+    )
+    if not lots_clotures.exists():
+        return
+    type_lot = ContentType.objects.get_for_model(LotGrossissement)
+    for lot in lots_clotures:
+        if (
+            operation_source_content_type == type_lot
+            and operation_source_object_id == lot.pk
+        ):
+            continue
+        dans_la_periode = lot.date_entree <= date_evenement <= lot.date_cloture
+        entree_apres_evacuation = (
+            date_evenement == lot.date_cloture
+            and type_mouvement == MouvementEffectif.TypeMouvement.ENTREE
+            and not lot.evacuation_requise
+        )
+        if dans_la_periode and not entree_apres_evacuation:
+            raise ValidationError({
+                "detail": (
+                    f"Le lot de grossissement {lot.code} est clôturé : son registre "
+                    "est figé, aucun mouvement ne peut y être ajouté."
+                )
+            })
+        if date_evenement > lot.date_cloture and lot.evacuation_requise:
+            raise ValidationError({
+                "detail": (
+                    f"Le lot de grossissement {lot.code} est clôturé mais le bassin "
+                    "n'a pas été évacué : évacuez-le avant toute nouvelle saisie."
                 )
             })

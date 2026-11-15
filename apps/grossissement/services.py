@@ -26,9 +26,11 @@ from .calculs import (
     PeseeCalcul,
     allouer_provende,
     calculer_instantanes,
+    ecart_poids_pourcentage,
     echantillon_conforme,
     poids_moyen_echantillon,
     pourcentage_reel_echantillon,
+    seuil_poids_vente,
     taille_echantillon_cible,
 )
 from .models import IndicateurLot, LotGrossissement, Pesee
@@ -37,92 +39,131 @@ from .models import IndicateurLot, LotGrossissement, Pesee
 MAX_LOTS_ACTIFS_PAR_BASSIN = 2
 
 
+def preparer_cloture(lot):
+    """Résumé de la clôture du lot à la date du jour ; rien n'est écrit.
+
+    La clôture n'est possible que pour un lot actif dont la dernière pesée
+    valide atteint le seuil de vente de son espèce. Le poids moyen final est
+    celui de cette pesée ; l'effectif final est l'effectif vivant du registre.
+    """
+    date_cloture = timezone.localdate()
+    derniere = derniere_pesee_valide(lot)
+    seuil = seuil_poids_vente(lot.espece)
+    poids_final = derniere.poids_moyen if derniere is not None else None
+
+    refus = None
+    if lot.statut != LotGrossissement.Statut.ACTIF:
+        refus = ("statut", "Seul un lot en cours de grossissement peut être clôturé.")
+    elif derniere is None:
+        refus = (
+            "poids_moyen_final",
+            "Aucune pesée enregistrée : effectuez une pesée finale avant de clôturer.",
+        )
+    elif poids_final < seuil:
+        refus = (
+            "poids_moyen_final",
+            f"Le poids moyen de la dernière pesée ({poids_final} g, le "
+            f"{derniere.date.isoformat()}) est inférieur au seuil de vente de "
+            f"{seuil} g ({lot.espece}). Enregistrez une pesée finale à jour.",
+        )
+    return {
+        "lot": lot,
+        "date_cloture": date_cloture,
+        "effectif_initial": lot.effectif_initial,
+        "effectif_final": effectif_vivant(lot.bassin_id, lot.espece, a_la_date=date_cloture),
+        "poids_moyen_initial": lot.poids_moyen_initial,
+        "poids_moyen_final": poids_final,
+        "date_derniere_pesee": derniere.date if derniere is not None else None,
+        "seuil_poids_vente_g": seuil,
+        "ecart_poids_pourcentage": ecart_poids_pourcentage(
+            lot.poids_moyen_initial, poids_final
+        ),
+        "cloturable": refus is None,
+        "champ_refus": refus[0] if refus else None,
+        "raison_refus": refus[1] if refus else None,
+    }
+
+
+def _verrouiller_lot_et_bassin(lot_id):
+    """Verrouille le bassin puis le lot (même ordre que les pesées)."""
+    bassin_id = (
+        LotGrossissement.objects.filter(pk=lot_id)
+        .values_list("bassin_id", flat=True)
+        .first()
+    )
+    if bassin_id is None:
+        raise NotFound("Lot de grossissement introuvable.")
+    bassin = Bassin.objects.select_for_update().get(pk=bassin_id)
+    lot = LotGrossissement.objects.select_for_update().get(pk=lot_id)
+    return lot, bassin
+
+
 @transaction.atomic
-def cloturer_lot_grossissement(
-    lot_id,
-    *,
-    motif,
-    poids_final_g,
-    utilisateur,
-    date_cloture=None,
-):
-    try:
-        lot_grossissement = LotGrossissement.objects.select_for_update().get(
-            pk=lot_id
-        )
-    except LotGrossissement.DoesNotExist as exc:
-        raise NotFound("Lot de grossissement introuvable.") from exc
-    if lot_grossissement.statut != LotGrossissement.Statut.ACTIF:
-        raise ValidationError({"statut": "Seul un lot actif peut être clôturé."})
-    if not motif or not motif.strip():
-        raise ValidationError({"motif": "Le motif de clôture est obligatoire."})
-    if poids_final_g is None or poids_final_g <= 0:
-        raise ValidationError({
-            "poids_final_g": "Le poids final doit être strictement positif."
-        })
+def cloturer_lot_grossissement(lot_id, *, utilisateur, observation=""):
+    """Clôture le cycle (une transaction) ; l'évacuation est une opération à part.
 
-    date_cloture = date_cloture or timezone.localdate()
-    date_mise_en_place = timezone.localtime(
-        lot_grossissement.date_mise_en_place
-    ).date()
-    if date_cloture > timezone.localdate():
-        raise ValidationError({
-            "date_cloture": "La date de clôture ne peut pas être dans le futur."
-        })
-    if date_cloture < date_mise_en_place:
-        raise ValidationError({
-            "date_cloture": (
-                "La date de clôture ne peut pas précéder la mise en place du lot."
-            )
-        })
-
-    bassin = Bassin.objects.select_for_update().get(pk=lot_grossissement.bassin_id)
-    lot_origine = Lot.objects.select_for_update().get(
-        pk=lot_grossissement.lot_origine_id
-    )
-    # Bassin + espèce identifient le lot : au plus un lot actif par espèce et par bassin.
-    if MouvementEffectif.objects.filter(
-        bassin=bassin,
-        espece=lot_grossissement.espece,
-        date_evenement__gt=date_cloture,
-    ).exists():
-        raise ValidationError({
-            "date_cloture": "Des mouvements existent après la date de clôture."
-        })
-    effectif = effectif_vivant(
-        bassin.pk,
-        lot_grossissement.espece,
-        a_la_date=date_cloture,
-    )
-    if effectif > 0:
-        # Évacuation : ramène l'effectif du lot à zéro dans le registre.
-        enregistrer_mouvement_operation(
-            operation=lot_grossissement,
-            bassin=bassin,
-            espece=lot_grossissement.espece,
-            type_mouvement=MouvementEffectif.TypeMouvement.SORTIE,
-            quantite=effectif,
-            date_evenement=date_cloture,
-            saisi_par=utilisateur,
-            lot_origine=lot_origine,
-            lot_grossissement=lot_origine,
-        )
+    Statut CLOTURE, date du jour, effectif et poids moyen finaux, lot d'origine
+    CLOTUREE. Aucun mouvement n'est écrit : le registre du lot est figé jusqu'à
+    l'évacuation (voir `evacuer_lot_grossissement`).
+    """
+    lot_grossissement, _ = _verrouiller_lot_et_bassin(lot_id)
+    lot_origine = Lot.objects.select_for_update().get(pk=lot_grossissement.lot_origine_id)
+    contexte = preparer_cloture(lot_grossissement)
+    if not contexte["cloturable"]:
+        raise ValidationError({contexte["champ_refus"]: contexte["raison_refus"]})
 
     lot_grossissement.statut = LotGrossissement.Statut.CLOTURE
-    lot_grossissement.date_cloture = date_cloture
-    lot_grossissement.motif_cloture = motif.strip()
-    lot_grossissement.poids_final_g = poids_final_g
-    lot_grossissement.effectif_final = effectif
+    lot_grossissement.date_cloture = contexte["date_cloture"]
+    lot_grossissement.effectif_final = contexte["effectif_final"]
+    lot_grossissement.poids_moyen_final = contexte["poids_moyen_final"]
+    lot_grossissement.motif_cloture = (observation or "").strip()
     lot_grossissement.save(update_fields=[
         "statut",
         "date_cloture",
-        "motif_cloture",
-        "poids_final_g",
         "effectif_final",
+        "poids_moyen_final",
+        "motif_cloture",
         "updated_at",
     ])
     lot_origine.stade = Lot.Stade.CLOTUREE
     lot_origine.save(update_fields=["stade", "updated_at"])
+    return lot_grossissement
+
+
+@transaction.atomic
+def evacuer_lot_grossissement(lot_id, *, utilisateur):
+    """Évacue le bassin d'un lot clôturé : SORTIE de l'effectif final.
+
+    Le mouvement est daté du jour de la clôture : le registre du lot étant figé
+    depuis, l'effectif à sortir est exactement l'effectif final.
+    """
+    lot_grossissement, bassin = _verrouiller_lot_et_bassin(lot_id)
+    if lot_grossissement.statut != LotGrossissement.Statut.CLOTURE:
+        raise ValidationError({"statut": "Seul un lot clôturé peut être évacué."})
+    if lot_grossissement.evacue_le is not None:
+        raise ValidationError({"detail": "Le bassin a déjà été évacué pour ce lot."})
+    effectif = effectif_vivant(
+        bassin.pk,
+        lot_grossissement.espece,
+        a_la_date=lot_grossissement.date_cloture,
+    )
+    if effectif <= 0:
+        raise ValidationError({"detail": "Aucun poisson du lot à évacuer."})
+    lot_origine = Lot.objects.get(pk=lot_grossissement.lot_origine_id)
+    enregistrer_mouvement_operation(
+        operation=lot_grossissement,
+        bassin=bassin,
+        espece=lot_grossissement.espece,
+        type_mouvement=MouvementEffectif.TypeMouvement.SORTIE,
+        quantite=effectif,
+        date_evenement=lot_grossissement.date_cloture,
+        saisi_par=utilisateur,
+        lot_origine=lot_origine,
+        lot_grossissement=lot_origine,
+    )
+    lot_grossissement.evacue_le = timezone.now()
+    lot_grossissement.evacue_par = utilisateur
+    lot_grossissement.save(update_fields=["evacue_le", "evacue_par", "updated_at"])
     return lot_grossissement
 
 
@@ -190,6 +231,19 @@ def verifier_capacite_bassin(bassin, espece, date_mise_en_place=None):
         raise ValidationError({
             "id_bassin_destination": (
                 "Le bassin contient déjà un lot en cours de la même espèce."
+            )
+        })
+    # Les poissons d'un lot clôturé non évacué sont encore dans le registre.
+    if LotGrossissement.objects.filter(
+        bassin=bassin,
+        espece=espece,
+        statut=LotGrossissement.Statut.CLOTURE,
+        evacue_le__isnull=True,
+        effectif_final__gt=0,
+    ).exists():
+        raise ValidationError({
+            "id_bassin_destination": (
+                "Un lot clôturé de cette espèce n'a pas encore été évacué du bassin."
             )
         })
     # Bassin + espèce identifient le lot : un nouveau lot ne peut pas s'intercaler

@@ -1,16 +1,17 @@
 {
   "lot": {
-    "id": 7,
-    "code": "GR-2026-0007",
+    "id": 2,
+    "code": "GR-2026-0002",
     "espece": "TILAPIA",
-    "id_bassin": 18,
+    "id_bassin": 5,
     "reference_bassin": "GROSS-DEST-V",
     "statut": "ACTIF",
     "date_entree": "2026-01-01",
     "jour_de_cycle": 10,
     "effectif_initial": 500,
     "poids_moyen_initial": 40.0,
-    "effectif_vivant_actuel": 500
+    "effectif_vivant_actuel": 500,
+    "evacuation_requise": false
   },
   "nombre_pesees": 0,
   "dernieres_valeurs": null,

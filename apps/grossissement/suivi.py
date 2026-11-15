@@ -14,11 +14,11 @@ from apps.effectifs.calculs import effectif_vivant
 from apps.environnement.models import ParametreEnvironnemental
 
 from .calculs import (
-    POIDS_VENTE_G,
     alertes_suivi,
     biomasse_kg,
     etat_calendrier,
     etat_seuil,
+    seuil_poids_vente,
 )
 from .models import IndicateurLot, LotGrossissement, Pesee
 
@@ -134,7 +134,8 @@ def suivi_lot(lot, date_reference):
         pesees[-1].date if pesees else None,
     )
     prochaine_pesee = calendrier["prochaine_pesee"] if actif else None
-    seuil = etat_seuil(pesees)
+    seuil_g = seuil_poids_vente(lot.espece)
+    seuil = etat_seuil(pesees, seuil_g)
 
     poids_initial = lot.poids_moyen_initial
     return {
@@ -152,6 +153,7 @@ def suivi_lot(lot, date_reference):
             "effectif_vivant_actuel": effectif_vivant(
                 lot.bassin_id, lot.espece, a_la_date=date_reference
             ),
+            "evacuation_requise": lot.evacuation_requise,
         },
         "nombre_pesees": len(series),
         "dernieres_valeurs": _dernieres_valeurs(series),
@@ -171,7 +173,7 @@ def suivi_lot(lot, date_reference):
             "pesees_prevues": calendrier["pesees_prevues"],
         },
         "seuil": {
-            "poids_vente_g": POIDS_VENTE_G,
+            "poids_vente_g": seuil_g,
             "atteint": seuil["atteint"],
             "fin_cycle_possible": seuil["atteint"] and actif,
             "date_premiere_pesee_au_seuil": seuil["date_premiere_pesee_au_seuil"],
@@ -180,6 +182,7 @@ def suivi_lot(lot, date_reference):
             actif=actif,
             prochaine_pesee=prochaine_pesee,
             seuil=seuil,
+            seuil_g=seuil_g,
         ),
         "parametres_environnementaux": _parametres_environnementaux(
             lot.bassin_id, date_reference

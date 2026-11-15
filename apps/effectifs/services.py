@@ -167,6 +167,18 @@ def enregistrer_mouvement(
             "quantite": "La quantité doit être strictement positive."
         })
 
+    from .signals import mouvement_avant_enregistrement
+
+    mouvement_avant_enregistrement.send(
+        sender=MouvementEffectif,
+        bassin=bassin,
+        espece=espece,
+        type_mouvement=type_mouvement,
+        date_evenement=date_evenement,
+        operation_source_content_type=operation_source_content_type,
+        operation_source_object_id=operation_source_object_id,
+    )
+
     sens = _sens_pour_type(type_mouvement)
     _verifier_hapa(bassin, hapa)
     if hapa is not None and type_mouvement == MouvementEffectif.TypeMouvement.ENTREE:

@@ -19,7 +19,13 @@ MILLE = Decimal("1000")
 PREMIERES_ECHEANCES_JOURS = (30, 60)
 INTERVALLE_PESEE_JOURS = 15
 TOLERANCE_RETARD_PESEE_JOURS = 0
-POIDS_VENTE_G = 250
+# Poids moyen de vente (g) par espèce : seuil de fin de cycle, exigé à la
+# dernière pesée pour clôturer. Seuil CARPE à faire valider par l'exploitant.
+SEUIL_POIDS_VENTE_G = {"TILAPIA": 250, "CARPE": 300}
+
+
+def seuil_poids_vente(espece):
+    return SEUIL_POIDS_VENTE_G[espece]
 
 
 def _arrondir(valeur, decimales):
@@ -187,20 +193,23 @@ def etat_calendrier(
     }
 
 
-def etat_seuil(pesees, seuil_g=POIDS_VENTE_G):
-    """Seuil de vente : atteint, définitivement, dès qu'une pesée l'atteint.
+def etat_seuil(pesees, seuil_g):
+    """Seuil de vente, jugé sur la dernière pesée (celle qui permet de clôturer).
 
     `pesees` : objets ayant `date` et `poids_moyen`, dans un ordre quelconque.
-    Renvoie aussi la dernière pesée au seuil, citée par l'alerte.
+    `date_premiere_pesee_au_seuil` reste un repère historique, même si la
+    dernière pesée est retombée sous le seuil.
     """
-    au_seuil = sorted(
-        (pesee for pesee in pesees if Decimal(pesee.poids_moyen) >= Decimal(seuil_g)),
-        key=lambda pesee: pesee.date,
-    )
+    triees = sorted(pesees, key=lambda pesee: pesee.date)
+    au_seuil = [
+        pesee for pesee in triees if Decimal(pesee.poids_moyen) >= Decimal(seuil_g)
+    ]
+    derniere = triees[-1] if triees else None
+    atteint = derniere is not None and Decimal(derniere.poids_moyen) >= Decimal(seuil_g)
     return {
-        "atteint": bool(au_seuil),
+        "atteint": atteint,
         "date_premiere_pesee_au_seuil": au_seuil[0].date if au_seuil else None,
-        "derniere_pesee_au_seuil": au_seuil[-1] if au_seuil else None,
+        "pesee_au_seuil": derniere if atteint else None,
     }
 
 
@@ -210,7 +219,7 @@ def _nombre_fr(valeur):
     return texte.replace(".", ",")
 
 
-def alertes_suivi(*, actif, prochaine_pesee, seuil, seuil_g=POIDS_VENTE_G):
+def alertes_suivi(*, actif, prochaine_pesee, seuil, seuil_g):
     """Alertes du suivi, calculées à la volée, seulement pour un lot actif."""
     if not actif:
         return []
@@ -226,7 +235,7 @@ def alertes_suivi(*, actif, prochaine_pesee, seuil, seuil_g=POIDS_VENTE_G):
             "date_prevue": date_prevue,
             "jours_de_retard": prochaine_pesee["jours_de_retard"],
         })
-    pesee = seuil["derniere_pesee_au_seuil"]
+    pesee = seuil["pesee_au_seuil"]
     if pesee is not None:
         alertes.append({
             "code": "POIDS_VENTE_ATTEINT",
@@ -370,3 +379,22 @@ def calculer_instantanes(lot, parts_par_jour):
         poids_precedent = poids
         biomasse_precedente = biomasse
     return instantanes
+
+
+# --- Clôture -------------------------------------------------------------------
+
+def ecart_poids_pourcentage(poids_initial, poids_final):
+    """Gain relatif du poids moyen (%) : (final − initial) / initial × 100."""
+    if poids_initial is None or poids_final is None or Decimal(poids_initial) == 0:
+        return None
+    return _arrondir(
+        (Decimal(poids_final) - Decimal(poids_initial)) * 100 / Decimal(poids_initial),
+        2,
+    )
+
+
+def taux_survie(effectif_initial, effectif_final):
+    """Part de l'effectif initial encore vivante à la clôture (%)."""
+    if effectif_initial is None or effectif_final is None or effectif_initial == 0:
+        return None
+    return _arrondir(Decimal(effectif_final) * 100 / Decimal(effectif_initial), 2)

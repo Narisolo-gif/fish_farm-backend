@@ -11,10 +11,7 @@ from apps.effectifs.calculs import effectif_vivant
 from apps.effectifs.models import MouvementEffectif
 from apps.effectifs.services import enregistrer_mouvement
 from apps.grossissement.models import IndicateurLot, LotGrossissement, Pesee
-from apps.grossissement.services import (
-    _effectifs_a_la_date,
-    cloturer_lot_grossissement,
-)
+from apps.grossissement.services import _effectifs_a_la_date
 from apps.lots.models import Lot
 
 from .test_lot_grossissement import URL_LOTS, OutilsLotGrossissement
@@ -191,12 +188,7 @@ class PeseeTests(OutilsLotGrossissement, TestCase):
                 self.assertIn(champ, reponse.data)
 
     def test_lot_cloture_ne_peut_pas_etre_pese(self):
-        cloturer_lot_grossissement(
-            self.gross.pk,
-            motif="Fin du cycle",
-            poids_final_g=Decimal("250"),
-            utilisateur=self.user,
-        )
+        self._cloturer(self.gross, evacuer=False)
         reponse = self._peser(10)
         self.assertEqual(reponse.status_code, 400, reponse.data)
         self.assertIn("id_lot_grossissement", reponse.data)

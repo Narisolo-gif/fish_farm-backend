@@ -82,13 +82,24 @@ class LotGrossissement(models.Model):
     date_cloture = models.DateField(null=True, blank=True)
     # Effectif vivant au jour de la clôture, lu dans le registre.
     effectif_final = models.PositiveIntegerField(null=True, blank=True)
-    poids_final_g = models.DecimalField(
+    # Poids moyen de la dernière pesée valide, retenu à la clôture.
+    poids_moyen_final = models.DecimalField(
         max_digits=8,
         decimal_places=2,
         null=True,
         blank=True,
     )
+    # Observation facultative de clôture (le seuil atteint en est le motif).
     motif_cloture = models.TextField(blank=True, default="")
+    # Évacuation du bassin, différable après la clôture (SORTIE de l'effectif final).
+    evacue_le = models.DateTimeField(null=True, blank=True)
+    evacue_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="lots_grossissement_evacues",
+        null=True,
+        blank=True,
+    )
     observation = models.TextField(blank=True, default="")
     utilisateur = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -117,10 +128,10 @@ class LotGrossissement(models.Model):
             ),
             models.CheckConstraint(
                 condition=(
-                    models.Q(poids_final_g__isnull=True)
-                    | models.Q(poids_final_g__gt=0)
+                    models.Q(poids_moyen_final__isnull=True)
+                    | models.Q(poids_moyen_final__gt=0)
                 ),
-                name="lot_gross_poids_final_positif",
+                name="lot_gross_poids_moyen_final_positif",
             ),
             models.CheckConstraint(
                 condition=(
@@ -132,12 +143,9 @@ class LotGrossissement(models.Model):
             models.CheckConstraint(
                 condition=(
                     ~models.Q(statut="CLOTURE")
-                    | models.Q(
-                        date_cloture__isnull=False,
-                        motif_cloture__gt="",
-                    )
+                    | models.Q(date_cloture__isnull=False)
                 ),
-                name="lot_gross_cloture_motivee",
+                name="lot_gross_cloture_datee",
             ),
             models.UniqueConstraint(
                 fields=["lot_origine"],
@@ -221,6 +229,15 @@ class LotGrossissement(models.Model):
             self.date_entree,
             date_reference,
             self.date_derniere_pesee(date_reference),
+        )
+
+    @property
+    def evacuation_requise(self):
+        """Lot clôturé dont les poissons sont encore dans le registre du bassin."""
+        return (
+            self.statut == self.Statut.CLOTURE
+            and (self.effectif_final or 0) > 0
+            and self.evacue_le is None
         )
 
     @property

@@ -11,7 +11,7 @@ que la réponse de l'API.
 """
 import json
 import os
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -176,6 +176,7 @@ class SuiviLotTests(OutilsLotGrossissement, TestCase):
             "effectif_initial": 1000,
             "poids_moyen_initial": 20.0,
             "effectif_vivant_actuel": 950,
+            "evacuation_requise": False,
         })
         self.assertEqual(data["nombre_pesees"], 2)
         premiere, seconde = data["series"]
@@ -240,7 +241,7 @@ class SuiviLotTests(OutilsLotGrossissement, TestCase):
             ],
         })
         self.assertEqual(data["seuil"], {
-            "poids_vente_g": 250,
+            "poids_vente_g": 300,
             "atteint": False,
             "fin_cycle_possible": False,
             "date_premiere_pesee_au_seuil": None,
@@ -313,13 +314,24 @@ class SuiviLotTests(OutilsLotGrossissement, TestCase):
         self.assertEqual(data["calendrier"]["prochaine_pesee"]["jour_cible"], 90)
         self.assertEqual(data["alertes"], [])
 
-    def test_seuil_de_vente_atteint_definitivement(self):
+    def test_seuil_de_vente_juge_sur_la_derniere_pesee(self):
+        # CARPE : seuil de 300 g.
         self._scenario_s1()
-        self._peser(date(2026, 3, 17), 95, "24700")  # 260 g
-        self._peser(date(2026, 4, 1), 95, "23275")   # 245 g
+        self._peser(date(2026, 3, 17), 95, "29450")  # 310 g
+        self._peser(date(2026, 4, 1), 95, "28025")   # 295 g : retombé sous le seuil
         data = self._ok(date(2026, 4, 2))
         self.assertEqual(data["seuil"], {
-            "poids_vente_g": 250,
+            "poids_vente_g": 300,
+            "atteint": False,
+            "fin_cycle_possible": False,
+            "date_premiere_pesee_au_seuil": "2026-03-17",
+        })
+        self.assertEqual(data["alertes"], [])
+
+        self._peser(date(2026, 4, 10), 95, "30400")  # 320 g
+        data = self._ok(date(2026, 4, 11))
+        self.assertEqual(data["seuil"], {
+            "poids_vente_g": 300,
             "atteint": True,
             "fin_cycle_possible": True,
             "date_premiere_pesee_au_seuil": "2026-03-17",
@@ -328,29 +340,24 @@ class SuiviLotTests(OutilsLotGrossissement, TestCase):
             "code": "POIDS_VENTE_ATTEINT",
             "niveau": "info",
             "message": (
-                "Le poids moyen a atteint 260 g, au-delà du seuil de 250 g : "
+                "Le poids moyen a atteint 320 g, au-delà du seuil de 300 g : "
                 "fin de cycle possible."
             ),
-            "poids_moyen": 260.0,
-            "seuil_g": 250,
-            "date_pesee": "2026-03-17",
+            "poids_moyen": 320.0,
+            "seuil_g": 300,
+            "date_pesee": "2026-04-10",
         }])
 
     def test_lot_cloture_sans_alerte_ni_prochaine_pesee(self):
         self._scenario_s1()
-        self._peser(date(2026, 3, 17), 95, "24700")
-        cloturer_lot_grossissement(
-            self.gross.pk,
-            motif="Fin du cycle",
-            poids_final_g=Decimal("260"),
-            date_cloture=date(2026, 3, 20),
-            utilisateur=self.user,
-        )
-        data = self._ok(date(2026, 4, 30))
+        self._peser(date(2026, 3, 17), 95, "28500")  # 300 g
+        cloturer_lot_grossissement(self.gross.pk, utilisateur=self.user)
+        # Vu après la clôture (du jour) : le cycle est figé à la date de clôture.
+        data = self._ok(self.today + timedelta(days=30))
         self.assertEqual(data["lot"]["statut"], "CLOTURE")
-        self.assertEqual(data["lot"]["jour_de_cycle"], 78)
+        self.assertEqual(data["lot"]["jour_de_cycle"], (self.today - ENTREE).days)
+        self.assertTrue(data["lot"]["evacuation_requise"])
         self.assertIsNone(data["calendrier"]["prochaine_pesee"])
-        self.assertEqual(len(data["calendrier"]["pesees_prevues"]), 3)
         self.assertEqual(data["alertes"], [])
         self.assertTrue(data["seuil"]["atteint"])
         self.assertFalse(data["seuil"]["fin_cycle_possible"])

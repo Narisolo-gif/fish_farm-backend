@@ -1,11 +1,11 @@
 [
   {
-    "id": 7,
-    "code": "GR-2026-0007",
-    "id_lot_origine": 7,
+    "id": 2,
+    "code": "GR-2026-0002",
+    "id_lot_origine": 2,
     "reference_lot_origine": "LOT-VIDE",
-    "id_sortie_stock": 7,
-    "id_bassin": 18,
+    "id_sortie_stock": 2,
+    "id_bassin": 5,
     "reference_bassin": "GROSS-DEST-V",
     "espece": "TILAPIA",
     "date_mise_en_place": "2026-01-01T00:00:00+03:00",
@@ -22,8 +22,10 @@
     "statut": "ACTIF",
     "date_cloture": null,
     "effectif_final": null,
-    "poids_final_g": null,
+    "poids_moyen_final": null,
     "motif_cloture": "",
+    "evacue_le": null,
+    "evacuation_requise": false,
     "observation": "",
     "age_jours": 318,
     "date_entree": "2026-01-01",
@@ -34,16 +36,16 @@
     "poids_moyen_actuel": "40.00",
     "date_derniere_pesee": null,
     "derniers_indicateurs": null,
-    "id_user": 6,
-    "created_at": "2026-11-15T05:11:42.537652+03:00"
+    "id_user": 1,
+    "created_at": "2026-11-15T12:56:05.733321+03:00"
   },
   {
-    "id": 6,
-    "code": "GR-2026-0006",
-    "id_lot_origine": 6,
+    "id": 1,
+    "code": "GR-2026-0001",
+    "id_lot_origine": 1,
     "reference_lot_origine": "LOT-S1",
-    "id_sortie_stock": 6,
-    "id_bassin": 15,
+    "id_sortie_stock": 1,
+    "id_bassin": 2,
     "reference_bassin": "GROSS-DEST",
     "espece": "CARPE",
     "date_mise_en_place": "2026-01-01T00:00:00+03:00",
@@ -60,8 +62,10 @@
     "statut": "ACTIF",
     "date_cloture": null,
     "effectif_final": null,
-    "poids_final_g": null,
+    "poids_moyen_final": null,
     "motif_cloture": "",
+    "evacue_le": null,
+    "evacuation_requise": false,
     "observation": "",
     "age_jours": 318,
     "date_entree": "2026-01-01",
@@ -82,7 +86,7 @@
       "ic_cumule": "2.50",
       "jour_de_cycle": 60
     },
-    "id_user": 6,
-    "created_at": "2026-11-15T05:11:42.038231+03:00"
+    "id_user": 1,
+    "created_at": "2026-11-15T12:56:05.394500+03:00"
   }
 ]

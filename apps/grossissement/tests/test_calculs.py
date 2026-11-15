@@ -14,6 +14,7 @@ from apps.grossissement.calculs import (
     allouer_provende,
     biomasse_kg,
     calculer_instantanes,
+    ecart_poids_pourcentage,
     echantillon_conforme,
     etat_calendrier,
     etat_seuil,
@@ -23,7 +24,9 @@ from apps.grossissement.calculs import (
     poids_moyen_echantillon,
     pourcentage_reel_echantillon,
     repartir_provende,
+    seuil_poids_vente,
     taille_echantillon_cible,
+    taux_survie,
 )
 
 
@@ -188,28 +191,37 @@ class SeuilEtAlertesTests(unittest.TestCase):
     def _prochaine(self, en_retard, jours=0):
         return {"date_prevue": date(2026, 1, 31), "en_retard": en_retard, "jours_de_retard": jours}
 
-    def test_seuil_atteint_definitivement_des_une_pesee(self):
+    def test_seuils_par_espece(self):
+        self.assertEqual(seuil_poids_vente("TILAPIA"), 250)
+        self.assertEqual(seuil_poids_vente("CARPE"), 300)
+
+    def test_seuil_juge_sur_la_derniere_pesee(self):
         pesees = [
-            _Pesee(date(2026, 1, 31), D("200")),
             _Pesee(date(2026, 3, 2), D("260")),
+            _Pesee(date(2026, 1, 31), D("200")),
             _Pesee(date(2026, 3, 17), D("245")),
-            _Pesee(date(2026, 4, 1), D("270")),
         ]
-        etat = etat_seuil(pesees)
-        self.assertTrue(etat["atteint"])
+        etat = etat_seuil(pesees, 250)
+        self.assertFalse(etat["atteint"])
+        self.assertIsNone(etat["pesee_au_seuil"])
+        # Repère historique conservé.
         self.assertEqual(etat["date_premiere_pesee_au_seuil"], date(2026, 3, 2))
-        self.assertEqual(etat["derniere_pesee_au_seuil"].date, date(2026, 4, 1))
-        # 250 g pile suffit.
-        self.assertTrue(etat_seuil([_Pesee(date(2026, 1, 31), D("250.00"))])["atteint"])
-        vide = etat_seuil([_Pesee(date(2026, 1, 31), D("249.99"))])
+
+        etat = etat_seuil([*pesees, _Pesee(date(2026, 4, 1), D("270"))], 250)
+        self.assertTrue(etat["atteint"])
+        self.assertEqual(etat["pesee_au_seuil"].date, date(2026, 4, 1))
+        # Bornes : le seuil pile suffit, 1 centième en dessous non.
+        self.assertTrue(etat_seuil([_Pesee(date(2026, 1, 31), D("300.00"))], 300)["atteint"])
+        self.assertFalse(etat_seuil([_Pesee(date(2026, 1, 31), D("299.99"))], 300)["atteint"])
+        vide = etat_seuil([], 250)
         self.assertEqual(
             (vide["atteint"], vide["date_premiere_pesee_au_seuil"]), (False, None)
         )
 
     def test_alertes_retard_et_poids_de_vente(self):
-        seuil = etat_seuil([_Pesee(date(2026, 1, 31), D("260.00"))])
+        seuil = etat_seuil([_Pesee(date(2026, 1, 31), D("260.00"))], 250)
         alertes = alertes_suivi(
-            actif=True, prochaine_pesee=self._prochaine(True, 5), seuil=seuil
+            actif=True, prochaine_pesee=self._prochaine(True, 5), seuil=seuil, seuil_g=250
         )
         self.assertEqual([a["code"] for a in alertes], ["PESEE_EN_RETARD", "POIDS_VENTE_ATTEINT"])
         retard, vente = alertes
@@ -224,19 +236,38 @@ class SeuilEtAlertesTests(unittest.TestCase):
         self.assertEqual(vente["date_pesee"], date(2026, 1, 31))
 
     def test_aucune_alerte_pour_un_lot_cloture_ou_a_jour(self):
-        seuil = etat_seuil([_Pesee(date(2026, 1, 31), D("260"))])
+        seuil = etat_seuil([_Pesee(date(2026, 1, 31), D("260"))], 250)
         self.assertEqual(
-            alertes_suivi(actif=False, prochaine_pesee=self._prochaine(True, 5), seuil=seuil),
+            alertes_suivi(
+                actif=False, prochaine_pesee=self._prochaine(True, 5), seuil=seuil, seuil_g=250
+            ),
             [],
         )
         self.assertEqual(
             alertes_suivi(
                 actif=True,
                 prochaine_pesee=self._prochaine(False),
-                seuil=etat_seuil([]),
+                seuil=etat_seuil([], 250),
+                seuil_g=250,
             ),
             [],
         )
+
+
+class ClotureCalculsTests(unittest.TestCase):
+    def test_ecart_poids_pourcentage(self):
+        self.assertEqual(ecart_poids_pourcentage(D("20"), D("260")), D("1200.00"))
+        self.assertEqual(ecart_poids_pourcentage(D("20.00"), D("20.00")), D("0.00"))
+        self.assertEqual(ecart_poids_pourcentage(D("3"), D("10")), D("233.33"))
+        self.assertIsNone(ecart_poids_pourcentage(None, D("260")))
+        self.assertIsNone(ecart_poids_pourcentage(D("0"), D("260")))
+
+    def test_taux_survie(self):
+        self.assertEqual(taux_survie(1000, 950), D("95.00"))
+        self.assertEqual(taux_survie(3, 2), D("66.67"))
+        self.assertEqual(taux_survie(1000, 0), D("0.00"))
+        self.assertIsNone(taux_survie(0, 0))
+        self.assertIsNone(taux_survie(1000, None))
 
 
 class RepartitionTests(unittest.TestCase):

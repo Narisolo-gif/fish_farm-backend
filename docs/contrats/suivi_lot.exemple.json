@@ -1,16 +1,17 @@
 {
   "lot": {
-    "id": 6,
-    "code": "GR-2026-0006",
+    "id": 1,
+    "code": "GR-2026-0001",
     "espece": "CARPE",
-    "id_bassin": 15,
+    "id_bassin": 2,
     "reference_bassin": "GROSS-DEST",
     "statut": "ACTIF",
     "date_entree": "2026-01-01",
     "jour_de_cycle": 68,
     "effectif_initial": 1000,
     "poids_moyen_initial": 20.0,
-    "effectif_vivant_actuel": 950
+    "effectif_vivant_actuel": 950,
+    "evacuation_requise": false
   },
   "nombre_pesees": 2,
   "dernieres_valeurs": {
@@ -37,7 +38,7 @@
   },
   "series": [
     {
-      "pesee_id": 5,
+      "pesee_id": 1,
       "date": "2026-01-31",
       "jour_de_cycle": 30,
       "poids_moyen": 45.0,
@@ -50,7 +51,7 @@
       "provende_periode_kg": 50.0
     },
     {
-      "pesee_id": 6,
+      "pesee_id": 2,
       "date": "2026-03-02",
       "jour_de_cycle": 60,
       "poids_moyen": 80.0,
@@ -86,7 +87,7 @@
     ]
   },
   "seuil": {
-    "poids_vente_g": 250,
+    "poids_vente_g": 300,
     "atteint": false,
     "fin_cycle_possible": false,
     "date_premiere_pesee_au_seuil": null
