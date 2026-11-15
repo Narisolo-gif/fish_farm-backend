@@ -14,6 +14,13 @@ from typing import Callable, Optional
 ZERO = Decimal("0")
 MILLE = Decimal("1000")
 
+# Constantes métier du suivi : seules valeurs à modifier pour changer le
+# calendrier, le seuil de vente ou la tolérance de retard.
+PREMIERES_ECHEANCES_JOURS = (30, 60)
+INTERVALLE_PESEE_JOURS = 15
+TOLERANCE_RETARD_PESEE_JOURS = 0
+POIDS_VENTE_G = 250
+
 
 def _arrondir(valeur, decimales):
     return Decimal(valeur).quantize(
@@ -111,11 +118,7 @@ def pourcentage_reel_echantillon(nombre_poissons_peses, effectif_vivant):
     )
 
 
-# --- Calendrier des pesées (information, jamais bloquant) -------------------
-
-PREMIERES_ECHEANCES_JOURS = (30, 60)
-INTERVALLE_PESEE_JOURS = 15
-
+# --- Calendrier des pesées, seuil et alertes (information, jamais bloquant) --
 
 def jour_echeance(rang):
     """Jour de cycle de la n-ième pesée prévue : J30, J60, puis tous les 15 jours."""
@@ -127,31 +130,116 @@ def jour_echeance(rang):
     )
 
 
-def etat_calendrier(date_entree, aujourdhui, date_derniere_pesee=None):
+def date_echeance(date_entree, rang):
+    return date_entree + timedelta(days=jour_echeance(rang))
+
+
+def etat_calendrier(
+    date_entree,
+    date_reference,
+    date_derniere_pesee=None,
+    tolerance_jours=TOLERANCE_RETARD_PESEE_JOURS,
+):
     """Position du lot dans le calendrier des pesées, sans limite de durée.
 
     - `etape_courante` : 1 avant J30, 2 de J30 à J59, 3 de J60 à J74, etc. ;
-    - `prochaine_echeance` : première échéance au plus tôt aujourd'hui ;
-    - `pesee_en_retard` : une échéance strictement passée est postérieure à la
-      dernière pesée (ou à la mise en place s'il n'y en a aucune).
+    - `prochaine_pesee` : première échéance strictement postérieure à la
+      dernière pesée réalisée (J30 s'il n'y en a pas) : une échéance sautée
+      puis rattrapée ne laisse pas de faux retard ;
+    - retard : la date de référence dépasse la date prévue plus la tolérance ;
+    - `pesees_prevues` : échéances datées au plus tard de la date de référence.
     """
-    age = max(0, (aujourdhui - date_entree).days)
+    age = max(0, (date_reference - date_entree).days)
     etape = 1
     while jour_echeance(etape) <= age:
         etape += 1
-    rang = 1
-    while jour_echeance(rang) < age:
-        rang += 1
+
     reference = date_derniere_pesee or date_entree
-    en_retard = (
-        rang > 1
-        and date_entree + timedelta(days=jour_echeance(rang - 1)) > reference
-    )
+    rang = 1
+    while date_echeance(date_entree, rang) <= reference:
+        rang += 1
+    date_prevue = date_echeance(date_entree, rang)
+    en_retard = date_reference > date_prevue + timedelta(days=tolerance_jours)
+
+    pesees_prevues = []
+    numero = 1
+    while date_echeance(date_entree, numero) <= date_reference:
+        pesees_prevues.append({
+            "numero": numero,
+            "jour_cible": jour_echeance(numero),
+            "date_prevue": date_echeance(date_entree, numero),
+        })
+        numero += 1
+
     return {
         "etape_courante": etape,
-        "prochaine_echeance": date_entree + timedelta(days=jour_echeance(rang)),
-        "pesee_en_retard": en_retard,
+        "prochaine_pesee": {
+            "numero": rang,
+            "jour_cible": jour_echeance(rang),
+            "date_prevue": date_prevue,
+            "jours_restants": max(0, (date_prevue - date_reference).days),
+            "en_retard": en_retard,
+            "jours_de_retard": (
+                (date_reference - date_prevue).days if en_retard else 0
+            ),
+        },
+        "pesees_prevues": pesees_prevues,
     }
+
+
+def etat_seuil(pesees, seuil_g=POIDS_VENTE_G):
+    """Seuil de vente : atteint, définitivement, dès qu'une pesée l'atteint.
+
+    `pesees` : objets ayant `date` et `poids_moyen`, dans un ordre quelconque.
+    Renvoie aussi la dernière pesée au seuil, citée par l'alerte.
+    """
+    au_seuil = sorted(
+        (pesee for pesee in pesees if Decimal(pesee.poids_moyen) >= Decimal(seuil_g)),
+        key=lambda pesee: pesee.date,
+    )
+    return {
+        "atteint": bool(au_seuil),
+        "date_premiere_pesee_au_seuil": au_seuil[0].date if au_seuil else None,
+        "derniere_pesee_au_seuil": au_seuil[-1] if au_seuil else None,
+    }
+
+
+def _nombre_fr(valeur):
+    """260 -> « 260 », 260.5 -> « 260,5 » (messages destinés à l'affichage)."""
+    texte = format(Decimal(valeur).normalize(), "f")
+    return texte.replace(".", ",")
+
+
+def alertes_suivi(*, actif, prochaine_pesee, seuil, seuil_g=POIDS_VENTE_G):
+    """Alertes du suivi, calculées à la volée, seulement pour un lot actif."""
+    if not actif:
+        return []
+    alertes = []
+    if prochaine_pesee is not None and prochaine_pesee["en_retard"]:
+        date_prevue = prochaine_pesee["date_prevue"]
+        alertes.append({
+            "code": "PESEE_EN_RETARD",
+            "niveau": "attention",
+            "message": (
+                f"La pesée prévue le {date_prevue.isoformat()} n'a pas été saisie."
+            ),
+            "date_prevue": date_prevue,
+            "jours_de_retard": prochaine_pesee["jours_de_retard"],
+        })
+    pesee = seuil["derniere_pesee_au_seuil"]
+    if pesee is not None:
+        alertes.append({
+            "code": "POIDS_VENTE_ATTEINT",
+            "niveau": "info",
+            "message": (
+                f"Le poids moyen a atteint {_nombre_fr(pesee.poids_moyen)} g, "
+                f"au-delà du seuil de {seuil_g} g : fin de cycle possible."
+            ),
+            "poids_moyen": pesee.poids_moyen,
+            "seuil_g": seuil_g,
+            "date_pesee": pesee.date,
+        })
+    return alertes
 
 
 @dataclass(frozen=True)

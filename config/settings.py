@@ -146,7 +146,9 @@ SIMPLE_JWT = {
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Fuseau de l'exploitation : il fixe la « date du jour » et les dates locales
+# (pesées, distributions, jour de cycle). Les dates-heures restent en UTC en base.
+TIME_ZONE = 'Indian/Antananarivo'
 
 USE_I18N = True
 

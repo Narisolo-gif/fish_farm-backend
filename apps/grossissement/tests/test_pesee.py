@@ -388,10 +388,15 @@ class PeseeTests(OutilsLotGrossissement, TestCase):
         fiche = self._fiche_lot()
         self.assertTrue(fiche["pesee_en_retard"])
         self.assertEqual(fiche["etape_courante"], 2)
-        self.assertEqual(fiche["prochaine_echeance_pesee"], self._jour(-20))
+        self.assertEqual(fiche["prochaine_echeance_pesee"], self._jour(10))
+        self.assertEqual(fiche["jour_de_cycle"], AGE_LOT)
+        self.assertEqual(fiche["date_entree"], self._jour(AGE_LOT))
 
+        # Pesée faite à l'échéance J30 : la prochaine est J60 (J+20).
         self._creer(10)
-        self.assertFalse(self._fiche_lot()["pesee_en_retard"])
+        fiche = self._fiche_lot()
+        self.assertFalse(fiche["pesee_en_retard"])
+        self.assertEqual(fiche["prochaine_echeance_pesee"], self._jour(-20))
 
     def test_une_pesee_meme_annulee_empeche_d_annuler_la_sortie(self):
         pesee = self._creer(10)

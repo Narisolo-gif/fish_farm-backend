@@ -24,6 +24,7 @@ from .serializers import (
     PeseeEcritureSerializer,
     PeseeSerializer,
     SortieGrossissementSerializer,
+    SuiviLotSerializer,
 )
 from .services import (
     EchantillonNonConforme,
@@ -35,6 +36,7 @@ from .services import (
     modifier_pesee,
     valider_sortie_grossissement,
 )
+from .suivi import suivi_lot
 
 
 class LotGrossissementViewSet(viewsets.ModelViewSet):
@@ -73,7 +75,7 @@ class LotGrossissementViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "patch", "post", "head", "options"]
 
     def get_permissions(self):
-        if self.action in {"list", "retrieve", "origine"}:
+        if self.action in {"list", "retrieve", "origine", "suivi"}:
             return [IsAuthenticated(), IsTousRolesActifs()]
         return [
             IsAuthenticated(),
@@ -167,6 +169,23 @@ class LotGrossissementViewSet(viewsets.ModelViewSet):
             utilisateur=request.user,
         )
         return Response(self.get_serializer(lot).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["get"], url_path="suivi")
+    def suivi(self, request, pk=None):
+        """Suivi de cycle du lot à `date_reference` (YYYY-MM-DD, défaut : aujourd'hui)."""
+        valeur = request.query_params.get("date_reference")
+        date_reference = timezone.localdate()
+        if valeur:
+            try:
+                date_reference = parse_date(valeur)
+            except ValueError:
+                date_reference = None
+            if date_reference is None:
+                raise ValidationError({
+                    "date_reference": "Format invalide. Utilisez YYYY-MM-DD."
+                })
+        lot = self.get_object()
+        return Response(SuiviLotSerializer(suivi_lot(lot, date_reference)).data)
 
     @action(detail=True, methods=["get"], url_path="origine")
     def origine(self, request, pk=None):

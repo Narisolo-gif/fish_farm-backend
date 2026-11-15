@@ -3,17 +3,20 @@
 Exécution : python -m unittest apps.grossissement.tests.test_calculs -v
 """
 import unittest
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal as D
 
 from apps.grossissement.calculs import (
     LotCalcul,
     PeseeCalcul,
+    alertes_suivi,
     allouer_provende,
     biomasse_kg,
     calculer_instantanes,
     echantillon_conforme,
     etat_calendrier,
+    etat_seuil,
     gmq,
     ic,
     jour_echeance,
@@ -101,7 +104,7 @@ class EchantillonTests(unittest.TestCase):
 class CalendrierTests(unittest.TestCase):
     """J30, J60 puis tous les 15 jours, sans limite ; information seulement."""
 
-    def _etat(self, age, derniere_pesee_jour=None):
+    def _etat(self, age, derniere_pesee_jour=None, tolerance=0):
         return etat_calendrier(
             ENTREE,
             ENTREE + timedelta(days=age),
@@ -110,6 +113,7 @@ class CalendrierTests(unittest.TestCase):
                 if derniere_pesee_jour is not None
                 else None
             ),
+            tolerance_jours=tolerance,
         )
 
     def test_jours_des_echeances(self):
@@ -119,36 +123,120 @@ class CalendrierTests(unittest.TestCase):
         )
         self.assertEqual(jour_echeance(30), 60 + 28 * 15)
 
-    def test_etape_et_prochaine_echeance(self):
-        for age, etape, prochaine in (
-            (0, 1, 30),
-            (29, 1, 30),
-            (30, 2, 30),
-            (31, 2, 60),
-            (60, 3, 60),
-            (75, 4, 75),
-            (180, 11, 180),
-            (181, 11, 195),
-            (400, 25, 405),
-        ):
+    def test_etape_courante(self):
+        for age, etape in ((0, 1), (29, 1), (30, 2), (59, 2), (60, 3), (75, 4), (180, 11), (400, 25)):
             with self.subTest(age=age):
-                etat = self._etat(age)
-                self.assertEqual(etat["etape_courante"], etape)
+                self.assertEqual(self._etat(age)["etape_courante"], etape)
+
+    def test_prochaine_pesee_suit_la_derniere_pesee_realisee(self):
+        for age, derniere, numero, jour_cible in (
+            # Sans pesée : J30, quel que soit l'âge du lot.
+            (10, None, 1, 30),
+            (70, None, 1, 30),
+            # Pesée faite à l'échéance : l'échéance suivante.
+            (35, 30, 2, 60),
+            # Pesée faite avant l'échéance : celle-ci reste à faire.
+            (35, 28, 1, 30),
+            # J30 sautée, pesée rattrapée à J40 : prochaine J60, pas de faux retard.
+            (45, 40, 2, 60),
+            (200, 180, 11, 195),
+        ):
+            with self.subTest(age=age, derniere=derniere):
+                prochaine = self._etat(age, derniere)["prochaine_pesee"]
+                self.assertEqual(prochaine["numero"], numero)
+                self.assertEqual(prochaine["jour_cible"], jour_cible)
                 self.assertEqual(
-                    etat["prochaine_echeance"], ENTREE + timedelta(days=prochaine)
+                    prochaine["date_prevue"], ENTREE + timedelta(days=jour_cible)
                 )
 
-    def test_pesee_en_retard(self):
+    def test_retard_jours_restants_et_tolerance(self):
+        a_l_heure = self._etat(20)["prochaine_pesee"]
+        self.assertEqual(
+            (a_l_heure["en_retard"], a_l_heure["jours_restants"], a_l_heure["jours_de_retard"]),
+            (False, 10, 0),
+        )
         # Le jour même de l'échéance, la pesée n'est pas encore en retard.
-        self.assertFalse(self._etat(30)["pesee_en_retard"])
-        self.assertTrue(self._etat(31)["pesee_en_retard"])
-        # Pesée faite le jour de l'échéance J30 : à jour jusqu'à J60.
-        self.assertFalse(self._etat(60, derniere_pesee_jour=30)["pesee_en_retard"])
-        self.assertTrue(self._etat(61, derniere_pesee_jour=30)["pesee_en_retard"])
-        # Pesée faite avant l'échéance : l'échéance reste à honorer.
-        self.assertTrue(self._etat(31, derniere_pesee_jour=28)["pesee_en_retard"])
-        # Avant la première échéance, jamais en retard.
-        self.assertFalse(self._etat(10)["pesee_en_retard"])
+        jour_meme = self._etat(30)["prochaine_pesee"]
+        self.assertEqual((jour_meme["en_retard"], jour_meme["jours_restants"]), (False, 0))
+        en_retard = self._etat(35)["prochaine_pesee"]
+        self.assertEqual(
+            (en_retard["en_retard"], en_retard["jours_restants"], en_retard["jours_de_retard"]),
+            (True, 0, 5),
+        )
+        # Avec 5 jours de tolérance, J35 n'est pas encore en retard, J36 l'est.
+        self.assertFalse(self._etat(35, tolerance=5)["prochaine_pesee"]["en_retard"])
+        self.assertTrue(self._etat(36, tolerance=5)["prochaine_pesee"]["en_retard"])
+
+    def test_pesees_prevues_jusqu_a_la_date_de_reference(self):
+        self.assertEqual(self._etat(10)["pesees_prevues"], [])
+        self.assertEqual(
+            self._etat(68)["pesees_prevues"],
+            [
+                {"numero": 1, "jour_cible": 30, "date_prevue": date(2026, 1, 31)},
+                {"numero": 2, "jour_cible": 60, "date_prevue": date(2026, 3, 2)},
+            ],
+        )
+
+
+@dataclass(frozen=True)
+class _Pesee:
+    date: date
+    poids_moyen: D
+
+
+class SeuilEtAlertesTests(unittest.TestCase):
+    def _prochaine(self, en_retard, jours=0):
+        return {"date_prevue": date(2026, 1, 31), "en_retard": en_retard, "jours_de_retard": jours}
+
+    def test_seuil_atteint_definitivement_des_une_pesee(self):
+        pesees = [
+            _Pesee(date(2026, 1, 31), D("200")),
+            _Pesee(date(2026, 3, 2), D("260")),
+            _Pesee(date(2026, 3, 17), D("245")),
+            _Pesee(date(2026, 4, 1), D("270")),
+        ]
+        etat = etat_seuil(pesees)
+        self.assertTrue(etat["atteint"])
+        self.assertEqual(etat["date_premiere_pesee_au_seuil"], date(2026, 3, 2))
+        self.assertEqual(etat["derniere_pesee_au_seuil"].date, date(2026, 4, 1))
+        # 250 g pile suffit.
+        self.assertTrue(etat_seuil([_Pesee(date(2026, 1, 31), D("250.00"))])["atteint"])
+        vide = etat_seuil([_Pesee(date(2026, 1, 31), D("249.99"))])
+        self.assertEqual(
+            (vide["atteint"], vide["date_premiere_pesee_au_seuil"]), (False, None)
+        )
+
+    def test_alertes_retard_et_poids_de_vente(self):
+        seuil = etat_seuil([_Pesee(date(2026, 1, 31), D("260.00"))])
+        alertes = alertes_suivi(
+            actif=True, prochaine_pesee=self._prochaine(True, 5), seuil=seuil
+        )
+        self.assertEqual([a["code"] for a in alertes], ["PESEE_EN_RETARD", "POIDS_VENTE_ATTEINT"])
+        retard, vente = alertes
+        self.assertEqual(retard["niveau"], "attention")
+        self.assertEqual(retard["message"], "La pesée prévue le 2026-01-31 n'a pas été saisie.")
+        self.assertEqual(retard["jours_de_retard"], 5)
+        self.assertEqual(vente["niveau"], "info")
+        self.assertEqual(
+            vente["message"],
+            "Le poids moyen a atteint 260 g, au-delà du seuil de 250 g : fin de cycle possible.",
+        )
+        self.assertEqual(vente["date_pesee"], date(2026, 1, 31))
+
+    def test_aucune_alerte_pour_un_lot_cloture_ou_a_jour(self):
+        seuil = etat_seuil([_Pesee(date(2026, 1, 31), D("260"))])
+        self.assertEqual(
+            alertes_suivi(actif=False, prochaine_pesee=self._prochaine(True, 5), seuil=seuil),
+            [],
+        )
+        self.assertEqual(
+            alertes_suivi(
+                actif=True,
+                prochaine_pesee=self._prochaine(False),
+                seuil=etat_seuil([]),
+            ),
+            [],
+        )
 
 
 class RepartitionTests(unittest.TestCase):

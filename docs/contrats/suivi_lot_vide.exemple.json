@@ -1,0 +1,44 @@
+{
+  "lot": {
+    "id": 7,
+    "code": "GR-2026-0007",
+    "espece": "TILAPIA",
+    "id_bassin": 18,
+    "reference_bassin": "GROSS-DEST-V",
+    "statut": "ACTIF",
+    "date_entree": "2026-01-01",
+    "jour_de_cycle": 10,
+    "effectif_initial": 500,
+    "poids_moyen_initial": 40.0,
+    "effectif_vivant_actuel": 500
+  },
+  "nombre_pesees": 0,
+  "dernieres_valeurs": null,
+  "point_initial": {
+    "date": "2026-01-01",
+    "jour_de_cycle": 0,
+    "poids_moyen": 40.0,
+    "biomasse_kg": 20.0
+  },
+  "series": [],
+  "calendrier": {
+    "prochaine_pesee": {
+      "numero": 1,
+      "jour_cible": 30,
+      "date_prevue": "2026-01-31",
+      "jours_restants": 20,
+      "en_retard": false,
+      "jours_de_retard": 0
+    },
+    "pesees_prevues": []
+  },
+  "seuil": {
+    "poids_vente_g": 250,
+    "atteint": false,
+    "fin_cycle_possible": false,
+    "date_premiere_pesee_au_seuil": null
+  },
+  "alertes": [],
+  "parametres_environnementaux": null,
+  "autres_lots_du_bassin": []
+}

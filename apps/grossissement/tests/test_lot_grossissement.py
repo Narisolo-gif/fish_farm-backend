@@ -923,17 +923,18 @@ class LotGrossissementTests(OutilsLotGrossissement, TestCase):
                 self.assertEqual(refused.status_code, 400, refused.data)
 
     def test_age_et_rappels_aux_limites_du_cycle(self):
-        # J30, J60 puis tous les 15 jours, sans limite de durée.
+        # J30, J60 puis tous les 15 jours, sans limite de durée. Sans pesée, la
+        # prochaine pesée reste J30, en retard une fois l'échéance passée.
         _, _, sortie_id, _ = self._sortie_validee("LOT-CYCLE", 10)
         gross = LotGrossissement.objects.get(sortie_stock_id=sortie_id)
-        for age, etape, prochaine in (
-            (0, 1, 30),
-            (29, 1, 30),
-            (30, 2, 30),
-            (75, 4, 75),
-            (76, 4, 90),
-            (180, 11, 180),
-            (400, 25, 405),
+        for age, etape, en_retard in (
+            (0, 1, False),
+            (29, 1, False),
+            (30, 2, False),
+            (31, 2, True),
+            (75, 4, True),
+            (180, 11, True),
+            (400, 25, True),
         ):
             with self.subTest(age=age):
                 gross.date_mise_en_place = timezone.make_aware(
@@ -945,8 +946,12 @@ class LotGrossissementTests(OutilsLotGrossissement, TestCase):
                 ):
                     self.assertEqual(gross.age_jours, age)
                     self.assertEqual(gross.etape_courante, etape)
-                    expected = self.today + timedelta(days=prochaine - age)
-                    self.assertEqual(gross.prochaine_echeance_pesee, expected)
+                    self.assertEqual(gross.jour_de_cycle(self.today), age)
+                    self.assertEqual(
+                        gross.prochaine_echeance_pesee,
+                        self.today + timedelta(days=30 - age),
+                    )
+                    self.assertEqual(gross.pesee_en_retard, en_retard)
 
     def test_origine_expose_traitement_stock_et_lot_sans_traitement(self):
         lot_traite, _, sortie_traitee, _ = self._sortie_validee(

@@ -192,12 +192,35 @@ class LotGrossissement(models.Model):
     def date_entree(self):
         return timezone.localtime(self.date_mise_en_place).date()
 
-    def calendrier_pesees(self, date_derniere_pesee=None):
+    def jour_de_cycle(self, date_reference=None):
+        """Jour de cycle à la date de référence, figé à la clôture."""
+        date_reference = date_reference or timezone.localdate()
+        if self.date_cloture is not None:
+            date_reference = min(date_reference, self.date_cloture)
+        return max(0, (date_reference - self.date_entree).days)
+
+    def date_derniere_pesee(self, date_reference=None):
+        """Date de la dernière pesée valide (au plus tard à date_reference)."""
+        # `pesees_valides` est préchargé par le viewset (dates décroissantes).
+        valides = getattr(self, "pesees_valides", None)
+        if valides is not None:
+            dates = [
+                pesee.date for pesee in valides
+                if date_reference is None or pesee.date <= date_reference
+            ]
+            return dates[0] if dates else None
+        pesees = self.pesees.filter(statut="VALIDEE")
+        if date_reference is not None:
+            pesees = pesees.filter(date__lte=date_reference)
+        return pesees.aggregate(derniere=models.Max("date"))["derniere"]
+
+    def calendrier_pesees(self, date_reference=None):
         """Calendrier indicatif (J30, J60, puis tous les 15 jours) : jamais bloquant."""
+        date_reference = date_reference or timezone.localdate()
         return etat_calendrier(
             self.date_entree,
-            timezone.localdate(),
-            date_derniere_pesee,
+            date_reference,
+            self.date_derniere_pesee(date_reference),
         )
 
     @property
@@ -206,7 +229,16 @@ class LotGrossissement(models.Model):
 
     @property
     def prochaine_echeance_pesee(self):
-        return self.calendrier_pesees()["prochaine_echeance"]
+        # Plus de pesée prévue pour un lot clôturé.
+        if self.statut != self.Statut.ACTIF:
+            return None
+        return self.calendrier_pesees()["prochaine_pesee"]["date_prevue"]
+
+    @property
+    def pesee_en_retard(self):
+        if self.statut != self.Statut.ACTIF:
+            return False
+        return self.calendrier_pesees()["prochaine_pesee"]["en_retard"]
 
     def __str__(self):
         return self.code or f"Lot de grossissement {self.pk}"

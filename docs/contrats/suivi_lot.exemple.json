@@ -1,0 +1,106 @@
+{
+  "lot": {
+    "id": 6,
+    "code": "GR-2026-0006",
+    "espece": "CARPE",
+    "id_bassin": 15,
+    "reference_bassin": "GROSS-DEST",
+    "statut": "ACTIF",
+    "date_entree": "2026-01-01",
+    "jour_de_cycle": 68,
+    "effectif_initial": 1000,
+    "poids_moyen_initial": 20.0,
+    "effectif_vivant_actuel": 950
+  },
+  "nombre_pesees": 2,
+  "dernieres_valeurs": {
+    "date_pesee": "2026-03-02",
+    "jour_de_cycle": 60,
+    "effectif_vivant": 950,
+    "poids_moyen": 80.0,
+    "biomasse_kg": 76.0,
+    "gmq_periode": 1.17,
+    "gmq_cumule": 1.0,
+    "ic_periode": 2.82,
+    "ic_cumule": 2.5,
+    "provende_periode_kg": 90.0,
+    "nature": {
+      "poids_moyen": "mesuré sur échantillon",
+      "biomasse_kg": "estimée"
+    }
+  },
+  "point_initial": {
+    "date": "2026-01-01",
+    "jour_de_cycle": 0,
+    "poids_moyen": 20.0,
+    "biomasse_kg": 20.0
+  },
+  "series": [
+    {
+      "pesee_id": 5,
+      "date": "2026-01-31",
+      "jour_de_cycle": 30,
+      "poids_moyen": 45.0,
+      "effectif_vivant": 980,
+      "gmq_periode": 0.83,
+      "gmq_cumule": 0.83,
+      "ic_periode": 2.07,
+      "ic_cumule": 2.07,
+      "biomasse_kg": 44.1,
+      "provende_periode_kg": 50.0
+    },
+    {
+      "pesee_id": 6,
+      "date": "2026-03-02",
+      "jour_de_cycle": 60,
+      "poids_moyen": 80.0,
+      "effectif_vivant": 950,
+      "gmq_periode": 1.17,
+      "gmq_cumule": 1.0,
+      "ic_periode": 2.82,
+      "ic_cumule": 2.5,
+      "biomasse_kg": 76.0,
+      "provende_periode_kg": 90.0
+    }
+  ],
+  "calendrier": {
+    "prochaine_pesee": {
+      "numero": 3,
+      "jour_cible": 75,
+      "date_prevue": "2026-03-17",
+      "jours_restants": 7,
+      "en_retard": false,
+      "jours_de_retard": 0
+    },
+    "pesees_prevues": [
+      {
+        "numero": 1,
+        "jour_cible": 30,
+        "date_prevue": "2026-01-31"
+      },
+      {
+        "numero": 2,
+        "jour_cible": 60,
+        "date_prevue": "2026-03-02"
+      }
+    ]
+  },
+  "seuil": {
+    "poids_vente_g": 250,
+    "atteint": false,
+    "fin_cycle_possible": false,
+    "date_premiere_pesee_au_seuil": null
+  },
+  "alertes": [],
+  "parametres_environnementaux": {
+    "date_heure_prelevement": "2026-03-09T08:00:00+03:00",
+    "temperature_eau": 27.5,
+    "temperature_air": 29.0,
+    "oxygene": 6.1,
+    "ph": 7.2,
+    "nitrite": 0.05,
+    "nitrate": 1.2,
+    "ammoniac": 0.02
+  },
+  "autres_lots_du_bassin": []
+}

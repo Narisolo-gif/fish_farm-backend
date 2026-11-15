@@ -465,7 +465,7 @@
                   "const now = new Date();",
                   "const t0 = new Date(now.getTime() - 5 * 60 * 1000);",
                   "const pad = (n) => String(n).padStart(2, '0');",
-                  "const dateOnly = (offset) => { const d = new Date(Date.UTC(t0.getUTCFullYear(), t0.getUTCMonth(), t0.getUTCDate() - offset)); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };",
+                  "const dateOnly = (offset) => { /* date locale du serveur : Indian/Antananarivo (UTC+3) */ const tl = new Date(t0.getTime() + 3 * 3600 * 1000); const d = new Date(Date.UTC(tl.getUTCFullYear(), tl.getUTCMonth(), tl.getUTCDate() - offset)); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };",
                   "const dateAt = (offset, hour = 0) => `${dateOnly(offset)}T${pad(hour)}:00:00.000Z`;",
                   "const iso = (d) => d.toISOString();",
                   "pm.collectionVariables.set('run_t0', iso(t0));",

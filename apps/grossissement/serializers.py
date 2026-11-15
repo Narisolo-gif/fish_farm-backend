@@ -1,3 +1,7 @@
+from datetime import date, datetime
+from decimal import Decimal
+
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import IndicateurLot, LotGrossissement, Pesee
@@ -70,7 +74,11 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
     poids_moyen_actuel = serializers.SerializerMethodField()
     date_derniere_pesee = serializers.SerializerMethodField()
     derniers_indicateurs = serializers.SerializerMethodField()
-    pesee_en_retard = serializers.SerializerMethodField()
+    pesee_en_retard = serializers.BooleanField(read_only=True)
+    # Sélection du lot dans la page de suivi : date d'entrée et jour de cycle
+    # (figé à la clôture ; `age_jours` est conservé pour les clients existants).
+    date_entree = serializers.DateField(read_only=True)
+    jour_de_cycle = serializers.SerializerMethodField()
 
     class Meta:
         model = LotGrossissement
@@ -101,6 +109,8 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
             "motif_cloture",
             "observation",
             "age_jours",
+            "date_entree",
+            "jour_de_cycle",
             "etape_courante",
             "prochaine_echeance_pesee",
             "pesee_en_retard",
@@ -157,13 +167,8 @@ class LotGrossissementSerializer(serializers.ModelSerializer):
         derniere = self._derniere_pesee(obj)
         return _indicateurs(derniere) if derniere is not None else None
 
-    def get_pesee_en_retard(self, obj):
-        if obj.statut != LotGrossissement.Statut.ACTIF:
-            return False
-        derniere = self._derniere_pesee(obj)
-        return obj.calendrier_pesees(
-            derniere.date if derniere is not None else None
-        )["pesee_en_retard"]
+    def get_jour_de_cycle(self, obj):
+        return obj.jour_de_cycle()
 
 
 CHAMPS_SORTIE_GROSSISSEMENT = {
@@ -562,3 +567,27 @@ class ApercuPeseeSerializer(serializers.Serializer):
             "poids_moyen": _decimal_ou_none(contexte["poids_moyen"]),
             "echantillon_conforme": contexte["echantillon_conforme"],
         }
+
+
+# --- Suivi de cycle ------------------------------------------------------------
+
+def _en_json(valeur):
+    """Décimaux en nombres JSON, dates en ISO (dates-heures en heure locale)."""
+    if isinstance(valeur, dict):
+        return {cle: _en_json(element) for cle, element in valeur.items()}
+    if isinstance(valeur, (list, tuple)):
+        return [_en_json(element) for element in valeur]
+    if isinstance(valeur, Decimal):
+        return float(valeur)
+    if isinstance(valeur, datetime):
+        return timezone.localtime(valeur).isoformat()
+    if isinstance(valeur, date):
+        return valeur.isoformat()
+    return valeur
+
+
+class SuiviLotSerializer(serializers.Serializer):
+    """Contrat de la page de suivi : toutes les clés toujours présentes."""
+
+    def to_representation(self, contexte):
+        return _en_json(contexte)

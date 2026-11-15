@@ -30,7 +30,7 @@
                 "exec": [
                   "const t0 = new Date(Date.now() - 5 * 60 * 1000);",
                   "const pad = (n) => String(n).padStart(2, '0');",
-                  "const dateOnly = (offset) => { const d = new Date(Date.UTC(t0.getUTCFullYear(), t0.getUTCMonth(), t0.getUTCDate() - offset)); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };",
+                  "const dateOnly = (offset) => { /* date locale du serveur : Indian/Antananarivo (UTC+3) */ const tl = new Date(t0.getTime() + 3 * 3600 * 1000); const d = new Date(Date.UTC(tl.getUTCFullYear(), tl.getUTCMonth(), tl.getUTCDate() - offset)); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };",
                   "pm.collectionVariables.set('gr_run_id', `GR-${t0.getUTCFullYear()}${pad(t0.getUTCMonth()+1)}${pad(t0.getUTCDate())}-${pad(t0.getUTCHours())}${pad(t0.getUTCMinutes())}-${Math.random().toString(36).slice(2,6).toUpperCase()}`);",
                   "for (const n of [3, 5, 7, 8, 9, 10]) pm.collectionVariables.set(`gr_date_jminus_${n}`, dateOnly(n));",
                   "pm.collectionVariables.set('gr_date_today', dateOnly(0));",
@@ -2055,7 +2055,7 @@
                 "exec": [
                   "const t0 = new Date(Date.now() - 5 * 60 * 1000);",
                   "const pad = (n) => String(n).padStart(2, '0');",
-                  "const dateOnly = (offset) => { const d = new Date(Date.UTC(t0.getUTCFullYear(), t0.getUTCMonth(), t0.getUTCDate() - offset)); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };",
+                  "const dateOnly = (offset) => { /* date locale du serveur : Indian/Antananarivo (UTC+3) */ const tl = new Date(t0.getTime() + 3 * 3600 * 1000); const d = new Date(Date.UTC(tl.getUTCFullYear(), tl.getUTCMonth(), tl.getUTCDate() - offset)); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };",
                   "pm.collectionVariables.set('ps_run_id', `PS-${t0.getUTCFullYear()}${pad(t0.getUTCMonth()+1)}${pad(t0.getUTCDate())}-${pad(t0.getUTCHours())}${pad(t0.getUTCMinutes())}-${Math.random().toString(36).slice(2,6).toUpperCase()}`);",
                   "for (const n of [2, 3, 5, 10, 15, 20, 22, 25, 30, 40, 45, 50, 57, 58, 59, 60]) pm.collectionVariables.set(`ps_j${n}`, dateOnly(n));",
                   "pm.collectionVariables.set('ps_j0', dateOnly(0));",
@@ -7763,7 +7763,7 @@
                 "exec": [
                   "const t0 = new Date();",
                   "const pad = (x) => String(x).padStart(2, '0');",
-                  "const dateOnly = (offset) => { const d = new Date(Date.UTC(t0.getUTCFullYear(), t0.getUTCMonth(), t0.getUTCDate() - offset)); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };",
+                  "const dateOnly = (offset) => { /* date locale du serveur : Indian/Antananarivo (UTC+3) */ const tl = new Date(t0.getTime() + 3 * 3600 * 1000); const d = new Date(Date.UTC(tl.getUTCFullYear(), tl.getUTCMonth(), tl.getUTCDate() - offset)); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };",
                   "const alea = Math.random().toString(36).slice(2, 7).toUpperCase();",
                   "pm.collectionVariables.set('sg_run_id', `SG-${t0.getUTCFullYear()}${pad(t0.getUTCMonth()+1)}${pad(t0.getUTCDate())}-${pad(t0.getUTCHours())}${pad(t0.getUTCMinutes())}-${alea}`);",
                   "pm.collectionVariables.set('sg_jplus1', dateOnly(-1));",
@@ -11864,6 +11864,1295 @@
             ],
             "url": "{{base_url}}/api/v1/effectifs/par-hapa/?bassin={{sg_bassin_stk}}",
             "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Suivi de cycle",
+      "description": "Suivi de cycle d'un lot (GET lots-grossissement/{id}/suivi/). Dossier autonome à dates fixes : le lot S1 du dossier 07 (entrée le 2026-01-01) est recréé avec des références uniques, puis le suivi est lu à plusieurs dates de référence.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{sv_token_admin}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "09.01 Connexion administrateur",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pad = (n) => String(n).padStart(2, '0');",
+                  "const t0 = new Date();",
+                  "pm.collectionVariables.set('sv_run_id', `SV-${t0.getUTCFullYear()}${pad(t0.getUTCMonth()+1)}${pad(t0.getUTCDate())}-${pad(t0.getUTCHours())}${pad(t0.getUTCMinutes())}-${Math.random().toString(36).slice(2,6).toUpperCase()}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "if (data.access !== undefined) pm.collectionVariables.set(\"sv_token_admin\", String(data.access));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{admin_username}}\",\n  \"password\": \"{{admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "09.02 Connexion employé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "if (data.access !== undefined) pm.collectionVariables.set(\"sv_token_employe\", String(data.access));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{employee_username}}\",\n  \"password\": \"{{employee_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "09.03 Créer bassin SV-REP-CARPE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"sv_bassin_rep_carpe\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"SV-REP-CARPE-{{sv_run_id}}\",\n  \"categorie\": \"REPRODUCTION\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.04 Créer bassin SV-STK",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"sv_bassin_stk\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"SV-STK-{{sv_run_id}}\",\n  \"categorie\": \"STOCKS\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.05 Créer bassin SV-IND1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"sv_bassin_ind1\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"SV-IND1-{{sv_run_id}}\",\n  \"categorie\": \"GROSSISSEMENT\",\n  \"capacity\": 10000,\n  \"statut\": \"ACTIF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.06 Lire les types de provende",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const liste = Array.isArray(data) ? data : (data.results || []);",
+                  "const type = liste.find(x => x.type === \"CROISSANCE\");",
+                  "pm.test(\"Type CROISSANCE disponible\", function () { pm.expect(type).to.exist; });",
+                  "if (type) pm.collectionVariables.set(\"sv_type_croissance\", String(type.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/types/",
+            "description": ""
+          }
+        },
+        {
+          "name": "09.07 Créer la provende de croissance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"sv_provende\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type_provende\": \"{{sv_type_croissance}}\",\n  \"reference\": \"SV-PROV-{{sv_run_id}}\",\n  \"date_creation\": \"2025-12-01\",\n  \"remarques\": \"Suivi {{sv_run_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.08 Lire la cause de mortalité Inconnue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const liste = Array.isArray(data) ? data : (data.results || []);",
+                  "const cause = liste.find(x => x.libelle === \"Inconnue\");",
+                  "pm.test(\"Cause Inconnue présente\", function () { pm.expect(cause).to.exist; });",
+                  "if (cause) pm.collectionVariables.set(\"sv_cause_inconnue\", String(cause.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/causes-mortalite/?actif=true",
+            "description": ""
+          }
+        },
+        {
+          "name": "09.09 Créer reproduction CARPE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/reproductions/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"SV-REPRO-CARPE-{{sv_run_id}}\",\n  \"bassin\": \"{{sv_bassin_rep_carpe}}\",\n  \"espece\": \"CARPE\",\n  \"date_ajout\": \"2025-12-01\",\n  \"quantite_male\": 5,\n  \"quantite_femelle\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.10 Créer hapa de stock S1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"sv_hapa_s1\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/bassins/hapas/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{sv_bassin_stk}}\",\n  \"nom\": \"SV_S1-{{sv_run_id}}\",\n  \"actif\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.11 Créer ponte S1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/reproduction/pontes/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"SV-PONTE-S1-{{sv_run_id}}\",\n  \"bassin\": \"{{sv_bassin_rep_carpe}}\",\n  \"date_ponte\": \"2025-12-02\",\n  \"quantite_oeuf_obtenu\": \"5000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.12 Créer éclosion S1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"sv_eclosion_s1\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ecloserie/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"SV-ECLOSION-S1-{{sv_run_id}}\",\n  \"reference_ponte\": \"SV-PONTE-S1-{{sv_run_id}}\",\n  \"date_eclosion\": \"2025-12-03\",\n  \"quantite_oeufs_eclos\": \"5000.00\",\n  \"quantite_alevins_obtenu\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.13 Créer lot S1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"sv_lot_s1\", String(data.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/lots/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"SV-LOT-S1-{{sv_run_id}}\",\n  \"id_eclosion\": \"{{sv_eclosion_s1}}\",\n  \"date_creation\": \"2025-12-04T12:00:00Z\",\n  \"parcours_production\": \"SANS_TRAITEMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.14 Mettre lot S1 en stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/stocks/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{sv_lot_s1}}\",\n  \"id_bassin\": \"{{sv_bassin_stk}}\",\n  \"finalite\": \"GROSSISSEMENT\",\n  \"date_mise_en_stock\": \"2025-12-10T12:00:00Z\",\n  \"hapas\": [\n    {\n      \"id_hapa\": \"{{sv_hapa_s1}}\",\n      \"effectif_entrant\": 1000\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.15 Valider la sortie du lot S1 avec sa pesée initiale",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Lot de grossissement actif\", function () { pm.expect(data.statut).to.eql(\"ACTIF\"); });",
+                  "pm.test(\"Quantité sortie\", function () { pm.expect(data.effectif_sortant).to.eql(1000); });",
+                  "pm.test(\"Effectif initial = effectif entrant\", function () { pm.expect(data.effectif_initial).to.eql(1000); });",
+                  "pm.test(\"Poids moyen initial calculé depuis P0\", function () { pm.expect(data.poids_moyen_initial).to.eql(\"20.00\"); });",
+                  "if (data.id_sortie_stock !== undefined) pm.collectionVariables.set(\"sv_sortie_s1\", String(data.id_sortie_stock));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot\": \"{{sv_lot_s1}}\",\n  \"id_bassin_destination\": \"{{sv_bassin_ind1}}\",\n  \"date_pesee_initiale\": \"2026-01-01\",\n  \"pourcentage_echantillon\": \"10\",\n  \"nombre_poissons_peses\": 100,\n  \"poids_total_g\": \"2000.00\",\n  \"date_mise_en_place\": \"2026-01-01\",\n  \"effectif_entrant\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.16 Retenir le lot de grossissement S1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const lot = (Array.isArray(data) ? data : (data.results || []))[0] || {};",
+                  "pm.test(\"Poids initial 20.00 enregistré à la création\", function () { pm.expect(lot.poids_moyen_initial).to.eql(\"20.00\"); pm.expect(lot.effectif_initial).to.eql(1000); });",
+                  "pm.collectionVariables.set(\"sv_lot_gross_s1\", String(lot.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?lot_origine={{sv_lot_s1}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "09.17 Mortalité de 20 CARPE le 2026-01-20 (IND1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/evenements-mortalite-perte/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type_evenement\": \"MORTALITE\",\n  \"id_bassin\": \"{{sv_bassin_ind1}}\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 20,\n  \"date_evenement\": \"2026-01-20\",\n  \"id_cause\": \"{{sv_cause_inconnue}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.18 Mortalité de 30 CARPE le 2026-02-20 (IND1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/effectifs/evenements-mortalite-perte/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type_evenement\": \"MORTALITE\",\n  \"id_bassin\": \"{{sv_bassin_ind1}}\",\n  \"espece\": \"CARPE\",\n  \"quantite\": 30,\n  \"date_evenement\": \"2026-02-20\",\n  \"id_cause\": \"{{sv_cause_inconnue}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.19 Distribution de 50.00 kg le 2026-01-15 (IND1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Distribution valide\", function () { pm.expect(data.statut).to.eql(\"VALIDE\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/consommations-provende/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{sv_bassin_ind1}}\",\n  \"id_provende\": \"{{sv_provende}}\",\n  \"date_distribution\": \"2026-01-15T08:00:00Z\",\n  \"quantite_kg\": \"50.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.20 Distribution de 90.00 kg le 2026-02-15 (IND1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Distribution valide\", function () { pm.expect(data.statut).to.eql(\"VALIDE\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/consommations-provende/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{sv_bassin_ind1}}\",\n  \"id_provende\": \"{{sv_provende}}\",\n  \"date_distribution\": \"2026-02-15T08:00:00Z\",\n  \"quantite_kg\": \"90.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.21 S1 : pesée 1 le 2026-01-31 (98 poissons, 4410 g = 45 g)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"sv_s1_p1\", String(data.id));",
+                  "const ind = data.indicateurs || {};",
+                  "pm.test(\"Effectif vivant 980 et poids moyen 45.00\", function () { pm.expect(data.effectif_vivant).to.eql(980); pm.expect(data.poids_moyen).to.eql(\"45.00\"); });",
+                  "pm.test(\"S1 P1 : jour_de_cycle = 30\", function () { pm.expect(ind.jour_de_cycle).to.eql(30); });",
+                  "pm.test(\"S1 P1 : biomasse_kg = 44.100\", function () { pm.expect(ind.biomasse_kg).to.eql(\"44.100\"); });",
+                  "pm.test(\"S1 P1 : gmq_periode = 0.83\", function () { pm.expect(ind.gmq_periode).to.eql(\"0.83\"); });",
+                  "pm.test(\"S1 P1 : gmq_cumule = 0.83\", function () { pm.expect(ind.gmq_cumule).to.eql(\"0.83\"); });",
+                  "pm.test(\"S1 P1 : provende_periode_kg = 50.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"50.000\"); });",
+                  "pm.test(\"S1 P1 : ic_periode = 2.07\", function () { pm.expect(ind.ic_periode).to.eql(\"2.07\"); });",
+                  "pm.test(\"S1 P1 : ic_cumule = 2.07\", function () { pm.expect(ind.ic_cumule).to.eql(\"2.07\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{sv_lot_gross_s1}}\",\n  \"date\": \"2026-01-31\",\n  \"nombre_poissons_peses\": 98,\n  \"poids_total_g\": \"4410.00\",\n  \"observation\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.22 S1 : pesée 2 le 2026-03-02 (95 poissons, 7600 g = 80 g)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set(\"sv_s1_p2\", String(data.id));",
+                  "const ind = data.indicateurs || {};",
+                  "pm.test(\"Effectif vivant 950\", function () { pm.expect(data.effectif_vivant).to.eql(950); });",
+                  "pm.test(\"S1 P2 : jour_de_cycle = 60\", function () { pm.expect(ind.jour_de_cycle).to.eql(60); });",
+                  "pm.test(\"S1 P2 : biomasse_kg = 76.000\", function () { pm.expect(ind.biomasse_kg).to.eql(\"76.000\"); });",
+                  "pm.test(\"S1 P2 : gmq_periode = 1.17\", function () { pm.expect(ind.gmq_periode).to.eql(\"1.17\"); });",
+                  "pm.test(\"S1 P2 : gmq_cumule = 1.00\", function () { pm.expect(ind.gmq_cumule).to.eql(\"1.00\"); });",
+                  "pm.test(\"S1 P2 : provende_periode_kg = 90.000\", function () { pm.expect(ind.provende_periode_kg).to.eql(\"90.000\"); });",
+                  "pm.test(\"S1 P2 : ic_periode = 2.82\", function () { pm.expect(ind.ic_periode).to.eql(\"2.82\"); });",
+                  "pm.test(\"S1 P2 : ic_cumule = 2.50\", function () { pm.expect(ind.ic_cumule).to.eql(\"2.50\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_lot_grossissement\": \"{{sv_lot_gross_s1}}\",\n  \"date\": \"2026-03-02\",\n  \"nombre_poissons_peses\": 95,\n  \"poids_total_g\": \"7600.00\",\n  \"observation\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09.23 Prélèvement environnemental du 2026-03-09 (bassin du lot)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/environnement/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{sv_bassin_ind1}}\",\n  \"date_heure_prelevement\": \"2026-03-09T08:00:00+03:00\",\n  \"temperature_eau\": \"27.50\",\n  \"temperature_air\": \"29.00\",\n  \"oxygene\": \"6.10\",\n  \"ph\": \"7.20\",\n  \"nitrite\": \"0.05\",\n  \"nitrate\": \"1.20\",\n  \"ammoniac\": \"0.02\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sv_token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "09.24 Suivi au 2026-03-10 : deux pesées (contrat de l'exemple)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Toutes les clés présentes\", function () { pm.expect(Object.keys(data).sort()).to.eql([\"alertes\", \"autres_lots_du_bassin\", \"calendrier\", \"dernieres_valeurs\", \"lot\", \"nombre_pesees\", \"parametres_environnementaux\", \"point_initial\", \"series\", \"seuil\"]); });",
+                  "pm.test(\"Lot : statut, entrée, jour de cycle\", function () { pm.expect([data.lot.statut, data.lot.date_entree, data.lot.jour_de_cycle]).to.eql([\"ACTIF\", \"2026-01-01\", 68]); });",
+                  "pm.test(\"Effectifs initial et vivant\", function () { pm.expect([data.lot.effectif_initial, data.lot.effectif_vivant_actuel]).to.eql([1000, 950]); });",
+                  "pm.test(\"Poids moyen initial en nombre JSON\", function () { pm.expect(data.lot.poids_moyen_initial).to.eql(20.0); });",
+                  "pm.test(\"Deux pesées\", function () { pm.expect(data.nombre_pesees).to.eql(2); });",
+                  "pm.test(\"Dernières valeurs\", function () { pm.expect([data.dernieres_valeurs.date_pesee, data.dernieres_valeurs.poids_moyen, data.dernieres_valeurs.biomasse_kg, data.dernieres_valeurs.gmq_cumule, data.dernieres_valeurs.ic_cumule]).to.eql([\"2026-03-02\", 80.0, 76.0, 1.0, 2.5]); });",
+                  "pm.test(\"Nature des valeurs\", function () { pm.expect(data.dernieres_valeurs.nature).to.eql({\"poids_moyen\": \"mesuré sur échantillon\", \"biomasse_kg\": \"estimée\"}); });",
+                  "pm.test(\"Point initial J0\", function () { pm.expect(data.point_initial).to.eql({\"date\": \"2026-01-01\", \"jour_de_cycle\": 0, \"poids_moyen\": 20.0, \"biomasse_kg\": 20.0}); });",
+                  "pm.test(\"Séries : poids moyen\", function () { pm.expect(data.series.map(p => p.poids_moyen)).to.eql([45.0, 80.0]); });",
+                  "pm.test(\"Séries : jours de cycle\", function () { pm.expect(data.series.map(p => p.jour_de_cycle)).to.eql([30, 60]); });",
+                  "pm.test(\"Séries : ICA période\", function () { pm.expect(data.series.map(p => p.ic_periode)).to.eql([2.07, 2.82]); });",
+                  "pm.test(\"Séries : biomasse\", function () { pm.expect(data.series.map(p => p.biomasse_kg)).to.eql([44.1, 76.0]); });",
+                  "pm.test(\"Prochaine pesée J75 dans 7 jours\", function () { pm.expect(data.calendrier.prochaine_pesee).to.eql({\"numero\": 3, \"jour_cible\": 75, \"date_prevue\": \"2026-03-17\", \"jours_restants\": 7, \"en_retard\": false, \"jours_de_retard\": 0}); });",
+                  "pm.test(\"Pesées prévues passées\", function () { pm.expect(data.calendrier.pesees_prevues.map(p => p.jour_cible)).to.eql([30, 60]); });",
+                  "pm.test(\"Seuil non atteint\", function () { pm.expect(data.seuil).to.eql({\"poids_vente_g\": 250, \"atteint\": false, \"fin_cycle_possible\": false, \"date_premiere_pesee_au_seuil\": null}); });",
+                  "pm.test(\"Aucune alerte\", function () { pm.expect(data.alertes).to.eql([]); });",
+                  "pm.test(\"Dernier prélèvement au plus tard à la date de référence\", function () { pm.expect([data.parametres_environnementaux.date_heure_prelevement, data.parametres_environnementaux.temperature_eau, data.parametres_environnementaux.oxygene]).to.eql([\"2026-03-09T08:00:00+03:00\", 27.5, 6.1]); });",
+                  "pm.test(\"Aucun autre lot dans le bassin\", function () { pm.expect(data.autres_lots_du_bassin).to.eql([]); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{sv_lot_gross_s1}}/suivi/?date_reference=2026-03-10",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sv_token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "09.25 Suivi au 2026-01-11 : aucune pesée encore",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Aucune pesée\", function () { pm.expect([data.nombre_pesees, data.dernieres_valeurs, data.series]).to.eql([0, null, []]); });",
+                  "pm.test(\"Jour de cycle 10\", function () { pm.expect(data.lot.jour_de_cycle).to.eql(10); });",
+                  "pm.test(\"Première pesée J30 dans 20 jours\", function () { pm.expect([data.calendrier.prochaine_pesee.numero, data.calendrier.prochaine_pesee.date_prevue, data.calendrier.prochaine_pesee.jours_restants]).to.eql([1, \"2026-01-31\", 20]); });",
+                  "pm.test(\"Aucune pesée prévue passée\", function () { pm.expect(data.calendrier.pesees_prevues).to.eql([]); });",
+                  "pm.test(\"Pas de prélèvement à cette date\", function () { pm.expect(data.parametres_environnementaux).to.eql(null); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{sv_lot_gross_s1}}/suivi/?date_reference=2026-01-11",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sv_token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "09.26 Prélèvement du 2026-03-11, postérieur à la date de référence",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/environnement/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bassin\": \"{{sv_bassin_ind1}}\",\n  \"date_heure_prelevement\": \"2026-03-11T08:00:00+03:00\",\n  \"temperature_eau\": \"30.00\",\n  \"temperature_air\": \"31.00\",\n  \"oxygene\": \"5.00\",\n  \"ph\": \"7.00\",\n  \"nitrite\": \"0.05\",\n  \"nitrate\": \"1.20\",\n  \"ammoniac\": \"0.02\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sv_token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "09.27 Suivi au 2026-03-25 : pesée J75 en retard de 8 jours",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Retard\", function () { pm.expect([data.calendrier.prochaine_pesee.en_retard, data.calendrier.prochaine_pesee.jours_de_retard]).to.eql([true, 8]); });",
+                  "pm.test(\"Alerte de retard (niveau attention)\", function () { pm.expect(data.alertes.map(a => [a.code, a.niveau])).to.eql([[\"PESEE_EN_RETARD\", \"attention\"]]); });",
+                  "pm.test(\"Message prêt à afficher\", function () { pm.expect(data.alertes[0].message).to.eql(\"La pesée prévue le 2026-03-17 n'a pas été saisie.\"); });",
+                  "pm.test(\"Prélèvement le plus récent\", function () { pm.expect(data.parametres_environnementaux.temperature_eau).to.eql(30.0); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{sv_lot_gross_s1}}/suivi/?date_reference=2026-03-25",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sv_token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "09.28 Liste de sélection : lots actifs avec date d'entrée et jour de cycle",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const lot = (Array.isArray(data) ? data : (data.results || [])).find(l => String(l.id) === pm.collectionVariables.get(\"sv_lot_gross_s1\")) || {};",
+                  "pm.test(\"Date d'entrée\", function () { pm.expect(lot.date_entree).to.eql(\"2026-01-01\"); });",
+                  "pm.test(\"Jour de cycle et champs de sélection\", function () { pm.expect(lot.jour_de_cycle).to.be.a(\"number\"); [\"code\", \"espece\", \"id_bassin\", \"reference_bassin\", \"statut\"].forEach(c => pm.expect(lot).to.have.property(c)); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/?statut=ACTIF&bassin={{sv_bassin_ind1}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sv_token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "09.29 Employé : lecture du suivi autorisée",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{sv_lot_gross_s1}}/suivi/",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sv_token_employe}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "09.30 Non connecté : suivi refusé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{sv_lot_gross_s1}}/suivi/",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "09.31 Refuser une date_reference invalide",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Erreur sur date_reference\", function () { pm.expect(data).to.have.property(\"date_reference\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/{{sv_lot_gross_s1}}/suivi/?date_reference=2026-02-30",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sv_token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "09.32 Lot inexistant : 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/lots-grossissement/999999999/suivi/",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sv_token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
           }
         }
       ]

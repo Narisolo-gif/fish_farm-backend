@@ -154,3 +154,15 @@ npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.j
 ```
 
 Les instantanés sont recalculés pour tout le bassin à chaque création, correction ou annulation de pesée, à partir des seules pesées valides. L'effectif de chaque pesée est alors relu dans le registre (l'`effectif_vivant` de la pesée reste la trace de la saisie ; celui de `indicateurs` est l'effectif relu). Une distribution ou une mortalité saisie après coup sur une période déjà pesée n'est donc prise en compte qu'à la prochaine opération de pesée du bassin.
+
+## Suivi de cycle (collection grossissement)
+
+Le dossier **09 Suivi de cycle** teste `GET /api/v1/grossissement/lots-grossissement/{id}/suivi/?date_reference=AAAA-MM-JJ`. Il est autonome, à dates fixes et à références uniques par exécution : il recrée le lot S1 du dossier 07 (entrée le 2026-01-01, pesées de 45 g puis 80 g), puis lit le suivi au 2026-01-11 (aucune pesée), au 2026-03-10 (valeurs de l'exemple du contrat) et au 2026-03-25 (pesée J75 en retard de 8 jours). Il vérifie aussi la liste de sélection (`?statut=ACTIF`, `date_entree`, `jour_de_cycle`), la lecture par un employé, le refus sans connexion, une `date_reference` invalide (400) et un lot inexistant (404).
+
+```powershell
+npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "09 Suivi de cycle"
+```
+
+Les exemples du contrat pour le frontend sont dans `docs/contrats/` (`suivi_lot.exemple.json`, `suivi_lot_vide.exemple.json`, `lots_en_cours.exemple.json`). Ils sont produits par l'API à partir du même scénario (`GENERER_EXEMPLES=1 python manage.py test apps.grossissement.tests.test_suivi`) ; sans cette variable, le test vérifie qu'ils ont toujours la structure de la réponse.
+
+Fuseau : le serveur est à l'heure d'Antananarivo (`TIME_ZONE = "Indian/Antananarivo"`). Les dates relatives des collections (`dateOnly`) sont calculées à UTC+3 pour coïncider avec la « date du jour » du serveur.
