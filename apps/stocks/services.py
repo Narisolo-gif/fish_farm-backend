@@ -161,6 +161,17 @@ def creer_mise_en_stock(validated_data, utilisateur):
         raise ValidationError({
             "id_lot": "Le traitement doit être clôturé avant la mise en stock."
         })
+    if (
+        traitement is not None
+        and traitement.date_cloture is not None
+        and date_evenement < traitement.date_cloture
+    ):
+        raise ValidationError({
+            "date_mise_en_stock": (
+                "La mise en stock ne peut pas précéder la clôture du traitement "
+                f"({traitement.date_cloture.isoformat()})."
+            )
+        })
     lignes_traitement = []
     if traitement is not None:
         lignes_traitement = list(

@@ -1,14 +1,10 @@
 from django.db import transaction
 from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import BasePermission, SAFE_METHODS
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.core.permissions import (
-    IsAdministrateur,
-    IsAdministrateurOuGestionnaire,
-)
+from apps.core.permissions import PermissionMatrice
 
 from .models import Bassin, Hapa
 from .serializers import BassinSerializer, HapaGestionSerializer, HapaSerializer
@@ -18,31 +14,15 @@ class BassinViewSet(viewsets.ModelViewSet):
     """
     Gestion des bassins.
 
-    Administrateur :
-        - consulter
-        - créer
-        - modifier
-        - mettre hors service
-
-    Gestionnaire :
-        - consulter
-
-    Employé :
-        - aucun accès
+    Droits : matrice `bassins` / `hapas` (apps/core/permissions.py) : tous les
+    rôles consultent ; Administrateur et Directeur créent et modifient.
     """
+
+    ressource = "bassins"
+    permission_classes = [PermissionMatrice]
 
     queryset = Bassin.objects.prefetch_related("hapas").all()
     serializer_class = BassinSerializer
-
-    def get_permissions(self):
-        """
-        Détermine les permissions selon l'opération demandée.
-        """
-
-        if self.action in ["list", "retrieve", "create"]:
-            return [IsAdministrateurOuGestionnaire()]
-
-        return [IsAdministrateur()]
 
     def get_queryset(self):
         """
@@ -166,17 +146,12 @@ class HapaViewSet(viewsets.ModelViewSet):
     Les hapas sont manipulés uniquement dans le contexte
     d'un bassin.
 
-    Administrateur :
-        - consulter
-        - modifier
-        - désactiver
-
-    Gestionnaire :
-        - consulter
-
-    Employé :
-        - aucun accès
+    Droits : matrice `bassins` / `hapas` (apps/core/permissions.py) : tous les
+    rôles consultent ; Administrateur et Directeur créent et modifient.
     """
+
+    ressource = "hapas"
+    permission_classes = [PermissionMatrice]
 
     queryset = Hapa.objects.select_related("bassin").all()
     serializer_class = HapaSerializer
@@ -196,20 +171,6 @@ class HapaViewSet(viewsets.ModelViewSet):
         )
 
         return queryset
-
-    def get_permissions(self):
-        """
-        Consultation :
-            Administrateur + Gestionnaire
-
-        Création, modification et désactivation :
-            Administrateur uniquement.
-        """
-
-        if self.action in ["list", "retrieve"]:
-            return [IsAdministrateurOuGestionnaire()]
-
-        return [IsAdministrateur()]
 
     def create(self, request, *args, **kwargs):
         """
@@ -264,25 +225,6 @@ class HapaViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class HapaPermission(BasePermission):
-    ROLES_AUTORISES = {"Administrateur", "Gestionnaire", "Employé"}
-    ROLES_GESTION = {"Administrateur", "Gestionnaire"}
-
-    def has_permission(self, request, view):
-        user = request.user
-        if not (
-            user
-            and user.is_authenticated
-            and user.is_active
-            and getattr(user, "statut", None) == "ACTIF"
-            and getattr(user, "role", None)
-        ):
-            return False
-        role = user.role.libelle
-        if request.method in SAFE_METHODS:
-            return role in self.ROLES_AUTORISES
-        return role in self.ROLES_GESTION and request.method in {"POST", "PATCH"}
-
 
 class HapaGestionViewSet(
     mixins.ListModelMixin,
@@ -291,9 +233,10 @@ class HapaGestionViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
+    ressource = "hapas"
+    permission_classes = [PermissionMatrice]
     queryset = Hapa.objects.select_related("bassin").all()
     serializer_class = HapaGestionSerializer
-    permission_classes = [HapaPermission]
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_queryset(self):

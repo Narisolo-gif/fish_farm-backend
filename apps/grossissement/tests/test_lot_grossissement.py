@@ -46,7 +46,7 @@ class OutilsLotGrossissement:
     """setUp et assistants partagés : lot en stock, sortie validée, lot de grossissement."""
 
     def setUp(self):
-        role = Role.objects.create(libelle="Administrateur")
+        role = Role.objects.get_or_create(libelle="Administrateur")[0]
         self.user = User.objects.create_user(
             username="grossissement-admin",
             password="test-password",
@@ -522,7 +522,7 @@ class LotGrossissementTests(OutilsLotGrossissement, TestCase):
         employe = User.objects.create_user(
             username="grossissement-employe",
             password="test-password",
-            role=Role.objects.create(libelle="Employé"),
+            role=Role.objects.get_or_create(libelle="Employé")[0],
             statut="ACTIF",
         )
         client_employe = APIClient()

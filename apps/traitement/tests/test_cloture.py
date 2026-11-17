@@ -1,4 +1,5 @@
 """Clôture d'un traitement : boîte de validation (aperçu) et droits."""
+from datetime import timedelta
 from rest_framework.test import APIClient
 
 from apps.core.models import Role
@@ -35,7 +36,7 @@ class ClotureTraitementTests(TraitementHapaTests):
         utilisateur = User.objects.create_user(
             username=f"cloture-{libelle}",
             password="test-password",
-            role=Role.objects.create(libelle=libelle),
+            role=Role.objects.get_or_create(libelle=libelle)[0],
             statut="ACTIF",
         )
         client = APIClient()
@@ -69,13 +70,14 @@ class ClotureTraitementTests(TraitementHapaTests):
         self.assertEqual(self.traitement.statut, Traitement.Statut.EN_COURS)
         self.assertFalse(hapa_est_bloque(self.hapa1.pk))
 
-    def test_cloture_reservee_admin_et_gestionnaire(self):
-        refusee = self._client("Employé").post(f"{URL}{self.traitement.pk}/cloturer/")
-        self.assertEqual(refusee.status_code, 403)
+    def test_cloture_reservee_au_pilotage(self):
+        for libelle in ("Employé", "Gestionnaire"):
+            refusee = self._client(libelle).post(f"{URL}{self.traitement.pk}/cloturer/")
+            self.assertEqual(refusee.status_code, 403, libelle)
         self.traitement.refresh_from_db()
         self.assertEqual(self.traitement.statut, Traitement.Statut.EN_COURS)
 
-        reponse = self._client("Gestionnaire").post(f"{URL}{self.traitement.pk}/cloturer/")
+        reponse = self._client("Directeur").post(f"{URL}{self.traitement.pk}/cloturer/")
 
         self.assertEqual(reponse.status_code, 200, reponse.data)
         self.assertEqual(reponse.data["statut"], Traitement.Statut.CLOTUREE)
@@ -99,11 +101,86 @@ class ClotureTraitementTests(TraitementHapaTests):
         self.assertFalse(reponse.data["cloturable"])
         self.assertEqual(reponse.data["raison_refus"], "Ce traitement est déjà clôturé.")
 
-    def test_employe_garde_la_creation_et_la_lecture(self):
+    def test_employe_lit_le_traitement(self):
         client = self._client("Employé")
         self.assertEqual(client.get(URL).status_code, 200)
         self.assertEqual(client.get(f"{URL}{self.traitement.pk}/").status_code, 200)
         self.assertEqual(client.get(f"{URL}{self.traitement.pk}/effectifs/").status_code, 200)
+
+    def _traitement_passe(self, reference, *, ouvert_il_y_a=20, mortalite_il_y_a=15):
+        """Traitement ouvert dans le passé sur un hapa neuf, avec 3 morts datés."""
+        bassin = self._bassin(f"TRT-{reference}")
+        hapa = self._hapa(bassin, f"{reference}-H")
+        traitement = self._creer_traitement(
+            bassin=bassin,
+            date_ouverture=self.today - timedelta(days=ouvert_il_y_a),
+            hapas=[{"id_hapa": hapa.pk, "effectif_initial": 10}],
+        )
+        enregistrer_mortalite_perte(
+            bassin=bassin,
+            hapa=hapa,
+            espece=Lot.Espece.CARPE,
+            type_evenement=EvenementMortalitePerte.TypeEvenement.MORTALITE,
+            quantite=3,
+            date_evenement=self.today - timedelta(days=mortalite_il_y_a),
+            saisi_par=self.user,
+            cause_mortalite=CauseMortalite.objects.get_or_create(libelle="Cause datée")[0],
+        )
+        return traitement
+
+    def test_cloture_a_une_date_passee(self):
+        traitement = self._traitement_passe("PASSE")
+        jour = (self.today - timedelta(days=10)).isoformat()
+        reponse = self._client("Directeur").post(
+            f"{URL}{traitement.pk}/cloturer/", {"date_cloture": jour}, format="json"
+        )
+        self.assertEqual(reponse.status_code, 200, reponse.data)
+        self.assertEqual(reponse.data["date_cloture"], jour)
+        self.assertEqual(reponse.data["effectif_final"], 7)
+
+    def test_date_de_cloture_refusee(self):
+        traitement = self._traitement_passe("REFUS", mortalite_il_y_a=5)
+        directeur = self._client("Directeur")
+        for il_y_a in (-1, 21, 10):  # future, avant l'ouverture, avant la mortalité
+            with self.subTest(il_y_a=il_y_a):
+                jour = (self.today - timedelta(days=il_y_a)).isoformat()
+                reponse = directeur.post(
+                    f"{URL}{traitement.pk}/cloturer/", {"date_cloture": jour}, format="json"
+                )
+                self.assertEqual(reponse.status_code, 400, reponse.data)
+                self.assertIn("date_cloture", reponse.data)
+        self.assertEqual(
+            directeur.post(f"{URL}{traitement.pk}/cloturer/", {"date_cloture": "abc"}, format="json").status_code,
+            400,
+        )
+        traitement.refresh_from_db()
+        self.assertEqual(traitement.statut, Traitement.Statut.EN_COURS)
+
+    def test_apercu_a_la_date_demandee(self):
+        traitement = self._traitement_passe("APERCU")
+        jour = (self.today - timedelta(days=10)).isoformat()
+        reponse = self._client("Employé").get(
+            f"{URL}{traitement.pk}/apercu-cloture/", {"date_cloture": jour}
+        )
+        self.assertEqual(reponse.status_code, 200, reponse.data)
+        self.assertEqual(reponse.data["date_cloture"], jour)
+        self.assertEqual(reponse.data["duree_jours"], 10)
+        self.assertEqual(reponse.data["effectif_final"], 7)
+        self.assertTrue(reponse.data["cloturable"])
+
+    def test_apercu_d_un_traitement_deja_cloture_montre_sa_vraie_cloture(self):
+        traitement = self._traitement_passe("DEJA")
+        jour = (self.today - timedelta(days=10)).isoformat()
+        directeur = self._client("Directeur")
+        self.assertEqual(
+            directeur.post(f"{URL}{traitement.pk}/cloturer/", {"date_cloture": jour}, format="json").status_code, 200
+        )
+        reponse = directeur.get(f"{URL}{traitement.pk}/apercu-cloture/")
+        self.assertEqual(reponse.status_code, 200, reponse.data)
+        self.assertFalse(reponse.data["cloturable"])
+        self.assertEqual(reponse.data["date_cloture"], jour)
+        self.assertEqual(reponse.data["duree_jours"], 10)
+        self.assertEqual(reponse.data["effectif_final"], 7)
 
     def test_non_connecte_refuse(self):
         self.assertEqual(

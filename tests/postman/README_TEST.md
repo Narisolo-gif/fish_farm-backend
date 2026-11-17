@@ -1,4 +1,58 @@
-# Tests fonctionnels E2E Postman
+# Tests fonctionnels Postman
+
+## Collection « flux complet » (en vigueur)
+
+`flux_complet.postman_collection.json` parcourt toute l'exploitation, avec le rôle réel de chaque saisie selon la matrice des permissions :
+- le **directeur** prend les décisions et gère les référentiels : bassins, hapas, provendes, lots, ouverture et clôture des traitements, mises en stock, sorties, annulations, clôture et évacuation ;
+- l'**employé** fait les saisies de terrain : mortalités, provende, paramètres environnementaux, pesées, aperçu de clôture du traitement ;
+- la **gérante** (Gestionnaire) fait les lectures : suivi, historique, fiches.
+
+Le compte administrateur sert uniquement à la première connexion. Chaque dossier contient aussi des refus attendus : 403 sans rien écrire (la gérante s'attribue le rôle Administrateur, crée un bassin, ouvre un traitement, met en stock, valide une sortie, saisit une pesée ou évacue ; l'employé crée un lot, clôture un traitement, annule une mortalité, corrige une pesée ou clôture un lot), et 401 pour un appel sans jeton.
+
+La collection est **générée** : ne la modifiez pas à la main. Les références sont uniques à chaque exécution (variable `fc_run`), et les dates sont fixes en 2026 : on peut la relancer sur une base qui contient déjà des données.
+
+### Prérequis
+
+1. `docker compose exec backend python manage.py migrate` : la migration crée les quatre rôles, les types de provende et la cause `Inconnue`.
+2. Les quatre comptes de l'environnement, au statut `ACTIF` : `admin_demo` (Administrateur), `directeur_demo` (Directeur), `gestionnaire_demo` (Gestionnaire), `employe_demo` (Employé). Les comptes absents se créent avec la commande suivante, qui ne touche pas aux comptes existants :
+
+```powershell
+docker compose exec backend python manage.py shell -c "from apps.core.models import Role; from django.contrib.auth import get_user_model as g; U = g(); [U.objects.filter(username=n).exists() or U.objects.create_user(n, password='ChangeMe-Local-2026!', role=Role.objects.get(libelle=r), statut='ACTIF') for n, r in (('admin_demo', 'Administrateur'), ('directeur_demo', 'Directeur'), ('gestionnaire_demo', 'Gestionnaire'), ('employe_demo', 'Employé'))]; print([(u.username, u.role.libelle) for u in U.objects.all()])"
+```
+
+### Exécution
+
+```powershell
+npx newman@6.1.3 run tests/postman/flux_complet.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000"
+```
+
+Dans Postman Desktop, importez la collection et l'environnement, puis lancez **Fish Farm — flux complet** en entier, dans l'ordre : chaque dossier réutilise les identifiants des dossiers précédents.
+
+### Régénérer et rejouer
+
+- Cahier de test Excel (une ligne par requête, résultat OK / KO / Bloqué / Non testé, commentaire, synthèse par dossier) : `cahier_de_test_flux_complet.xlsx`, régénéré par `py tests/postman/generer_cahier_de_test.py` (nécessite `openpyxl` ; efface les résultats saisis).
+- Régénérer la collection après une modification du scénario (`tests/postman/generer_flux_complet.py`) : `py tests/postman/generer_flux_complet.py`.
+- Contrôle de structure, sans base : `py -m unittest discover -s tests/postman -p "test_generer*.py"`.
+- Rejeu du scénario par Django sur une base de test, avec les vrais droits (codes HTTP, vérifications, aucun effet pour un refus, deux exécutions de suite) : `docker compose exec backend python manage.py test apps.core.tests.test_collection_flux_complet`. Lancez-le avant newman pour repérer les erreurs de scénario.
+
+### Contenu de la base après exécution (base de démonstration)
+
+| Lot | Espèce | État final |
+|---|---|---|
+| P | TILAPIA | Traitement (2 000 alevins, clôturé le 2026-01-15), stock le 2026-01-16, grossissement à partir du 2026-02-01 avec dix pesées jusqu'à 320 g, provende toutes les deux semaines et une mortalité corrigée par le directeur. Le cycle est clôturé le jour de l'exécution, le bassin évacué, et le lot d'origine est `CLOTUREE`. |
+| T1 | CARPE | Traitement ouvert le 2026-11-01 (`EN_COURS`). |
+| T2 | CARPE | Traitement clôturé et lot mis en stock le jour de l'exécution (`EN_STOCK`). |
+| G1, G2 | CARPE, TILAPIA | Traités en juin et juillet, en stock le 2026-07-10, entrés le 2026-08-01 dans le même bassin. Pesées J30, J60 et J75, provende hebdomadaire. Les deux lots sont `ACTIF` avec l'alerte `PESEE_EN_RETARD` (pesée J90 prévue le 2026-10-30). |
+
+Les pesées récentes de G1 et G2 ne font **pas** partie de la collection : elles seront saisies pendant les tests qui suivront l'intégration du frontend (elles lèveront l'alerte de retard).
+
+Les vérifications portent sur les codes HTTP, les identifiants et les champs dont le frontend a besoin (stade, statut, effectifs, calendrier, alerte, évacuation). Les valeurs exactes des indicateurs ne sont pas vérifiées.
+
+## Anciennes collections
+
+`pisciculture_e2e.postman_collection.json` (séquentielle, base vide) reste en place. `archives/grossissement_sortie_lot.postman_collection.json` est **archivée** : elle est remplacée par la collection « flux complet ». Les sections ci-dessous qui la mentionnent sont conservées pour mémoire.
+
+# Collection E2E (historique)
 
 ## Base propre et comptes de test
 
@@ -69,12 +123,12 @@ Les soldes sont lus dans le registre et récapitulés dans la console Postman/Ne
 
 Les modules environnement, pesée/répartition et toute route non présente dans les URLs réelles sont ignorés dans la collection E2E.
 
-## Pesées (collection grossissement)
+## Pesées (collection grossissement, archivée)
 
-La pesée sur échantillon est testée dans le dossier **06 Pesées** de `grossissement_sortie_lot.postman_collection.json`. Ce dossier est autonome : il crée ses bassins, ses lots et leur effectif, avec des références uniques par exécution. On peut donc le lancer seul ou après les dossiers 00 à 05 :
+La pesée sur échantillon est testée dans le dossier **06 Pesées** de `archives/grossissement_sortie_lot.postman_collection.json` (archivée). Ce dossier est autonome : il crée ses bassins, ses lots et leur effectif, avec des références uniques par exécution. On peut donc le lancer seul ou après les dossiers 00 à 05 :
 
 ```powershell
-npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "06 Pesées"
+npx newman@6.1.3 run tests/postman/archives/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "06 Pesées"
 ```
 
 Valeur à vérifier à la main : le lot A compte 1 000 poissons ; à 10 %, la cible est de 100 poissons ; 100 poissons pour 2 537,50 g donnent 25,375 g, soit **25,38 g** après arrondi.
@@ -122,14 +176,14 @@ Il n'y a plus de brouillon ni de validation en deux temps. Deux appels, réserv�
 
 `code` vide : le code proposé (`GR-AAAA-NNNN`) est retenu. Le champ `poids_initial_g` est renommé `poids_moyen_initial` (migration `0006`). Ni l'un ni l'autre n'est accepté en écriture, à la validation comme en `PATCH` du lot : le poids moyen initial est calculé depuis la pesée initiale (P0) et tracé, en lecture seule, avec `date_pesee_initiale`, `pourcentage_echantillon_initial`, `nombre_poissons_peses_initial` et `poids_total_initial_g`. Les anciennes routes `POST /api/v1/effectifs/sorties-stock/` et `PATCH …/{id}/` répondent 405, `…/{id}/valider/` répond 404 ; la lecture et `…/{id}/annuler/` restent disponibles.
 
-Les requêtes adaptées des dossiers 03 à 07 (collection grossissement) et 08 à 10 (collection E2E) envoient un échantillon P0 à la taille cible (10 %) pesant 20 g par poisson (40 g pour le lot B du dossier 07), soit un `poids_moyen_initial` de 20,00 g, comme l'ancien `poids_initial_g`.
+Les requêtes adaptées des dossiers 03 à 07 (collection grossissement, archivée) et 08 à 10 (collection E2E) envoient un échantillon P0 à la taille cible (10 %) pesant 20 g par poisson (40 g pour le lot B du dossier 07), soit un `poids_moyen_initial` de 20,00 g, comme l'ancien `poids_initial_g`.
 
 ### Dossier « 08 Sortie grossissement »
 
-Dossier indépendant de `grossissement_sortie_lot.postman_collection.json` : il se connecte avec les trois comptes de l'environnement et crée ses bassins, ses cinq lots (2 000 poissons chacun) et leurs stocks, à dates fixes (stock le 2026-02-10, pesée initiale le 2026-03-01, mise en bassin le 2026-03-02) et à références uniques par exécution.
+Dossier indépendant de `archives/grossissement_sortie_lot.postman_collection.json` (archivée) : il se connecte avec les trois comptes de l'environnement et crée ses bassins, ses cinq lots (2 000 poissons chacun) et leurs stocks, à dates fixes (stock le 2026-02-10, pesée initiale le 2026-03-01, mise en bassin le 2026-03-02) et à références uniques par exécution.
 
 ```powershell
-npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "08 Sortie grossissement"
+npx newman@6.1.3 run tests/postman/archives/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "08 Sortie grossissement"
 ```
 
 Scénarios couverts : aperçu sans écriture ; cas nominal (200 poissons pesés pour 4 000 g, soit 20,00 g, aucune `Pesee`) ; écart en moins justifié ; écart sans justification ; écart en plus refusé ; échantillon non conforme (150 pour une cible de 200) refusé puis accepté avec confirmation ; échantillon supérieur à l'effectif entrant ; dates (mise en bassin avant la pesée, date future) ; bassin d'une autre catégorie, avec hapa, déjà à deux lots, de même espèce ; deux espèces dans un même bassin ; code déjà utilisé puis code saisi ; ancien flux refusé ; permissions (employé, sans authentification, compte désactivé) ; trace P0 en lecture seule. Après chaque refus, le dossier vérifie que rien n'a été écrit : aucune sortie, aucun lot de grossissement, stade `EN_STOCK`, effectif du hapa de stock intact.
@@ -141,7 +195,7 @@ Scénarios couverts : aperçu sans écriture ; cas nominal (200 poissons pesés 
 - **Autres finalités de sortie** : la sortie de stock n'a que le type `GROSSISSEMENT` ; il n'existe pas d'autre finalité à valider « comme avant ».
 - **Bassin avec hapa** : l'API refuse la création d'un hapa en bassin de grossissement. Le dossier crée le bassin en `REPRODUCTION`, y ajoute un hapa, puis le passe en `GROSSISSEMENT`.
 
-## Indicateurs (collection grossissement)
+## Indicateurs (collection grossissement, archivée)
 
 Le dossier **07 Indicateurs** est autonome, à **dates fixes** (cycle de 2026, entrée des lots le 2026-01-01) et à références uniques par exécution : il peut être relancé sur la même base. Il crée ses bassins, ses lots, leurs mortalités et les distributions de provende, puis vérifie l'objet `indicateurs` de chaque pesée :
 
@@ -150,29 +204,29 @@ Le dossier **07 Indicateurs** est autonome, à **dates fixes** (cycle de 2026, e
 - une pesée le jour même de l'entrée (GMQ `null`).
 
 ```powershell
-npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "07 Indicateurs"
+npx newman@6.1.3 run tests/postman/archives/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "07 Indicateurs"
 ```
 
 Les instantanés sont recalculés pour tout le bassin à chaque création, correction ou annulation de pesée, à partir des seules pesées valides. L'effectif de chaque pesée est alors relu dans le registre (l'`effectif_vivant` de la pesée reste la trace de la saisie ; celui de `indicateurs` est l'effectif relu). Une distribution ou une mortalité saisie après coup sur une période déjà pesée n'est donc prise en compte qu'à la prochaine opération de pesée du bassin.
 
-## Suivi de cycle (collection grossissement)
+## Suivi de cycle (collection grossissement, archivée)
 
 Le dossier **09 Suivi de cycle** teste `GET /api/v1/grossissement/lots-grossissement/{id}/suivi/?date_reference=AAAA-MM-JJ`. Il est autonome, à dates fixes et à références uniques par exécution : il recrée le lot S1 du dossier 07 (entrée le 2026-01-01, pesées de 45 g puis 80 g), puis lit le suivi au 2026-01-11 (aucune pesée), au 2026-03-10 (valeurs de l'exemple du contrat) et au 2026-03-25 (pesée J75 en retard de 8 jours). Il vérifie aussi la liste de sélection (`?statut=ACTIF`, `date_entree`, `jour_de_cycle`), la lecture par un employé, le refus sans connexion, une `date_reference` invalide (400) et un lot inexistant (404).
 
 ```powershell
-npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "09 Suivi de cycle"
+npx newman@6.1.3 run tests/postman/archives/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "09 Suivi de cycle"
 ```
 
 Les exemples du contrat pour le frontend sont dans `docs/contrats/` (`suivi_lot.exemple.json`, `suivi_lot_vide.exemple.json`, `lots_en_cours.exemple.json`). Ils sont produits par l'API à partir du même scénario (`GENERER_EXEMPLES=1 python manage.py test apps.grossissement.tests.test_suivi`) ; sans cette variable, le test vérifie qu'ils ont toujours la structure de la réponse.
 
 Fuseau : le serveur est à l'heure d'Antananarivo (`TIME_ZONE = "Indian/Antananarivo"`). Les dates relatives des collections (`dateOnly`) sont calculées à UTC+3 pour coïncider avec la « date du jour » du serveur.
 
-## Clôture (collection grossissement)
+## Clôture (collection grossissement, archivée)
 
 Le dossier **10 Clôture** est autonome, à dates fixes et à références uniques : il recrée le lot S1 (CARPE, entrée le 2026-01-01, pesées de 45 g puis 80 g), vérifie que la clôture est refusée sous le seuil (300 g pour la carpe), enregistre une pesée finale de 300 g, puis teste l'aperçu, l'ancien format refusé, le refus pour un employé, la clôture (finaux, message, lot d'origine `CLOTUREE`), la seconde clôture refusée, la mortalité et la distribution de provende refusées après la clôture, l'historique, l'évacuation (puis la seconde refusée), le solde nul et le suivi en lecture seule.
 
 ```powershell
-npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "10 Clôture"
+npx newman@6.1.3 run tests/postman/archives/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "10 Clôture"
 ```
 
 Clôtures adaptées au nouveau flux (dernière pesée ≥ seuil, date du jour, aucun poids ni motif saisi, évacuation à part) : dossier 05 (pesée finale du lot A, aperçu, clôture, évacuation), dossier 06 (pesée finale du lot B à J-6 avant sa mortalité totale, clôture à effectif nul) et dossier 10 de la collection E2E (pesée finale du lot C à 10 %, clôture, évacuation ; l'ancien format est refusé). La collection E2E fait donc désormais une pesée, la seule.
@@ -180,3 +234,7 @@ Clôtures adaptées au nouveau flux (dernière pesée ≥ seuil, date du jour, a
 ## Clôture du traitement (collection E2E)
 
 Dossier 05 : l'employé lit le résumé de clôture (`GET /api/v1/traitement/{id}/apercu-cloture/`, 05.00a) mais la clôture lui est refusée (403, 05.00b) ; la clôture par l'administrateur (05.01) renvoie `message` et `mise_en_stock_possible`.
+
+## Rôles et matrice des permissions
+
+Prérequis depuis la matrice des permissions (2026-11-17) : la base doit contenir un compte `directeur_demo` (rôle `Directeur`, statut `ACTIF`, mot de passe de l'environnement `director_password`), créé par l'Administrateur après le `migrate`. Les écritures de production faites auparavant par `gestionnaire_demo` passent par le directeur (06.56, 08.70 de la collection grossissement ; 08.11, 09.04 de l'E2E), avec une connexion directeur ajoutée (06.02b, 08.02b, 00.03b). Refus ajoutés : gérante qui corrige une pesée (06.56b), qui ouvre un traitement (00.04a) et qui s'attribue le rôle Administrateur (00.04b à 00.04d).

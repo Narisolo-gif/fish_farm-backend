@@ -25,7 +25,12 @@ Documents liés (voir `context/README.md`) :
 - Erreurs : `ValidationError({"champ": "message"})`, clés alignées sur les champs de l'API (`id_lot`, `id_bassin`, `id_hapa`, `effectif_entrant`, `justification_ecart`, `date_…`, `detail`).
 - L'utilisateur est toujours fourni par le serveur (`request.user`). Les dates d'opération sont posées par le serveur, sauf les dates de saisie métier prévues (mise en stock, pesée, mise en bassin, événements, distributions).
 - Fuseau du projet : `TIME_ZONE = "Indian/Antananarivo"`. Les dates-heures sont stockées en UTC ; « aujourd'hui » et le jour d'une distribution sont calculés dans ce fuseau.
-- Rôles (lus via `user.role.libelle`, utilisateur au `statut` `ACTIF`) : `Administrateur`, `Gestionnaire`, `Employé`. Les droits par route sont dans `GUIDE_INTEGRATION_FRONTEND.md`.
+- Rôles (lus via `user.role.libelle`, utilisateur actif au `statut` `ACTIF`, libellés dans `apps/core/roles.py`) :
+  - `Administrateur` : développeur, compte de support, accès à tout ;
+  - `Directeur` : directeur des opérations ; démarre et termine chaque événement de production, corrige et annule, gère les référentiels ; seul à réparer une erreur (pas de suppléant) ;
+  - `Gestionnaire` : gérante ; gère les comptes (sauf le rôle Administrateur) et consulte la production ;
+  - `Employé` : terrain ; saisit les faits observés (mortalité, perte, provende, environnement, pesée) et rapporte les autres événements au directeur.
+  Les droits par route sont dans la matrice `MATRICE` (`apps/core/permissions.py`), résumée dans `GUIDE_INTEGRATION_FRONTEND.md` ; conception : `CONCEPTION_MATRICE_PERMISSIONS.md`.
 - Rien n'est supprimé physiquement pour les données métier : on annule (`statut`, motif obligatoire, `annulee_par`, `annulee_le`). Exceptions : les deux outils de nettoyage de la section 0.
 
 ## 2. Registre d'effectif (app `effectifs`)
@@ -58,19 +63,19 @@ Documents liés (voir `context/README.md`) :
 - Bassin actif de catégorie TRAITEMENT ; **un ou plusieurs hapas** (`TraitementHapa`, chacun avec son effectif initial), sans doublon, du même bassin, libres. `effectif_initial` = somme des hapas, > 0.
 - À l'ouverture : statut `EN_COURS`, une `ENTREE` par hapa, lot au stade `EN_TRAITEMENT`.
 - Mortalités et pertes du traitement saisies **par hapa** (journal `effectifs`).
-- **Clôture** (Administrateur, Gestionnaire) :
-  1. Boîte de validation en lecture seule (`apercu-cloture`) : lot, espèce, bassin, dates (ouverture, clôture = aujourd'hui, durée), effectif initial, effectif final, morts et pertes, taux de survie, `cloturable` / `raison_refus`.
-  2. Validation : l'`effectif_final` de chaque hapa est **calculé depuis le registre** (jamais saisi ; refusé s'il dépasse l'effectif initial) ; `date_cloture` = aujourd'hui ; statut `CLOTUREE` ; un `BlocageSaisie` est posé sur chaque hapa.
+- **Clôture** (Administrateur, Directeur) :
+  1. Boîte de validation en lecture seule (`apercu-cloture`) : lot, espèce, bassin, dates (ouverture, clôture = `date_cloture` facultative, aujourd'hui par défaut, durée), effectif initial, effectif final, morts et pertes, taux de survie, `cloturable` / `raison_refus`.
+  2. Validation : l'`effectif_final` de chaque hapa est **calculé depuis le registre** (jamais saisi ; refusé s'il dépasse l'effectif initial) ; `date_cloture` saisie ou aujourd'hui par défaut : ni future, ni antérieure à l'ouverture, ni antérieure à un mouvement des hapas du traitement pour l'espèce du lot (les effectifs finaux sont lus à cette date) ; statut `CLOTUREE` ; un `BlocageSaisie` est posé sur chaque hapa.
   3. Le frontend propose ensuite la mise en stock (redirection vers le formulaire) ou non. Sans mise en stock, le lot reste `EN_TRAITEMENT` et les hapas restent bloqués.
 - Après la clôture : **aucune mortalité ni perte** sur les hapas du traitement tant que la mise en stock n'est pas faite ; la provende reste permise. Un écart de comptage se justifie à la mise en stock (section 5), jamais par une perte.
-- L'Employé consulte, ouvre un traitement et lit l'aperçu de clôture ; il ne le clôture pas.
+- L'Employé et la Gestionnaire consultent et lisent l'aperçu de clôture ; seuls l'Administrateur et le Directeur ouvrent et clôturent un traitement.
 
 ## 5. Mise en stock (app `stocks`)
 
 - Un lot a au plus une mise en stock (OneToOne) ; le lot entier est transféré.
 - Conditions : lot au stade `CREEE` (sans traitement) ou `EN_TRAITEMENT` avec traitement `CLOTUREE` (le parcours n'est pas contrôlé : un lot `TRAITEMENT_REQUIS` encore `CREEE` peut être mis en stock sans traitement, voir section 12) ; bassin actif de catégorie STOCKS avec au moins un hapa actif ; `finalite` obligatoire ; **un ou plusieurs hapas** de stock (`MiseEnStockHapa`, effectif entrant par hapa).
 - `effectif_entrant` (somme des hapas) > 0 et **jamais supérieur** à la référence : `effectif_final` du traitement, ou `quantite_initiale` du lot sans traitement. `ecart_effectif` = entrant − référence ; si non nul, `justification_ecart` obligatoire ; aucun mouvement de perte pour l'écart.
-- `date_mise_en_stock` : saisissable, pas dans le futur.
+- `date_mise_en_stock` : saisissable, pas dans le futur, et jamais antérieure à la clôture du traitement du lot.
 - Dans une transaction : `SORTIE` de chaque hapa de traitement (refusée si son effectif a bougé depuis la clôture), levée des blocages, `ENTREE` dans chaque hapa de stock, lot au stade `EN_STOCK`.
 - **Modification** : refusée dès que la mise en stock a des mouvements, donc en pratique toujours (laissé tel quel, décision du 2026-11-17).
 - **Suppression** : outil de test (annule les mouvements, rétablit le blocage du traitement, supprime l'opération, rétablit le stade) ; inaccessible côté frontend.
@@ -82,7 +87,7 @@ Documents liés (voir `context/README.md`) :
 - **Mortalité** : poissons morts, comptés ; `cause_mortalite` obligatoire (liste fermée contenant « Inconnue »).
 - **Perte** : poissons disparus sans cadavre ; `categorie_perte` et `justification` obligatoires.
 - Chaque saisie crée un mouvement `MORTALITE` ou `PERTE` ; refusée si l'effectif devient négatif à une date quelconque, si le hapa est bloqué (traitement clôturé) ou si le registre est figé (lot de grossissement clôturé).
-- Correction par annulation de l'événement (Administrateur, Gestionnaire). L'Employé saisit et consulte.
+- Correction par annulation de l'événement (Administrateur, Directeur). L'Employé saisit et consulte ; la Gestionnaire consulte.
 
 ## 7. Journal de provende (app `provende`)
 
@@ -92,19 +97,19 @@ Documents liés (voir `context/README.md`) :
 - Au plus **3 distributions valides par jour** et par cible, toutes provendes confondues ; doublon (même cible, même provende, même minute) refusé. Mode libre (pas de plan de ration).
 - Autorisée après la clôture d'un traitement.
 - En **grossissement** : saisie par bassin, jamais par lot (la répartition entre lots est calculée). Refusée si aucun lot `ACTIF` n'est en place à la date, ou si elle est datée de la période d'un lot clôturé (de sa mise en place à sa clôture) ; l'annulation d'une distribution de cette période est aussi refusée (chiffres biologiques figés).
-- Correction par annulation (Administrateur, Gestionnaire). L'Employé saisit et consulte.
+- Correction par annulation (Administrateur, Directeur). L'Employé saisit et consulte ; la Gestionnaire consulte.
 
 ## 8. Sortie de stock
 
 - Seule la sortie vers le **grossissement** est implémentée (finalité `GROSSISSEMENT`), par le flux unique de la section 9. La sortie pour la finalité `VENTE` n'est **pas** implémentée (décision du 2026-11-17).
 - Sortie **totale** du lot d'origine ; les lignes par hapa sont calculées par le serveur. Statuts `VALIDEE` / `ANNULEE` (pas de brouillon).
-- Annulation (Administrateur, Gestionnaire, motif obligatoire) : contre-mouvements, lot d'origine revenu `EN_STOCK`, lot de grossissement supprimé ; refusée si le lot de grossissement a une pesée (même annulée) ou est clôturé.
+- Annulation (Administrateur, Directeur, motif obligatoire) : contre-mouvements, lot d'origine revenu `EN_STOCK`, lot de grossissement supprimé ; refusée si le lot de grossissement a une pesée (même annulée) ou est clôturé.
 
 ## 9. Grossissement (résumé)
 
 Détail : `CONTEXTE_INDICATEURS_GROSSISSEMENT.md` et `CONTEXTE_CLOTURE_LOT.md`.
 
-- **Sortie et création du lot en une transaction** (Administrateur, Gestionnaire) : aperçu sans écriture, puis validation. Pesée initiale P0 sur échantillon (10 % par défaut) ; `effectif_entrant` ≤ quantité sortie (écart en moins justifié, écart en plus refusé) ; code proposé (`GR-AAAA-NNNN`) modifiable et unique ; bassin GROSSISSEMENT actif, sans hapa, au plus **deux lots `ACTIF`** d'espèces différentes.
+- **Sortie et création du lot en une transaction** (Administrateur, Directeur) : aperçu sans écriture, puis validation. Pesée initiale P0 sur échantillon (10 % par défaut) ; `effectif_entrant` ≤ quantité sortie (écart en moins justifié, écart en plus refusé) ; code proposé (`GR-AAAA-NNNN`) modifiable et unique ; bassin GROSSISSEMENT actif, sans hapa, au plus **deux lots `ACTIF`** d'espèces différentes.
 - **Pesées** de suivi par lot, sur échantillon ; indicateurs (poids moyen, biomasse, GMQ, ICA) par lot.
 - **Seuil de vente par espèce**, jugé sur la **dernière** pesée valide : TILAPIA 250 g, CARPE 300 g **[À CONFIRMER par l'exploitant]**. Simple signal ; précondition de la clôture ; jamais de clôture automatique.
 - **Clôture** à la date du jour, sans saisie, puis **évacuation** différable du bassin.

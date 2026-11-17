@@ -5,57 +5,17 @@ from django.utils.dateparse import parse_date
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
+
+from apps.core.permissions import PermissionMatrice
 
 from .models import Eclosion
 from .serializers import EclosionSerializer
 
 
-class IsRoleEcloserieAutorise(BasePermission):
-    """
-    Autorise les utilisateurs actifs selon leur rôle métier.
-    """
-
-    roles_autorises = {
-        "Administrateur",
-        "Gestionnaire",
-        "Employé",
-    }
-
-    def has_permission(self, request, view):
-        user = request.user
-
-        return bool(
-            user
-            and user.is_authenticated
-            and user.statut == "ACTIF"
-            and user.role
-            and user.role.libelle in self.roles_autorises
-        )
-
-
-class IsAdministrateurOuGestionnaireEcloserie(BasePermission):
-    """
-    Réserve la suppression aux administrateurs et gestionnaires actifs.
-    """
-
-    def has_permission(self, request, view):
-        user = request.user
-
-        return bool(
-            user
-            and user.is_authenticated
-            and user.statut == "ACTIF"
-            and user.role
-            and user.role.libelle in {
-                "Administrateur",
-                "Gestionnaire",
-            }
-        )
-
-
 class EclosionViewSet(viewsets.ModelViewSet):
+    ressource = "eclosions"
+    permission_classes = [PermissionMatrice]
     serializer_class = EclosionSerializer
 
     queryset = Eclosion.objects.select_related(
@@ -64,20 +24,6 @@ class EclosionViewSet(viewsets.ModelViewSet):
         "ponte__reproduction__bassin",
         "utilisateur",
     ).all()
-
-    def get_permissions(self):
-        if self.action in ["destroy", "desactiver"]:
-            permission_classes = [
-                IsAuthenticated,
-                IsAdministrateurOuGestionnaireEcloserie,
-            ]
-        else:
-            permission_classes = [
-                IsAuthenticated,
-                IsRoleEcloserieAutorise,
-            ]
-
-        return [permission() for permission in permission_classes]
 
     def get_queryset(self):
         queryset = super().get_queryset()

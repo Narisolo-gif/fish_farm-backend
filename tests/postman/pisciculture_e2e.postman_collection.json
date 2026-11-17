@@ -576,6 +576,50 @@
           "response": []
         },
         {
+          "name": "00.03b Connexion directeur",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login/",
+            "description": "Vérifie 00.03 connexion gestionnaire.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{director_username}}\",\n  \"password\": \"{{director_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Jeton gestionnaire\", function () { pm.expect(data).to.have.property('access'); });",
+                  "pm.test(\"Jeton stocké\", function () { pm.collectionVariables.set('token_directeur', data.access); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
           "name": "00.04 Connexion employé",
           "request": {
             "method": "POST",
@@ -618,6 +662,184 @@
             }
           ],
           "response": []
+        },
+        {
+          "name": "00.04a Gérante : refuser l'ouverture d'un traitement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/traitement/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_gestionnaire}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "00.04b Gérante : lire son identifiant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "if (data.id !== undefined) pm.collectionVariables.set('gestionnaire_id', String(data.id));",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/me/",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_gestionnaire}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "00.04c Lire l'identifiant du rôle Administrateur",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const admin = (Array.isArray(data) ? data : (data.results || [])).find(r => r.libelle === 'Administrateur');",
+                  "pm.test('Rôle Administrateur présent', function () { pm.expect(admin).to.exist; });",
+                  "if (admin) pm.collectionVariables.set('role_admin_id', String(admin.id));",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/roles/",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_gestionnaire}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "00.04d Gérante : refuser qu'elle s'attribue le rôle Administrateur",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/users/{{gestionnaire_id}}/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role_id\": \"{{role_admin_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_gestionnaire}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
         },
         {
           "name": "00.05 Vérification des rôles disponibles",
@@ -5236,7 +5458,7 @@
           }
         },
         {
-          "name": "08.11 Valider la sortie du lot A comme gestionnaire",
+          "name": "08.11 Valider la sortie du lot A comme directeur",
           "event": [
             {
               "listen": "test",
@@ -5282,7 +5504,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token_gestionnaire}}",
+                  "value": "{{token_directeur}}",
                   "type": "string"
                 }
               ]
@@ -5637,7 +5859,7 @@
           }
         },
         {
-          "name": "09.04 Valider sortie C comme gestionnaire",
+          "name": "09.04 Valider sortie C comme directeur",
           "event": [
             {
               "listen": "test",
@@ -5683,7 +5905,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token_gestionnaire}}",
+                  "value": "{{token_directeur}}",
                   "type": "string"
                 }
               ]

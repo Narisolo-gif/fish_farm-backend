@@ -4,14 +4,11 @@ from django.utils.dateparse import parse_date
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
-from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
 from apps.bassins.models import Bassin, Hapa
-from apps.core.permissions import (
-    IsAdministrateurOuGestionnaire,
-    IsTousRolesActifs,
-)
+from apps.core.permissions import PermissionMatrice
+
 from .calculs import effectifs_par_hapa
 from .models import (
     CategoriePerte,
@@ -39,37 +36,10 @@ from .services import (
 )
 
 
-class IsRoleEffectifAutorise(BasePermission):
-    ROLES_AUTORISES = {"Administrateur", "Gestionnaire", "Employé"}
-
-    def has_permission(self, request, view):
-        user = request.user
-        return bool(
-            user
-            and user.is_authenticated
-            and user.is_active
-            and getattr(user, "statut", None) == "ACTIF"
-            and getattr(user, "role", None)
-            and user.role.libelle in self.ROLES_AUTORISES
-        )
-
-
-class IsAdministrateurOuGestionnaireEffectif(BasePermission):
-    ROLES_AUTORISES = {"Administrateur", "Gestionnaire"}
-
-    def has_permission(self, request, view):
-        user = request.user
-        return bool(
-            user
-            and user.is_authenticated
-            and user.is_active
-            and getattr(user, "statut", None) == "ACTIF"
-            and getattr(user, "role", None)
-            and user.role.libelle in self.ROLES_AUTORISES
-        )
-
-
 class MouvementEffectifViewSet(viewsets.ReadOnlyModelViewSet):
+
+    ressource = "mouvements"
+    permission_classes = [PermissionMatrice]
     queryset = MouvementEffectif.objects.select_related(
         "bassin",
         "lot_origine",
@@ -81,11 +51,6 @@ class MouvementEffectifViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = MouvementEffectifSerializer
     # POST est conservé uniquement pour l'action explicite d'annulation, jamais pour créer une ligne.
     http_method_names = ["get", "post", "head", "options"]
-
-    def get_permissions(self):
-        if self.action in ["list", "retrieve", "solde", "par_hapa"]:
-            return [IsAuthenticated(), IsRoleEffectifAutorise()]
-        return [IsAuthenticated(), IsAdministrateurOuGestionnaireEffectif()]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -204,14 +169,12 @@ class MouvementEffectifViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class CauseMortaliteViewSet(viewsets.ModelViewSet):
+
+    ressource = "causes_mortalite"
+    permission_classes = [PermissionMatrice]
     queryset = CauseMortalite.objects.all()
     serializer_class = CauseMortaliteSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
-
-    def get_permissions(self):
-        if self.action in {"list", "retrieve"}:
-            return [IsAuthenticated(), IsTousRolesActifs()]
-        return [IsAuthenticated(), IsAdministrateurOuGestionnaire()]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -224,14 +187,12 @@ class CauseMortaliteViewSet(viewsets.ModelViewSet):
 
 
 class CategoriePerteViewSet(viewsets.ModelViewSet):
+
+    ressource = "categories_perte"
+    permission_classes = [PermissionMatrice]
     queryset = CategoriePerte.objects.all()
     serializer_class = CategoriePerteSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
-
-    def get_permissions(self):
-        if self.action in {"list", "retrieve"}:
-            return [IsAuthenticated(), IsTousRolesActifs()]
-        return [IsAuthenticated(), IsAdministrateurOuGestionnaire()]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -244,6 +205,9 @@ class CategoriePerteViewSet(viewsets.ModelViewSet):
 
 
 class EvenementMortalitePerteViewSet(viewsets.ModelViewSet):
+
+    ressource = "evenements_mortalite_perte"
+    permission_classes = [PermissionMatrice]
     queryset = EvenementMortalitePerte.objects.select_related(
         "bassin",
         "hapa",
@@ -255,11 +219,6 @@ class EvenementMortalitePerteViewSet(viewsets.ModelViewSet):
     ).all()
     serializer_class = EvenementMortalitePerteSerializer
     http_method_names = ["get", "post", "head", "options"]
-
-    def get_permissions(self):
-        if self.action in {"list", "retrieve", "totaux", "create"}:
-            return [IsAuthenticated(), IsTousRolesActifs()]
-        return [IsAuthenticated(), IsAdministrateurOuGestionnaire()]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -356,6 +315,9 @@ class SortieStockViewSet(viewsets.ReadOnlyModelViewSet):
     Il n'y a plus de brouillon ni de validation en deux temps.
     """
 
+    ressource = "sorties_stock"
+    permission_classes = [PermissionMatrice]
+
     queryset = SortieStock.objects.select_related(
         "lot",
         "bassin_destination",
@@ -365,15 +327,6 @@ class SortieStockViewSet(viewsets.ReadOnlyModelViewSet):
     ).prefetch_related("lignes__hapa__bassin").all()
     serializer_class = SortieStockSerializer
     http_method_names = ["get", "post", "head", "options"]
-
-    def get_permissions(self):
-        if self.action in {"list", "retrieve"}:
-            return [IsAuthenticated(), IsTousRolesActifs()]
-        return [
-            IsAuthenticated(),
-            IsTousRolesActifs(),
-            IsAdministrateurOuGestionnaire(),
-        ]
 
     def get_queryset(self):
         queryset = super().get_queryset()

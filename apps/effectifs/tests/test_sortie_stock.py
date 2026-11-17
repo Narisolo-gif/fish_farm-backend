@@ -31,9 +31,9 @@ class SortieStockTests(TestCase):
     dans apps.grossissement (flux en une seule transaction, sans brouillon)."""
 
     def setUp(self):
-        role = User._meta.get_field("role").remote_field.model.objects.create(
+        role = User._meta.get_field("role").remote_field.model.objects.get_or_create(
             libelle="Administrateur",
-        )
+        )[0]
         self.user = User.objects.create_user(
             username="sortie-admin",
             password="test-password",

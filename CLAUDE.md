@@ -5,7 +5,7 @@ Backend de gestion d'une pisciculture (carpe, tilapia) : reproduction → ponte 
 ## Stack
 - Django 5.2, Django REST Framework, SimpleJWT (rotation + blacklist), django-cors-headers (front sur `http://localhost:3000`).
 - PostgreSQL 16 via Docker Compose (services `backend` et `db`, variables DB dans `.env`).
-- `AUTH_USER_MODEL = "core.Utilisateur"` (AbstractUser + FK `Role` + `statut`). Rôles : `Administrateur`, `Gestionnaire`, `Employé` (permissions dans `apps/core/permissions.py`).
+- `AUTH_USER_MODEL = "core.Utilisateur"` (AbstractUser + FK `Role` + `statut`). Rôles : `Administrateur` (support), `Directeur` (production), `Gestionnaire` (comptes, lecture), `Employé` (saisies de terrain) ; libellés dans `apps/core/roles.py`. Droits : matrice unique `MATRICE` + `PermissionMatrice` (`apps/core/permissions.py`), chaque viewset déclare sa `ressource` ; refus par défaut ; test de couverture `apps/core/tests/test_matrice_couverture.py`. Garde-fou : seul l'Administrateur attribue le rôle Administrateur ou agit sur un compte Administrateur, `is_superuser` ou `is_staff`. Filet : `DEFAULT_PERMISSION_CLASSES` = `UtilisateurActif`.
 - Routes : `config/urls.py`, un préfixe par app sous `/api/v1/<app>/` ; login JWT `/api/auth/login/`, refresh `/api/auth/refresh/`.
 
 ## Commandes
@@ -14,7 +14,7 @@ docker compose up -d --build
 docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py test apps
 ```
-Tests E2E Postman : `tests/postman/` (collection E2E séquentielle 00→12 sur base vide, collection grossissement 00→10 à dossiers autonomes ; voir `tests/postman/README_TEST.md`).
+Tests Postman : `tests/postman/` ; collection en vigueur `flux_complet.postman_collection.json`, **générée** par `tests/postman/generer_flux_complet.py` (chaque étape jouée par son rôle réel, refus 403/401 sans écriture, rejouable, remplit une base de démonstration) et rejouée par `apps/core/tests/test_collection_flux_complet.py`. Collection E2E historique 00→12 sur base vide ; ancienne collection grossissement dans `tests/postman/archives/`. Voir `tests/postman/README_TEST.md`.
 
 ## Documentation
 Index : `context/README.md`. Règles métier de référence : `context/REGLES_DE_GESTION_FISH_FARM.md` ; intégration frontend : `context/GUIDE_INTEGRATION_FRONTEND.md` ; contrats JSON : `docs/contrats/`. Les documents de `context/archives/` sont obsolètes. Tout changement de règle dans le code se reporte dans ces documents.
@@ -44,8 +44,8 @@ Index : `context/README.md`. Règles métier de référence : `context/REGLES_DE
 - La sortie vers le grossissement est faite par `grossissement.services.valider_sortie_grossissement` (une transaction, sans brouillon ni signal ; `SortieStock.statut` vaut `VALIDEE` ou `ANNULEE`), qui s'appuie sur `effectifs.services.preparer_sortie_stock` et `enregistrer_sortie_stock_validee`. Aperçu : `apercu_sortie_grossissement`.
 
 ## Clôture du traitement (`traitement`)
-- Boîte de validation : `GET /api/v1/traitement/{id}/apercu-cloture/` (tous les rôles, rien n'est écrit) résume lot, espèce, bassin, dates (ouverture, clôture = aujourd'hui, durée), effectif initial, effectif final calculé depuis le registre, morts et pertes, taux de survie, `cloturable` / `raison_refus` (`preparer_cloture_traitement`).
-- `POST …/cloturer/` : **Administrateur et Gestionnaire seulement** (l'Employé garde lecture et création). Fige les effectifs finaux par hapa et pose un `BlocageSaisie` sur chaque hapa ; le lot reste `EN_TRAITEMENT`. Réponse : `message` et `mise_en_stock_possible` ; le frontend propose alors la mise en stock (qui lève le blocage) ou laisse le lot clôturé et bloqué.
+- Boîte de validation : `GET /api/v1/traitement/{id}/apercu-cloture/` (tous les rôles, rien n'est écrit) résume lot, espèce, bassin, dates (ouverture, clôture = `date_cloture` facultative, aujourd'hui par défaut, durée ; `?date_cloture=AAAA-MM-JJ`), effectif initial, effectif final calculé depuis le registre, morts et pertes, taux de survie, `cloturable` / `raison_refus` (`preparer_cloture_traitement`).
+- `POST …/cloturer/` : **Administrateur et Directeur seulement** (Gestionnaire et Employé : lecture et aperçu). Corps `{date_cloture?}` : ni future, ni avant l'ouverture, ni avant un mouvement des hapas pour l'espèce du lot ; effectifs finaux lus à cette date. Fige les effectifs finaux par hapa et pose un `BlocageSaisie` sur chaque hapa ; le lot reste `EN_TRAITEMENT`. Réponse : `message` et `mise_en_stock_possible` ; le frontend propose alors la mise en stock (qui lève le blocage) ou laisse le lot clôturé et bloqué.
 
 ## Pesée de suivi (`grossissement`)
 - Une `Pesee` porte sur un lot de grossissement et une date : la date est libre (≤ aujourd'hui, ≥ mise en place) mais strictement postérieure à la dernière pesée **valide** du lot (`UniqueConstraint` lot + date sur `VALIDEE`).
@@ -76,7 +76,6 @@ Index : `context/README.md`. Règles métier de référence : `context/REGLES_DE
 - Services : `@transaction.atomic`, verrous `select_for_update()` sur Lot/Bassin/Hapa, erreurs `rest_framework.exceptions.ValidationError({"id_lot": "..."})` dont les clés suivent les champs API (`id_lot`, `id_bassin`, `id_hapa`).
 - Rien n'est supprimé physiquement pour les données métier : on annule avec un `statut` et un `motif_annulation` obligatoire (imposé par une contrainte), et on renseigne `annulee_par` / `annulee_le`.
 - Les noms, messages d'erreur et commentaires sont en **français**.
-- Paramètres environnementaux : utilisateur connecté et actif ; les trois rôles lisent, saisissent et modifient ; seul l'Administrateur supprime une mesure.
 
 ## Décisions : ne pas implémenter sans nouvelle demande
 - Modification d'une mise en stock : impossible en pratique (refusée dès qu'il existe des mouvements) ; laissée telle quelle.
@@ -87,5 +86,5 @@ Index : `context/README.md`. Règles métier de référence : `context/REGLES_DE
 - `config/settings.py` : `SECRET_KEY` en dur, `DEBUG=True`, `ALLOWED_HOSTS=[]` ; durée de vie du jeton d'accès JWT (15 j) supérieure à celle du refresh (7 j).
 - `apps.core.urls` est inclus deux fois (`/api/` et `/api/v1/auth/`).
 - `PATCH /api/v1/lots/{id}/cloturer/` bloquée (commentée, 404) : elle forçait `CLOTUREE` sans contrôle. Seule `cloturer_lot_grossissement` clôture un lot ; la fin de vie d'un lot perdu avant le grossissement reste à concevoir.
-- `StockPermission` : l'Employé peut créer une mise en stock mais ni la lister ni la lire.
+- Comptes existants : après le `migrate` (migration `core` 0002 qui crée le rôle `Directeur`), réaffecter le compte du directeur au rôle `Directeur` ; `gestionnaire_demo` n'a plus d'écriture en production.
 - Mise en stock : le parcours n'est pas contrôlé (un lot `TRAITEMENT_REQUIS` encore `CREEE` peut être mis en stock sans traitement).

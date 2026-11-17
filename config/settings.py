@@ -131,6 +131,11 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    # Filet de sécurité : une vue qui ne déclare pas ses permissions exige un
+    # utilisateur connecté et actif (les viewsets utilisent PermissionMatrice).
+    "DEFAULT_PERMISSION_CLASSES": (
+        "apps.core.permissions.UtilisateurActif",
+    ),
 }
 
 SIMPLE_JWT = {

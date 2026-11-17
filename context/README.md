@@ -11,6 +11,7 @@
 | `GUIDE_INTEGRATION_FRONTEND.md` | frontend | Authentification, conventions de l'API, matrice des droits, parcours écran par écran, points d'attention. |
 | `../docs/contrats/*.exemple.json` | frontend | Réponses réelles de l'API (suivi, liste des lots), contrôlées par les tests : données factices. |
 | `../tests/postman/README_TEST.md` | backend, recette | Collections Postman et commandes newman. |
+| `CONCEPTION_POSTMAN_FLUX_COMPLET.md` | backend, recette | Conception de la collection « flux complet » (scénario, rôles, base de démonstration). |
 | `archives/` | historique | Prompts exécutés et anciens plans, **obsolètes** : ne pas s'en servir comme référence. |
 
 Ordre de priorité en cas d'écart : le code et ses tests, puis `REGLES_DE_GESTION_FISH_FARM.md`, puis les autres contextes. Signaler tout écart plutôt que de le corriger en silence.

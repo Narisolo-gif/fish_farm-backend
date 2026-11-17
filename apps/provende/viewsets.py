@@ -5,14 +5,10 @@ from django.db.models.deletion import ProtectedError
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.bassins.models import Bassin
-from apps.core.permissions import (
-    IsAdministrateurOuGestionnaire,
-    IsTousRolesActifs,
-)
+from apps.core.permissions import PermissionMatrice
 
 from .models import ConsommationProvende, Provende, TypeProvende
 from .serializers import (
@@ -31,16 +27,11 @@ from .services import (
 class ProvendeViewSet(viewsets.ModelViewSet):
     """API CRUD des provendes."""
 
+    ressource = "provendes"
+    permission_classes = [PermissionMatrice]
+
     queryset = Provende.objects.select_related("type_provende").all()
     serializer_class = ProvendeSerializer
-
-    def get_permissions(self):
-        # Tous les rôles actifs peuvent consulter.
-        if self.action in ["list", "retrieve"]:
-            return [IsTousRolesActifs()]
-
-        # Seuls Admin et Gestionnaire peuvent modifier les données.
-        return [IsAdministrateurOuGestionnaire()]
 
     def perform_destroy(self, instance):
         """Transforme une suppression protégée en erreur API contrôlée."""
@@ -59,15 +50,11 @@ class ProvendeViewSet(viewsets.ModelViewSet):
 class TypeProvendeViewSet(viewsets.ModelViewSet):
     """API CRUD des types de provende."""
 
+    ressource = "types_provende"
+    permission_classes = [PermissionMatrice]
+
     queryset = TypeProvende.objects.all()
     serializer_class = TypeProvendeSerializer
-
-    def get_permissions(self):
-        # Tous les rôles actifs peuvent consulter les types.
-        if self.action in ["list", "retrieve"]:
-            return [IsTousRolesActifs()]
-
-        return [IsAdministrateurOuGestionnaire()]
 
     def perform_destroy(self, instance):
         """Empêche la suppression d'un type encore référencé."""
@@ -84,6 +71,9 @@ class TypeProvendeViewSet(viewsets.ModelViewSet):
 
 
 class ConsommationProvendeViewSet(viewsets.ModelViewSet):
+
+    ressource = "consommations_provende"
+    permission_classes = [PermissionMatrice]
     queryset = ConsommationProvende.objects.select_related(
         "bassin",
         "hapa",
@@ -94,18 +84,6 @@ class ConsommationProvendeViewSet(viewsets.ModelViewSet):
     ).all()
     serializer_class = ConsommationProvendeSerializer
     http_method_names = ["get", "post", "head", "options"]
-
-    def get_permissions(self):
-        if self.action in {
-            "list",
-            "retrieve",
-            "totaux_journaliers",
-            "jours_manquants_action",
-        }:
-            return [IsTousRolesActifs()]
-        if self.action == "annuler":
-            return [IsAdministrateurOuGestionnaire()]
-        return [IsAuthenticated(), IsTousRolesActifs()]
 
     @staticmethod
     def _dates_periode(params, *, max_days=None):

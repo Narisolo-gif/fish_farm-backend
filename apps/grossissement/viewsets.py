@@ -4,13 +4,9 @@ from django.utils.dateparse import parse_date
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.core.permissions import (
-    IsAdministrateurOuGestionnaire,
-    IsTousRolesActifs,
-)
+from apps.core.permissions import PermissionMatrice
 from apps.lots.models import Lot
 
 from .models import LotGrossissement, Pesee
@@ -49,8 +45,13 @@ class LotGrossissementViewSet(viewsets.ModelViewSet):
 
     POST / : sortie totale du stock et création du lot, en une seule transaction.
     POST /apercu-sortie/ : mêmes contrôles, valeurs préremplies, rien n'est écrit.
-    Administrateur, Gestionnaire : écriture. Employé : lecture.
+    Droits : matrice `lots_grossissement` (apps/core/permissions.py) : tous les
+    rôles consultent ; Administrateur et Directeur écrivent (sortie, clôture,
+    évacuation, modification).
     """
+
+    ressource = "lots_grossissement"
+    permission_classes = [PermissionMatrice]
 
     queryset = (
         LotGrossissement.objects.select_related(
@@ -77,22 +78,6 @@ class LotGrossissementViewSet(viewsets.ModelViewSet):
     )
     serializer_class = LotGrossissementSerializer
     http_method_names = ["get", "patch", "post", "head", "options"]
-
-    def get_permissions(self):
-        if self.action in {
-            "list",
-            "retrieve",
-            "origine",
-            "suivi",
-            "apercu_cloture",
-            "historique_clotures",
-        }:
-            return [IsAuthenticated(), IsTousRolesActifs()]
-        return [
-            IsAuthenticated(),
-            IsTousRolesActifs(),
-            IsAdministrateurOuGestionnaire(),
-        ]
 
     def create(self, request, *args, **kwargs):
         serializer = SortieGrossissementSerializer(data=request.data)
@@ -281,9 +266,13 @@ class PeseeViewSet(viewsets.ModelViewSet):
     POST /{id}/annuler/ : annule la dernière pesée valide (motif obligatoire).
     Aucune suppression : DELETE n'est pas permis.
 
-    Administrateur, Gestionnaire : toutes les actions.
-    Employé : création, aperçu, liste et lecture.
+    Droits : matrice `pesees` (apps/core/permissions.py) : tous les rôles
+    consultent ; l'Employé saisit (création, aperçu) ; Administrateur et
+    Directeur saisissent, corrigent et annulent.
     """
+
+    ressource = "pesees"
+    permission_classes = [PermissionMatrice]
 
     queryset = Pesee.objects.select_related(
         "lot_grossissement",
@@ -292,15 +281,6 @@ class PeseeViewSet(viewsets.ModelViewSet):
     ).all()
     serializer_class = PeseeSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
-
-    def get_permissions(self):
-        if self.action in {"partial_update", "annuler"}:
-            return [
-                IsAuthenticated(),
-                IsTousRolesActifs(),
-                IsAdministrateurOuGestionnaire(),
-            ]
-        return [IsAuthenticated(), IsTousRolesActifs()]
 
     def get_queryset(self):
         queryset = super().get_queryset()

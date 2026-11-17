@@ -20,6 +20,7 @@ from django.urls import resolve
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from apps.core.roles import ADMINISTRATEUR
 from apps.grossissement.calculs import taille_echantillon_cible
 from apps.grossissement.simulation import (
     CAUSE_PAR_DEFAUT,
@@ -153,7 +154,7 @@ class Command(BaseCommand):
         else:
             utilisateur = (
                 Utilisateur.objects.filter(
-                    role__libelle="Administrateur",
+                    role__libelle=ADMINISTRATEUR,
                     is_active=True,
                     statut="ACTIF",
                 )

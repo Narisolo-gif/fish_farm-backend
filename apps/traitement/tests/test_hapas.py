@@ -109,13 +109,14 @@ class TraitementHapaTests(TestCase):
         bassin=None,
         effectif_initial=10,
         hapas=None,
+        date_ouverture=None,
     ):
         return creer_traitement(
             {
                 "lot": lot or self._lot(),
                 "bassin": bassin or self.bassin,
                 "used_provende": self.provende,
-                "date_ouverture": self.today,
+                "date_ouverture": date_ouverture or self.today,
                 "effectif_initial": effectif_initial,
                 **({"hapas": hapas} if hapas is not None else {}),
             },

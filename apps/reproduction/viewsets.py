@@ -3,14 +3,10 @@ from django.db import transaction
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.bassins.models import Bassin
-from apps.core.permissions import (
-    IsAdministrateur,
-    IsAdministrateurOuGestionnaire,
-)
+from apps.core.permissions import PermissionMatrice
 from apps.effectifs.models import MouvementEffectif
 from apps.effectifs.services import (
     enregistrer_mouvement_operation,
@@ -24,6 +20,8 @@ from .serializers import (
 )
 
 class ReproductionViewSet(viewsets.ModelViewSet):
+    ressource = "reproductions"
+    permission_classes = [PermissionMatrice]
     queryset = (
         Reproduction.objects
         .select_related("bassin", "utilisateur")
@@ -32,27 +30,6 @@ class ReproductionViewSet(viewsets.ModelViewSet):
     )
 
     serializer_class = ReproductionSerializer
-
-    def get_permissions(self):
-        if self.action in [
-              "list",
-            "retrieve",
-            "create",
-        ]:
-            permission_classes = [
-                IsAuthenticated,
-                IsAdministrateurOuGestionnaire,
-            ]
-        else:
-            permission_classes = [
-                IsAuthenticated,
-                IsAdministrateur,
-            ]
-
-        return [
-            permission()
-            for permission in permission_classes
-        ]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -178,6 +155,8 @@ class ReproductionViewSet(viewsets.ModelViewSet):
 
 
 class PonteViewSet(viewsets.ModelViewSet):
+    ressource = "pontes"
+    permission_classes = [PermissionMatrice]
     queryset = (
         Ponte.objects
         .select_related(
@@ -189,26 +168,6 @@ class PonteViewSet(viewsets.ModelViewSet):
     )
 
     serializer_class = PonteSerializer
-
-    def get_permissions(self):
-        if self.action in [
-            "list",
-            "retrieve",
-        ]:
-            permission_classes = [
-                IsAuthenticated,
-                IsAdministrateurOuGestionnaire,
-            ]
-        else:
-            permission_classes = [
-                IsAuthenticated,
-                IsAdministrateur,
-            ]
-
-        return [
-            permission()
-            for permission in permission_classes
-        ]
 
     def get_queryset(self):
         queryset = super().get_queryset()

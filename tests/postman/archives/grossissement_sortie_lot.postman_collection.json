@@ -2250,6 +2250,47 @@
           }
         },
         {
+          "name": "06.02b Connexion directeur",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "if (data.access !== undefined) pm.collectionVariables.set(\"ps_token_directeur\", String(data.access));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{director_username}}\",\n  \"password\": \"{{director_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
           "name": "06.03 Connexion employé",
           "event": [
             {
@@ -4362,7 +4403,7 @@
           ]
         },
         {
-          "name": "06.56 Corriger la dernière pesée (gestionnaire) : poids moyen recalculé",
+          "name": "06.56 Corriger la dernière pesée (directeur) : poids moyen recalculé",
           "event": [
             {
               "listen": "test",
@@ -4393,6 +4434,53 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"observation\": \"Correction du poids total\",\n  \"poids_total_g\": \"3100.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ps_token_directeur}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "06.56b Gérante : correction d'une pesée refusée (lecture seule en production)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/grossissement/pesees/{{ps_pesee_2}}/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"observation\": \"Tentative\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7997,6 +8085,47 @@
           }
         },
         {
+          "name": "08.02b Connexion directeur",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "if (data.access !== undefined) pm.collectionVariables.set(\"sg_token_directeur\", String(data.access));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{director_username}}\",\n  \"password\": \"{{director_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
           "name": "08.03 Connexion employé",
           "event": [
             {
@@ -10507,7 +10636,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{sg_token_gestionnaire}}",
+                  "value": "{{sg_token_directeur}}",
                   "type": "string"
                 }
               ]

@@ -51,7 +51,7 @@ class EffectifServiceTests(TestCase):
             statut=Bassin.Statut.ACTIF,
         )
     def _create_role(self, libelle):
-        return Role.objects.create(libelle=libelle, description="Test")
+        return Role.objects.get_or_create(libelle=libelle, defaults={"description": "Test"})[0]
 
     def test_refuse_negative_balance(self):
         enregistrer_mouvement(
@@ -458,7 +458,7 @@ class EffectifConcurrencyTests(TransactionTestCase):
     reset_sequences = True
 
     def setUp(self):
-        role = Role.objects.create(libelle="Administrateur")
+        role = Role.objects.get_or_create(libelle="Administrateur")[0]
         self.user = User.objects.create_user(
             username="concurrent-admin",
             password="Password123!",
@@ -521,10 +521,10 @@ class EffectifConcurrencyTests(TransactionTestCase):
 
 class EffectifOperationIntegrationTests(TestCase):
     def setUp(self):
-        role = Role.objects.create(
+        role = Role.objects.get_or_create(
             libelle="Administrateur",
-            description="Tests d’intégration",
-        )
+            defaults={"description": "Tests d’intégration"},
+        )[0]
         self.user = User.objects.create_user(
             username="registry-admin",
             password="Password123!",

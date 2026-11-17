@@ -42,8 +42,9 @@ class PermissionsEnvironnementTests(TestCase):
         }
 
     def _client(self, libelle, *, statut="ACTIF"):
+        self.compteur = getattr(self, "compteur", 0) + 1
         utilisateur = User.objects.create_user(
-            username=f"env-{libelle}-{statut}",
+            username=f"env-{self.compteur}",
             password="test-password",
             role=Role.objects.get_or_create(libelle=libelle)[0],
             statut=statut,
@@ -91,26 +92,40 @@ class PermissionsEnvironnementTests(TestCase):
             client.post(URL, self._corps_creation(), format="json").status_code, 403
         )
 
-    def test_utilisateurs_connectes_et_actifs_acceptes(self):
-        for libelle in ("Administrateur", "Gestionnaire", "Employé"):
+    def test_tous_les_roles_lisent(self):
+        for libelle in ("Administrateur", "Directeur", "Gestionnaire", "Employé"):
             with self.subTest(role=libelle):
                 client = self._client(libelle)
                 for url in self._routes_de_lecture():
                     self.assertEqual(client.get(url).status_code, 200, url)
-                creee = client.post(URL, self._corps_creation(), format="json")
-                self.assertEqual(creee.status_code, 201, creee.data)
-                modifiee = client.patch(
-                    f"{URL}{creee.data['id']}/", {"ph": "7.00"}, format="json"
-                )
-                self.assertEqual(modifiee.status_code, 200, modifiee.data)
 
-    def test_suppression_reservee_a_l_administrateur(self):
+    def test_saisie_par_le_terrain_correction_par_le_pilotage(self):
+        # L'employé saisit ; la gérante lit seulement ; seul le pilotage corrige.
+        for libelle in ("Administrateur", "Directeur", "Employé"):
+            with self.subTest(role=libelle):
+                creee = self._client(libelle).post(URL, self._corps_creation(), format="json")
+                self.assertEqual(creee.status_code, 201, creee.data)
+        self.assertEqual(
+            self._client("Gestionnaire").post(URL, self._corps_creation(), format="json").status_code,
+            403,
+        )
+        url = f"{URL}{self.mesure.pk}/"
+        for libelle in ("Employé", "Gestionnaire"):
+            with self.subTest(role=libelle):
+                self.assertEqual(
+                    self._client(libelle).patch(url, {"ph": "7.00"}, format="json").status_code, 403
+                )
+        self.assertEqual(
+            self._client("Directeur").patch(url, {"ph": "7.00"}, format="json").status_code, 200
+        )
+
+    def test_suppression_reservee_au_pilotage(self):
         for libelle in ("Gestionnaire", "Employé"):
             with self.subTest(role=libelle):
                 reponse = self._client(libelle).delete(f"{URL}{self.mesure.pk}/")
                 self.assertEqual(reponse.status_code, 403)
         self.assertTrue(ParametreEnvironnemental.objects.filter(pk=self.mesure.pk).exists())
 
-        reponse = self._client("Administrateur").delete(f"{URL}{self.mesure.pk}/")
+        reponse = self._client("Directeur").delete(f"{URL}{self.mesure.pk}/")
         self.assertEqual(reponse.status_code, 204)
         self.assertFalse(ParametreEnvironnemental.objects.filter(pk=self.mesure.pk).exists())

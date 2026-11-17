@@ -1,11 +1,10 @@
 from rest_framework import status, viewsets
+from django.utils.dateparse import parse_date
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
-from apps.core.permissions import (
-    IsAdministrateurOuGestionnaire,
-    IsTousRolesActifs,
-)
+from apps.core.permissions import PermissionMatrice
 
 from .models import Traitement
 from .serializers import ApercuClotureTraitementSerializer, TraitementSerializer
@@ -17,8 +16,24 @@ from .services import (
 )
 
 
+def _date_cloture(valeur):
+    """Date de clôture facultative (AAAA-MM-JJ) ; None = aujourd'hui."""
+    if not valeur:
+        return None
+    try:
+        jour = parse_date(str(valeur))
+    except ValueError:
+        jour = None
+    if jour is None:
+        raise ValidationError({"date_cloture": "Format invalide. Utilisez YYYY-MM-DD."})
+    return jour
+
+
 class TraitementViewSet(viewsets.ModelViewSet):
     """API de gestion des traitements."""
+
+    ressource = "traitement"
+    permission_classes = [PermissionMatrice]
 
     queryset = Traitement.objects.select_related(
         "lot",
@@ -29,21 +44,6 @@ class TraitementViewSet(viewsets.ModelViewSet):
     ).prefetch_related("lignes_hapas__hapa").all().order_by("-created_at", "-id")
 
     serializer_class = TraitementSerializer
-
-    def get_permissions(self):
-        # L'Employé peut consulter et créer un traitement, et voir le résumé
-        # de clôture ; il ne peut pas le clôturer.
-        if self.action in [
-            "list",
-            "retrieve",
-            "create",
-            "effectifs",
-            "apercu_cloture",
-        ]:
-            return [IsTousRolesActifs()]
-
-        # Seuls Admin et Gestionnaire clôturent, modifient ou suppriment.
-        return [IsAdministrateurOuGestionnaire()]
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -62,7 +62,10 @@ class TraitementViewSet(viewsets.ModelViewSet):
         ensuite de mettre le lot en stock (formulaire de mise en stock) ou non.
         """
         self.get_object()
-        cloturer_traitement(traitement_id=pk)
+        cloturer_traitement(
+            traitement_id=pk,
+            date_cloture=_date_cloture(request.data.get("date_cloture")),
+        )
         traitement = self.get_object()
         return Response(
             {
@@ -78,7 +81,10 @@ class TraitementViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="apercu-cloture")
     def apercu_cloture(self, request, pk=None):
         """Résumé en lecture seule de la boîte de validation ; rien n'est écrit."""
-        contexte = preparer_cloture_traitement(self.get_object())
+        contexte = preparer_cloture_traitement(
+            self.get_object(),
+            date_cloture=_date_cloture(request.query_params.get("date_cloture")),
+        )
         return Response(ApercuClotureTraitementSerializer(contexte).data)
 
     @action(

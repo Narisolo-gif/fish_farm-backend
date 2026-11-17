@@ -196,24 +196,55 @@ def _effectifs_finaux(bassin_id, espece, lignes, date_cloture):
     return effectifs_final
 
 
-def preparer_cloture_traitement(traitement):
-    """Résumé de la clôture à la date du jour (boîte de validation) ; rien n'est écrit."""
+def _verifier_date_cloture(traitement, lignes, espece, date_cloture):
+    """Date de clôture : ni future, ni avant l'ouverture, ni avant un mouvement des hapas."""
+    if date_cloture > timezone.localdate():
+        raise ValidationError({
+            "date_cloture": "La date de clôture ne peut pas être dans le futur."
+        })
+    if date_cloture < traitement.date_ouverture:
+        raise ValidationError({
+            "date_cloture": (
+                "La date de clôture ne peut pas précéder l'ouverture du traitement "
+                f"({traitement.date_ouverture.isoformat()})."
+            )
+        })
+    if MouvementEffectif.objects.filter(
+        bassin_id=traitement.bassin_id,
+        hapa_id__in=[ligne.hapa_id for ligne in lignes],
+        espece=espece,
+        date_evenement__gt=date_cloture,
+    ).exists():
+        raise ValidationError({
+            "date_cloture": (
+                "Des mouvements des hapas du traitement sont datés après cette "
+                "date : la clôture ne peut pas être antérieure."
+            )
+        })
+
+
+def preparer_cloture_traitement(traitement, date_cloture=None):
+    """Résumé de la clôture à la date donnée (défaut : aujourd'hui) ; rien n'est écrit."""
     lot = traitement.lot
-    date_cloture = timezone.localdate()
+    date_cloture = date_cloture or timezone.localdate()
     lignes = list(traitement.lignes_hapas.select_related("hapa").order_by("hapa_id"))
     effectif_final = None
     raison = None
     if traitement.statut == Traitement.Statut.CLOTUREE:
+        # Clôture figée (éventuellement antidatée) : on montre la vraie date et l'effectif figé.
         raison = "Ce traitement est déjà clôturé."
+        date_cloture = traitement.date_cloture or date_cloture
+        effectif_final = traitement.effectif_final
     elif not lignes:
         raison = "Traitement sans hapas : supprimez-le et recréez-le."
     else:
         try:
+            _verifier_date_cloture(traitement, lignes, lot.espece, date_cloture)
             effectif_final = sum(
                 _effectifs_finaux(traitement.bassin_id, lot.espece, lignes, date_cloture).values()
             )
         except ValidationError as exc:
-            raison = str(exc.detail["effectif_final"])
+            raison = " ".join(str(message) for message in exc.detail.values())
     morts_et_pertes = (
         traitement.effectif_initial - effectif_final if effectif_final is not None else None
     )
@@ -234,8 +265,8 @@ def preparer_cloture_traitement(traitement):
 
 
 @transaction.atomic
-def cloturer_traitement(traitement_id):
-    """Calcule puis fige les effectifs du traitement à la clôture."""
+def cloturer_traitement(traitement_id, date_cloture=None):
+    """Calcule puis fige les effectifs du traitement à la date de clôture (défaut : aujourd'hui)."""
     try:
         traitement = Traitement.objects.select_for_update().get(
             pk=traitement_id
@@ -248,7 +279,7 @@ def cloturer_traitement(traitement_id):
 
     lot = Lot.objects.select_for_update().get(pk=traitement.lot_id)
     bassin = Bassin.objects.select_for_update().get(pk=traitement.bassin_id)
-    date_cloture = timezone.localdate()
+    date_cloture = date_cloture or timezone.localdate()
     lignes = list(
         TraitementHapa.objects.select_for_update()
         .filter(traitement=traitement)
@@ -266,6 +297,7 @@ def cloturer_traitement(traitement_id):
         .filter(pk__in=[ligne.hapa_id for ligne in lignes])
         .order_by("pk")
     )
+    _verifier_date_cloture(traitement, lignes, lot.espece, date_cloture)
     effectifs_final = _effectifs_finaux(bassin.pk, lot.espece, lignes, date_cloture)
     effectif_final = sum(effectifs_final.values())
 

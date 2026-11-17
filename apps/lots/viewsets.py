@@ -4,53 +4,18 @@ from django.db import IntegrityError, transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
+from apps.core.permissions import PermissionMatrice
 from apps.ecloserie.models import Eclosion
 
 from .models import Lot
 from .serializers import LotSerializer
 
 
-class IsRoleAutorisePourLectureLots(BasePermission):
-    """Autorise la consultation aux trois rôles métier."""
-
-    def has_permission(self, request, view):
-        user = request.user
-
-        return bool(
-            user
-            and user.is_authenticated
-            and user.statut == "ACTIF"
-            and user.role
-            and user.role.libelle in {
-                "Administrateur",
-                "Gestionnaire",
-                "Employé",
-            }
-        )
-
-
-class IsAdministrateurOuGestionnaireLots(BasePermission):
-    """Autorise les opérations de gestion aux rôles autorisés."""
-
-    def has_permission(self, request, view):
-        user = request.user
-
-        return bool(
-            user
-            and user.is_authenticated
-            and user.statut == "ACTIF"
-            and user.role
-            and user.role.libelle in {
-                "Administrateur",
-                "Gestionnaire",
-            }
-        )
-
-
 class LotViewSet(viewsets.ModelViewSet):
+    ressource = "lots"
+    permission_classes = [PermissionMatrice]
     serializer_class = LotSerializer
 
     queryset = Lot.objects.select_related(
@@ -59,20 +24,6 @@ class LotViewSet(viewsets.ModelViewSet):
         "eclosion__ponte__reproduction",
         "utilisateur_createur",
     ).all()
-
-    def get_permissions(self):
-        if self.action in ["list", "retrieve"]:
-            permission_classes = [
-                IsAuthenticated,
-                IsRoleAutorisePourLectureLots,
-            ]
-        else:
-            permission_classes = [
-                IsAuthenticated,
-                IsAdministrateurOuGestionnaireLots,
-            ]
-
-        return [permission() for permission in permission_classes]
 
     @transaction.atomic
     def perform_create(self, serializer):

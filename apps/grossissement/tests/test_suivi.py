@@ -407,7 +407,7 @@ class SuiviLotTests(OutilsLotGrossissement, TestCase):
         employe = User.objects.create_user(
             username="suivi-employe",
             password="test-password",
-            role=Role.objects.create(libelle="Employé"),
+            role=Role.objects.get_or_create(libelle="Employé")[0],
             statut="ACTIF",
         )
         client = APIClient()

@@ -219,6 +219,18 @@ class MiseEnStockHapaTests(TestCase):
             ),
         )
 
+    def test_mise_en_stock_avant_la_cloture_refusee(self):
+        lot, _ = self._traitement()  # clôturé aujourd'hui
+        with self.assertRaises(ValidationError) as ctx:
+            self._creer_mise(
+                lot,
+                lignes=[(self.stock_hapa1, 6), (self.stock_hapa2, 6)],
+                effectif=12,
+                date_mise_en_stock=timezone.now() - timedelta(days=1),
+            )
+        self.assertIn("date_mise_en_stock", ctx.exception.detail)
+        self.assertEqual(Lot.objects.get(pk=lot.pk).stade, Lot.Stade.EN_TRAITEMENT)
+
     def test_total_egal_au_final_cree_sorties_et_entrees_par_hapa(self):
         lot, traitement = self._traitement()
         self.assertTrue(hapa_est_bloque(self.treatment_hapa1.pk))
