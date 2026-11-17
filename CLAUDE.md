@@ -14,7 +14,10 @@ docker compose up -d --build
 docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py test apps
 ```
-Tests E2E Postman : `tests/postman/` (collection séquentielle 00→12, base vide requise, voir `tests/postman/README_TEST.md`).
+Tests E2E Postman : `tests/postman/` (collection E2E séquentielle 00→12 sur base vide, collection grossissement 00→10 à dossiers autonomes ; voir `tests/postman/README_TEST.md`).
+
+## Documentation
+Index : `context/README.md`. Règles métier de référence : `context/REGLES_DE_GESTION_FISH_FARM.md` ; intégration frontend : `context/GUIDE_INTEGRATION_FRONTEND.md` ; contrats JSON : `docs/contrats/`. Les documents de `context/archives/` sont obsolètes. Tout changement de règle dans le code se reporte dans ces documents.
 
 ## Apps (`apps/`)
 | App | Modèles principaux |
@@ -40,6 +43,10 @@ Tests E2E Postman : `tests/postman/` (collection séquentielle 00→12, base vid
 - `effectifs` ne doit pas importer `grossissement` : il passe par les signaux `sortie_stock_avant_annulation`, `mouvement_avant_annulation` et `mouvement_avant_enregistrement` (`apps/effectifs/signals.py`), consommés par `apps/grossissement/receivers.py`.
 - La sortie vers le grossissement est faite par `grossissement.services.valider_sortie_grossissement` (une transaction, sans brouillon ni signal ; `SortieStock.statut` vaut `VALIDEE` ou `ANNULEE`), qui s'appuie sur `effectifs.services.preparer_sortie_stock` et `enregistrer_sortie_stock_validee`. Aperçu : `apercu_sortie_grossissement`.
 
+## Clôture du traitement (`traitement`)
+- Boîte de validation : `GET /api/v1/traitement/{id}/apercu-cloture/` (tous les rôles, rien n'est écrit) résume lot, espèce, bassin, dates (ouverture, clôture = aujourd'hui, durée), effectif initial, effectif final calculé depuis le registre, morts et pertes, taux de survie, `cloturable` / `raison_refus` (`preparer_cloture_traitement`).
+- `POST …/cloturer/` : **Administrateur et Gestionnaire seulement** (l'Employé garde lecture et création). Fige les effectifs finaux par hapa et pose un `BlocageSaisie` sur chaque hapa ; le lot reste `EN_TRAITEMENT`. Réponse : `message` et `mise_en_stock_possible` ; le frontend propose alors la mise en stock (qui lève le blocage) ou laisse le lot clôturé et bloqué.
+
 ## Pesée de suivi (`grossissement`)
 - Une `Pesee` porte sur un lot de grossissement et une date : la date est libre (≤ aujourd'hui, ≥ mise en place) mais strictement postérieure à la dernière pesée **valide** du lot (`UniqueConstraint` lot + date sur `VALIDEE`).
 - Seule la dernière pesée valide d'un lot actif est corrigeable (`modifier_pesee`, date figée) ou annulable (`annuler_pesee`, motif obligatoire) ; jamais de suppression. Une pesée, même annulée, empêche d'annuler la sortie de stock (`lot_a_historique`).
@@ -58,6 +65,7 @@ Tests E2E Postman : `tests/postman/` (collection séquentielle 00→12, base vid
 - Évacuation séparée et différable : `evacuer_lot_grossissement` (`POST …/evacuer/`), `SORTIE` de l'effectif final datée de la clôture, `evacue_le` / `evacue_par`. Propriété `evacuation_requise`.
 - Registre figé : signal `effectifs.signals.mouvement_avant_enregistrement` (émis par `enregistrer_mouvement`) consommé par `grossissement.receivers.refuser_mouvement_lot_cloture` ; nouveau lot de même espèce refusé tant que le bassin n'est pas évacué.
 - Historique : `GET lots-grossissement/historique-clotures/` (écart de poids %, taux de survie, évacuation).
+- Provende figée : `provende` émet `distribution_avant_enregistrement` / `distribution_avant_annulation` (`apps/provende/signals.py`, `provende` n'importe pas `grossissement`) ; en bassin GROSSISSEMENT, `grossissement.receivers` refuse une distribution (ou son annulation) datée de la période d'un lot clôturé (mise en place → clôture), et toute distribution sans lot `ACTIF` en place à sa date. Traitement et stock ne sont pas concernés.
 
 ## Cycle de vie d'un lot (`Lot.stade`)
 `CREEE` → `EN_TRAITEMENT` (seulement si `parcours_production = TRAITEMENT_REQUIS` ; bassin de catégorie TRAITEMENT, hapas obligatoires) → `EN_STOCK` → (sortie totale validée et création du lot, une transaction) `EN_GROSSISSEMENT` → `CLOTUREE`.
@@ -68,7 +76,16 @@ Tests E2E Postman : `tests/postman/` (collection séquentielle 00→12, base vid
 - Services : `@transaction.atomic`, verrous `select_for_update()` sur Lot/Bassin/Hapa, erreurs `rest_framework.exceptions.ValidationError({"id_lot": "..."})` dont les clés suivent les champs API (`id_lot`, `id_bassin`, `id_hapa`).
 - Rien n'est supprimé physiquement pour les données métier : on annule avec un `statut` et un `motif_annulation` obligatoire (imposé par une contrainte), et on renseigne `annulee_par` / `annulee_le`.
 - Les noms, messages d'erreur et commentaires sont en **français**.
+- Paramètres environnementaux : utilisateur connecté et actif ; les trois rôles lisent, saisissent et modifient ; seul l'Administrateur supprime une mesure.
+
+## Décisions : ne pas implémenter sans nouvelle demande
+- Modification d'une mise en stock : impossible en pratique (refusée dès qu'il existe des mouvements) ; laissée telle quelle.
+- Sortie de stock à finalité `VENTE` : non implémentée.
+- `supprimer_mise_en_stock` (suppression physique, outil de test) : conservée côté backend, rendue inaccessible côté frontend.
 
 ## Points connus à corriger
 - `config/settings.py` : `SECRET_KEY` en dur, `DEBUG=True`, `ALLOWED_HOSTS=[]` ; durée de vie du jeton d'accès JWT (15 j) supérieure à celle du refresh (7 j).
 - `apps.core.urls` est inclus deux fois (`/api/` et `/api/v1/auth/`).
+- `PATCH /api/v1/lots/{id}/cloturer/` bloquée (commentée, 404) : elle forçait `CLOTUREE` sans contrôle. Seule `cloturer_lot_grossissement` clôture un lot ; la fin de vie d'un lot perdu avant le grossissement reste à concevoir.
+- `StockPermission` : l'Employé peut créer une mise en stock mais ni la lister ni la lire.
+- Mise en stock : le parcours n'est pas contrôlé (un lot `TRAITEMENT_REQUIS` encore `CREEE` peut être mis en stock sans traitement).

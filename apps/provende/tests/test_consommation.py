@@ -11,7 +11,9 @@ from apps.core.models import Role
 from apps.effectifs.models import MouvementEffectif
 from apps.effectifs.services import bloquer_hapa, enregistrer_mouvement
 
+from apps.grossissement.receivers import refuser_distribution_sans_lot_en_cours
 from apps.provende.models import ConsommationProvende, Provende, TypeProvende
+from apps.provende.signals import distribution_avant_enregistrement
 from apps.provende.services import (
     MAX_DISTRIBUTIONS_PAR_JOUR,
     annuler_distribution,
@@ -63,6 +65,20 @@ class ConsommationProvendeTests(TestCase):
         self._ajouter_effectif(self.treatment, self.treatment_hapa2)
         self._ajouter_effectif(self.stock, self.stock_hapa)
         self._ajouter_effectif(self.stock, self.stock_hapa2)
+
+    def _sans_controle_lot_grossissement(self):
+        """Ces tests portent sur la cible (hapa facultatif), pas sur le lot en cours.
+
+        La règle « provende en grossissement seulement pour un lot en cours »
+        est testée dans apps/grossissement/tests/test_cloture.py.
+        """
+        uid = "grossissement.provende_lot_en_cours"
+        distribution_avant_enregistrement.disconnect(dispatch_uid=uid)
+        self.addCleanup(
+            distribution_avant_enregistrement.connect,
+            refuser_distribution_sans_lot_en_cours,
+            dispatch_uid=uid,
+        )
 
     def _bassin(self, reference, categorie):
         return Bassin.objects.create(
@@ -266,6 +282,7 @@ class ConsommationProvendeTests(TestCase):
             self.assertIn("obligatoire", str(response.data["id_hapa"]))
 
     def test_hapa_facultatif_en_grossissement_sans_hapa(self):
+        self._sans_controle_lot_grossissement()
         self._ajouter_effectif(self.grossissement, quantity=5)
 
         response = self._post(
@@ -303,6 +320,7 @@ class ConsommationProvendeTests(TestCase):
             self.assertIn("id_hapa", response.data)
 
     def test_jours_manquants_grossissement_sans_hapa(self):
+        self._sans_controle_lot_grossissement()
         self._ajouter_effectif(
             self.grossissement,
             quantity=5,

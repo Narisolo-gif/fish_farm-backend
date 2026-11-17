@@ -1,11 +1,12 @@
 """Clôture d'un lot de grossissement : seuil, résumé, évacuation et historique."""
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
@@ -17,6 +18,8 @@ from apps.effectifs.services import enregistrer_mouvement
 from apps.grossissement.models import LotGrossissement
 from apps.grossissement.services import creer_pesee
 from apps.lots.models import Lot
+from apps.provende.models import ConsommationProvende, Provende, TypeProvende
+from apps.provende.services import annuler_distribution, enregistrer_distribution
 
 from .test_lot_grossissement import URL_LOTS, OutilsLotGrossissement
 
@@ -341,6 +344,83 @@ class ClotureTests(OutilsLotGrossissement, TestCase):
         self.assertEqual(self._evacuer_api().status_code, 200)
         acceptee = self._valider(self._donnees_sortie(lot, 10))
         self.assertEqual(acceptee.status_code, 201, acceptee.data)
+
+    # --- Provende : chiffres d'un lot clôturé figés -------------------------
+
+    def _distribuer(self, il_y_a_jours, bassin=None, quantite="5"):
+        type_provende, _ = TypeProvende.objects.get_or_create(
+            type=TypeProvende.Type.CROISSANCE
+        )
+        provende, _ = Provende.objects.get_or_create(
+            reference="PROV-CLOTURE",
+            defaults={
+                "type_provende": type_provende,
+                "date_creation": self._jour(AGE_LOT + 5),
+            },
+        )
+        return enregistrer_distribution(
+            {
+                "bassin": bassin or self.bassin_destination,
+                "provende": provende,
+                "date_distribution": timezone.make_aware(
+                    datetime.combine(self._jour(il_y_a_jours), time(8, 0)),
+                    timezone.get_current_timezone(),
+                ),
+                "quantite_kg": Decimal(quantite),
+            },
+            self.user,
+        )
+
+    def _reculer_cloture(self, jours):
+        """Simule une clôture faite il y a `jours` jours (la clôture est datée du jour)."""
+        LotGrossissement.objects.filter(pk=self.gross.pk).update(
+            date_cloture=self._jour(jours)
+        )
+
+    def test_provende_refusee_sur_la_periode_d_un_lot_cloture(self):
+        self._distribuer(10)
+        self._peser("300")
+        self._cloturer_api()
+        for il_y_a_jours in (0, 10):
+            with self.subTest(il_y_a_jours=il_y_a_jours):
+                with self.assertRaises(ValidationError) as ctx:
+                    self._distribuer(il_y_a_jours)
+                self.assertIn("date_distribution", ctx.exception.detail)
+                self.assertIn("clôturé", str(ctx.exception.detail))
+        self.assertEqual(ConsommationProvende.objects.count(), 1)
+
+    def test_provende_refusee_sans_lot_en_cours(self):
+        # Lot clôturé il y a 5 jours, bassin non évacué : poissons présents,
+        # mais aucun lot en cours pour recevoir la provende.
+        self._peser("300", il_y_a_jours=6)
+        self._cloturer_api()
+        self._reculer_cloture(5)
+        with self.assertRaises(ValidationError) as ctx:
+            self._distribuer(2)
+        self.assertIn("id_bassin", ctx.exception.detail)
+
+    def test_provende_acceptee_pour_l_autre_espece_en_cours(self):
+        self._lot_tilapia(destination=self.bassin_destination)
+        self._peser("300", il_y_a_jours=6)
+        self._cloturer_api()
+        self._reculer_cloture(5)
+        # Après la clôture de la CARPE, le TILAPIA en cours reçoit la provende...
+        self.assertIsNotNone(self._distribuer(2))
+        # ... mais la période de la CARPE clôturée reste figée.
+        with self.assertRaises(ValidationError):
+            self._distribuer(6)
+
+    def test_annulation_de_provende_refusee_sur_la_periode_close(self):
+        avant = self._distribuer(10)
+        hors_periode = self._distribuer(20)
+        annuler_distribution(hors_periode.pk, "Erreur avant clôture", self.user)
+        self._peser("300")
+        self._cloturer_api()
+        with self.assertRaises(ValidationError) as ctx:
+            annuler_distribution(avant.pk, "Erreur de saisie", self.user)
+        self.assertIn("clôturé", str(ctx.exception.detail))
+        avant.refresh_from_db()
+        self.assertEqual(avant.statut, ConsommationProvende.Statut.VALIDE)
 
     # --- Historique et permissions ----------------------------------------
 

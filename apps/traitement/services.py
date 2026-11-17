@@ -176,6 +176,63 @@ def effectifs_traitement(traitement):
     ]
 
 
+def _effectifs_finaux(bassin_id, espece, lignes, date_cloture):
+    """Effectif final de chaque hapa, lu dans le registre à la date de clôture.
+
+    Refusé si un hapa compte plus de poissons qu'à l'ouverture.
+    """
+    effectifs = effectifs_par_hapa(bassin_id, a_la_date=date_cloture)
+    effectifs_final = {}
+    for ligne in lignes:
+        courant = effectifs.get((ligne.hapa_id, espece), 0)
+        if courant > ligne.effectif_initial:
+            raise ValidationError({
+                "effectif_final": (
+                    f"L’effectif calculé du hapa {ligne.hapa.nom} ({courant}) "
+                    f"dépasse son effectif initial ({ligne.effectif_initial})."
+                )
+            })
+        effectifs_final[ligne.pk] = courant
+    return effectifs_final
+
+
+def preparer_cloture_traitement(traitement):
+    """Résumé de la clôture à la date du jour (boîte de validation) ; rien n'est écrit."""
+    lot = traitement.lot
+    date_cloture = timezone.localdate()
+    lignes = list(traitement.lignes_hapas.select_related("hapa").order_by("hapa_id"))
+    effectif_final = None
+    raison = None
+    if traitement.statut == Traitement.Statut.CLOTUREE:
+        raison = "Ce traitement est déjà clôturé."
+    elif not lignes:
+        raison = "Traitement sans hapas : supprimez-le et recréez-le."
+    else:
+        try:
+            effectif_final = sum(
+                _effectifs_finaux(traitement.bassin_id, lot.espece, lignes, date_cloture).values()
+            )
+        except ValidationError as exc:
+            raison = str(exc.detail["effectif_final"])
+    morts_et_pertes = (
+        traitement.effectif_initial - effectif_final if effectif_final is not None else None
+    )
+    return {
+        "traitement": traitement,
+        "date_cloture": date_cloture,
+        "duree_jours": (date_cloture - traitement.date_ouverture).days,
+        "effectif_final": effectif_final,
+        "morts_et_pertes": morts_et_pertes,
+        "taux_survie": (
+            round(effectif_final * 100 / traitement.effectif_initial, 2)
+            if effectif_final is not None and traitement.effectif_initial
+            else None
+        ),
+        "cloturable": raison is None,
+        "raison_refus": raison,
+    }
+
+
 @transaction.atomic
 def cloturer_traitement(traitement_id):
     """Calcule puis fige les effectifs du traitement à la clôture."""
@@ -209,21 +266,7 @@ def cloturer_traitement(traitement_id):
         .filter(pk__in=[ligne.hapa_id for ligne in lignes])
         .order_by("pk")
     )
-    effectifs = effectifs_par_hapa(
-        bassin.pk,
-        a_la_date=date_cloture,
-    )
-    effectifs_final = {}
-    for ligne in lignes:
-        courant = effectifs.get((ligne.hapa_id, lot.espece), 0)
-        if courant > ligne.effectif_initial:
-            raise ValidationError({
-                "effectif_final": (
-                    f"L’effectif calculé du hapa {ligne.hapa.nom} ({courant}) "
-                    f"dépasse son effectif initial ({ligne.effectif_initial})."
-                )
-            })
-        effectifs_final[ligne.pk] = courant
+    effectifs_final = _effectifs_finaux(bassin.pk, lot.espece, lignes, date_cloture)
     effectif_final = sum(effectifs_final.values())
 
     for ligne in lignes:

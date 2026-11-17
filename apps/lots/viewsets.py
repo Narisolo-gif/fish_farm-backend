@@ -120,30 +120,49 @@ class LotViewSet(viewsets.ModelViewSet):
 
         serializer.save()
 
-    @action(
-        detail=True,
-        methods=["patch"],
-        url_path="cloturer",
-    )
-    @transaction.atomic
-    def cloturer(self, request, pk=None):
-        lot = self.get_object()
-
-        if lot.stade == Lot.Stade.CLOTUREE:
-            return Response(
-                {"detail": "Ce lot est déjà clôturé."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        lot.stade = Lot.Stade.CLOTUREE
-        lot.save(update_fields=["stade", "updated_at"])
-
-        return Response(
-            {
-                "detail": "Lot clôturé avec succès.",
-                "id": lot.id,
-                "reference": lot.reference,
-                "stade": lot.stade,
-            },
-            status=status.HTTP_200_OK,
-        )
+    # ROUTE BLOQUÉE (2026-11-17) : PATCH /api/v1/lots/{id}/cloturer/
+    #
+    # Cette action passait le lot au stade CLOTUREE sans aucun contrôle métier :
+    # ni le stade de départ, ni le traitement, la mise en stock ou le lot de
+    # grossissement, ni le registre d'effectifs ; sans motif ni trace, et de façon
+    # irréversible par l'API. Selon le stade, elle laissait des poissons coincés
+    # dans le registre (mise en stock et sortie vers le grossissement refusées),
+    # des hapas bloqués à jamais, ou un lot « clôturé » dont le lot de
+    # grossissement restait ACTIF (et qu'une annulation de sortie pouvait rouvrir).
+    #
+    # La seule fin de vie d'un lot est la clôture de son lot de grossissement
+    # (grossissement.services.cloturer_lot_grossissement), qui passe le lot
+    # d'origine à CLOTUREE. La clôture d'un lot perdu avant le grossissement
+    # (effectif nul en traitement ou en stock) reste à concevoir : ne pas
+    # réactiver cette action telle quelle.
+    #
+    # Commentée, l'action n'est plus générée par le routeur : la route répond 404.
+    # Les imports `action`, `status` et `Response` ne servent qu'à elle.
+    #
+    # @action(
+    #     detail=True,
+    #     methods=["patch"],
+    #     url_path="cloturer",
+    # )
+    # @transaction.atomic
+    # def cloturer(self, request, pk=None):
+    #     lot = self.get_object()
+    #
+    #     if lot.stade == Lot.Stade.CLOTUREE:
+    #         return Response(
+    #             {"detail": "Ce lot est déjà clôturé."},
+    #             status=status.HTTP_400_BAD_REQUEST,
+    #         )
+    #
+    #     lot.stade = Lot.Stade.CLOTUREE
+    #     lot.save(update_fields=["stade", "updated_at"])
+    #
+    #     return Response(
+    #         {
+    #             "detail": "Lot clôturé avec succès.",
+    #             "id": lot.id,
+    #             "reference": lot.reference,
+    #             "stade": lot.stade,
+    #         },
+    #         status=status.HTTP_200_OK,
+    #     )

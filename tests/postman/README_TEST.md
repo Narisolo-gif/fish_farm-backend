@@ -169,10 +169,14 @@ Fuseau : le serveur est à l'heure d'Antananarivo (`TIME_ZONE = "Indian/Antanana
 
 ## Clôture (collection grossissement)
 
-Le dossier **10 Clôture** est autonome, à dates fixes et à références uniques : il recrée le lot S1 (CARPE, entrée le 2026-01-01, pesées de 45 g puis 80 g), vérifie que la clôture est refusée sous le seuil (300 g pour la carpe), enregistre une pesée finale de 300 g, puis teste l'aperçu, l'ancien format refusé, le refus pour un employé, la clôture (finaux, message, lot d'origine `CLOTUREE`), la seconde clôture refusée, la mortalité refusée tant que le bassin n'est pas évacué, l'historique, l'évacuation (puis la seconde refusée), le solde nul et le suivi en lecture seule.
+Le dossier **10 Clôture** est autonome, à dates fixes et à références uniques : il recrée le lot S1 (CARPE, entrée le 2026-01-01, pesées de 45 g puis 80 g), vérifie que la clôture est refusée sous le seuil (300 g pour la carpe), enregistre une pesée finale de 300 g, puis teste l'aperçu, l'ancien format refusé, le refus pour un employé, la clôture (finaux, message, lot d'origine `CLOTUREE`), la seconde clôture refusée, la mortalité et la distribution de provende refusées après la clôture, l'historique, l'évacuation (puis la seconde refusée), le solde nul et le suivi en lecture seule.
 
 ```powershell
 npx newman@6.1.3 run tests/postman/grossissement_sortie_lot.postman_collection.json -e tests/postman/pisciculture_local.postman_environment.json --env-var "base_url=http://localhost:8000" --folder "10 Clôture"
 ```
 
 Clôtures adaptées au nouveau flux (dernière pesée ≥ seuil, date du jour, aucun poids ni motif saisi, évacuation à part) : dossier 05 (pesée finale du lot A, aperçu, clôture, évacuation), dossier 06 (pesée finale du lot B à J-6 avant sa mortalité totale, clôture à effectif nul) et dossier 10 de la collection E2E (pesée finale du lot C à 10 %, clôture, évacuation ; l'ancien format est refusé). La collection E2E fait donc désormais une pesée, la seule.
+
+## Clôture du traitement (collection E2E)
+
+Dossier 05 : l'employé lit le résumé de clôture (`GET /api/v1/traitement/{id}/apercu-cloture/`, 05.00a) mais la clôture lui est refusée (403, 05.00b) ; la clôture par l'administrateur (05.01) renvoie `message` et `mise_en_stock_possible`.

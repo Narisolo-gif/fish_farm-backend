@@ -13,6 +13,7 @@ from apps.effectifs.calculs import effectifs_du_bassin, effectifs_par_hapa
 from apps.effectifs.models import MouvementEffectif
 
 from .models import ConsommationProvende, Provende, TypeProvende
+from .signals import distribution_avant_annulation, distribution_avant_enregistrement
 
 MAX_DISTRIBUTIONS_PAR_JOUR = 3
 
@@ -123,6 +124,11 @@ def enregistrer_distribution(validated_data, utilisateur):
         raise ValidationError({
             champ_cible: "Aucun poisson vivant n’est enregistré dans cette cible à cette date."
         })
+    distribution_avant_enregistrement.send(
+        sender=ConsommationProvende,
+        bassin=bassin,
+        date_locale=date_locale,
+    )
 
     debut_jour = timezone.make_aware(
         datetime.combine(date_locale, time.min),
@@ -216,6 +222,10 @@ def annuler_distribution(distribution_id, motif, utilisateur):
     Bassin.objects.select_for_update().get(pk=distribution.bassin_id)
     if distribution.hapa_id is not None:
         Hapa.objects.select_for_update().get(pk=distribution.hapa_id)
+    distribution_avant_annulation.send(
+        sender=ConsommationProvende,
+        distribution=distribution,
+    )
 
     distribution.statut = ConsommationProvende.Statut.ANNULEE
     distribution.motif_annulation = motif.strip()

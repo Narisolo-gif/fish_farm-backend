@@ -2,6 +2,9 @@ from django.contrib.contenttypes.models import ContentType
 from django.dispatch import receiver
 from rest_framework.exceptions import ValidationError
 
+from django.utils import timezone
+
+from apps.bassins.models import Bassin
 from apps.effectifs.models import MouvementEffectif
 from apps.effectifs.signals import (
     mouvement_avant_annulation,
@@ -9,6 +12,10 @@ from apps.effectifs.signals import (
     sortie_stock_avant_annulation,
 )
 from apps.lots.models import Lot
+from apps.provende.signals import (
+    distribution_avant_annulation,
+    distribution_avant_enregistrement,
+)
 
 from .models import LotGrossissement
 from .services import lot_a_historique
@@ -130,3 +137,65 @@ def refuser_mouvement_lot_cloture(
                     "n'a pas été évacué : évacuez-le avant toute nouvelle saisie."
                 )
             })
+
+
+# --- Provende : chiffres biologiques d'un lot clôturé figés -------------------
+
+def _refuser_periode_lot_cloture(bassin, jour, action):
+    """Refuse une écriture de provende datée de la période d'un lot clôturé.
+
+    La provende d'un jour est répartie entre les lots présents ce jour-là :
+    toucher à la période d'un lot clôturé changerait ses indicateurs (ICA).
+    """
+    lot = (
+        LotGrossissement.objects.filter(
+            bassin=bassin,
+            statut=LotGrossissement.Statut.CLOTURE,
+            date_mise_en_place__date__lte=jour,
+            date_cloture__gte=jour,
+        )
+        .order_by("-date_cloture")
+        .first()
+    )
+    if lot is not None:
+        raise ValidationError({
+            "date_distribution": (
+                f"Le lot de grossissement {lot.code} est clôturé : ses chiffres sont "
+                f"figés, aucune distribution ne peut être {action} sur sa période "
+                f"(jusqu'au {lot.date_cloture.isoformat()})."
+            )
+        })
+
+
+@receiver(
+    distribution_avant_enregistrement,
+    dispatch_uid="grossissement.provende_lot_en_cours",
+)
+def refuser_distribution_sans_lot_en_cours(sender, *, bassin, date_locale, **kwargs):
+    """En grossissement, la provende n'est saisie que pour un lot en cours."""
+    if bassin.categorie != Bassin.Categorie.GROSSISSEMENT:
+        return
+    _refuser_periode_lot_cloture(bassin, date_locale, "enregistrée")
+    if not LotGrossissement.objects.filter(
+        bassin=bassin,
+        statut=LotGrossissement.Statut.ACTIF,
+        date_mise_en_place__date__lte=date_locale,
+    ).exists():
+        raise ValidationError({
+            "id_bassin": (
+                "Aucun lot de grossissement en cours dans ce bassin à cette date : "
+                "la provende ne peut pas être enregistrée."
+            )
+        })
+
+
+@receiver(
+    distribution_avant_annulation,
+    dispatch_uid="grossissement.provende_annulation_lot_cloture",
+)
+def refuser_annulation_distribution_lot_cloture(sender, *, distribution, **kwargs):
+    bassin = distribution.bassin
+    if bassin.categorie != Bassin.Categorie.GROSSISSEMENT:
+        return
+    jour = timezone.localtime(distribution.date_distribution).date()
+    _refuser_periode_lot_cloture(bassin, jour, "annulée")

@@ -3,10 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.core.permissions import (
-    IsAdministrateur,
-    IsAdministrateurOuGestionnaire,
-)
+from apps.core.permissions import IsAdministrateur, IsTousRolesActifs
 
 from .models import ParametreEnvironnemental
 from .serializers import ParametreEnvironnementalSerializer
@@ -18,17 +15,11 @@ class ParametreEnvironnementalViewSet(
     """
     Gestion des paramètres environnementaux.
 
-    Administrateur :
-        - consulter
-        - créer
-        - modifier
-        - supprimer
-
-    Gestionnaire :
-        - consulter
-
-    Employé :
-        - aucun accès
+    Utilisateur connecté, au compte actif, avec l'un des trois rôles :
+    - Administrateur, Gestionnaire, Employé : consulter, créer, modifier ;
+    - Administrateur seulement : supprimer une mesure.
+    Sans connexion : 401 ; compte inactif, sans rôle ou suppression par un
+    autre rôle : 403.
     """
 
     queryset = (
@@ -39,23 +30,15 @@ class ParametreEnvironnementalViewSet(
 
     serializer_class = ParametreEnvironnementalSerializer
 
-    # def get_permissions(self):
-    #     """
-    #     Détermine les permissions selon l'action.
-    #     """
-
-    #     if self.action in [
-    #         "list",
-    #         "retrieve",
-    #         "historique_bassin",
-    #         "derniere_mesure_bassin",
-    #         "dernieres_mesures",
-    #     ]:
-    #         return [
-    #             IsAdministrateurOuGestionnaire()
-    #         ]
-
-    #     return [IsAdministrateur()]
+    # Auparavant aucune permission n'était déclarée (et REST_FRAMEWORK ne définit
+    # pas de permission par défaut) : l'API était accessible sans connexion.
+    def get_permissions(self):
+        permissions = [IsAuthenticated(), IsTousRolesActifs()]
+        # Une suppression efface la mesure (et la retire du suivi de cycle) :
+        # réservée à l'Administrateur. Les trois rôles saisissent et corrigent.
+        if self.action == "destroy":
+            permissions.append(IsAdministrateur())
+        return permissions
 
     def get_queryset(self):
         """

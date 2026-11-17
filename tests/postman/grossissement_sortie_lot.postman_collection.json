@@ -14540,7 +14540,45 @@
           }
         },
         {
-          "name": "10.33 Historique : lot clôturé, non évacué",
+          "name": "10.33 Refuser une distribution de provende après la clôture (chiffres figés)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Période du lot clôturé figée\", function () { pm.expect(data).to.have.property(\"date_distribution\"); pm.expect(JSON.stringify(data)).to.include(\"clôturé\"); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/provende/consommations-provende/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bassin\": \"{{cl_bassin_ind1}}\",\n  \"id_provende\": \"{{cl_provende}}\",\n  \"quantite_kg\": \"5.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "10.34 Historique : lot clôturé, non évacué",
           "event": [
             {
               "listen": "test",
@@ -14570,7 +14608,7 @@
           }
         },
         {
-          "name": "10.34 Évacuer le bassin",
+          "name": "10.35 Évacuer le bassin",
           "event": [
             {
               "listen": "test",
@@ -14609,7 +14647,7 @@
           }
         },
         {
-          "name": "10.35 Refuser une seconde évacuation",
+          "name": "10.36 Refuser une seconde évacuation",
           "event": [
             {
               "listen": "test",
@@ -14647,7 +14685,7 @@
           }
         },
         {
-          "name": "10.36 Solde CARPE du bassin à 0",
+          "name": "10.37 Solde CARPE du bassin à 0",
           "event": [
             {
               "listen": "test",
@@ -14676,7 +14714,7 @@
           }
         },
         {
-          "name": "10.37 Historique : lot évacué",
+          "name": "10.38 Historique : lot évacué",
           "event": [
             {
               "listen": "test",
@@ -14705,7 +14743,7 @@
           }
         },
         {
-          "name": "10.38 Détail en lecture seule : suivi du lot clôturé",
+          "name": "10.39 Détail en lecture seule : suivi du lot clôturé",
           "event": [
             {
               "listen": "test",
@@ -14735,7 +14773,7 @@
           }
         },
         {
-          "name": "10.39 Non connecté : historique refusé",
+          "name": "10.40 Non connecté : historique refusé",
           "event": [
             {
               "listen": "test",

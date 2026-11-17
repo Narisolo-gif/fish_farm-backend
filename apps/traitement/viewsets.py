@@ -8,10 +8,11 @@ from apps.core.permissions import (
 )
 
 from .models import Traitement
-from .serializers import TraitementSerializer
+from .serializers import ApercuClotureTraitementSerializer, TraitementSerializer
 from .services import (
     cloturer_traitement,
     effectifs_traitement,
+    preparer_cloture_traitement,
     supprimer_traitement,
 )
 
@@ -30,17 +31,18 @@ class TraitementViewSet(viewsets.ModelViewSet):
     serializer_class = TraitementSerializer
 
     def get_permissions(self):
-        # L'Employé peut consulter, créer et clôturer un traitement.
+        # L'Employé peut consulter et créer un traitement, et voir le résumé
+        # de clôture ; il ne peut pas le clôturer.
         if self.action in [
             "list",
             "retrieve",
             "create",
-            "cloturer",
             "effectifs",
+            "apercu_cloture",
         ]:
             return [IsTousRolesActifs()]
 
-        # Seuls Admin et Gestionnaire peuvent modifier ou supprimer.
+        # Seuls Admin et Gestionnaire clôturent, modifient ou suppriment.
         return [IsAdministrateurOuGestionnaire()]
 
     def get_serializer_context(self):
@@ -54,14 +56,30 @@ class TraitementViewSet(viewsets.ModelViewSet):
         url_path="cloturer",
     )
     def cloturer(self, request, pk=None):
-        """Endpoint dédié à la clôture du traitement."""
+        """Clôture confirmée depuis la boîte de validation.
+
+        Les hapas sont bloqués jusqu'à la mise en stock ; le frontend propose
+        ensuite de mettre le lot en stock (formulaire de mise en stock) ou non.
+        """
         self.get_object()
         cloturer_traitement(traitement_id=pk)
-
+        traitement = self.get_object()
         return Response(
-            self.get_serializer(self.get_object()).data,
+            {
+                **self.get_serializer(traitement).data,
+                "message": (
+                    f"Le traitement du lot {traitement.lot.reference} a bien été clôturé."
+                ),
+                "mise_en_stock_possible": True,
+            },
             status=status.HTTP_200_OK,
         )
+
+    @action(detail=True, methods=["get"], url_path="apercu-cloture")
+    def apercu_cloture(self, request, pk=None):
+        """Résumé en lecture seule de la boîte de validation ; rien n'est écrit."""
+        contexte = preparer_cloture_traitement(self.get_object())
+        return Response(ApercuClotureTraitementSerializer(contexte).data)
 
     @action(
         detail=True,

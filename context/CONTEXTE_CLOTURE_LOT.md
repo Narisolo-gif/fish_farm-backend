@@ -43,6 +43,7 @@ Ce document complète `REGLES_DE_GESTION_FISH_FARM.md`, `CONTEXTE_INDICATEURS_GR
 - **Registre figé** (bassin + espèce identifient le lot) : tout nouveau mouvement daté de la période du lot (de la mise en place à la clôture) est refusé, ainsi que tout mouvement postérieur **tant que le bassin n'est pas évacué**. Seule l'évacuation du lot passe ; après elle, un nouveau lot peut entrer dès le jour de la clôture.
 - Un nouveau lot de **même espèce** est refusé dans le bassin tant que le lot clôturé n'est pas évacué. Une autre espèce du même bassin n'est pas concernée.
 - L'annulation des mouvements de la période du lot reste refusée (règle existante).
+- **Provende figée** (pour protéger les indicateurs, dont l'ICA) : en bassin de grossissement, une distribution, ou son annulation, datée de la période d'un lot clôturé est refusée ; une distribution est aussi refusée si aucun lot `ACTIF` n'est en place à sa date (bassin clôturé non évacué). Un lot d'une autre espèce encore en cours dans le bassin reçoit la provende dès le lendemain de la clôture. Les bassins de traitement et de stock ne sont pas concernés.
 
 ## 3. Historique des clôtures
 

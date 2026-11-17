@@ -3255,6 +3255,96 @@
       ],
       "item": [
         {
+          "name": "05.00a Aperçu de la clôture du traitement A (employé, lecture seule)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Résumé : lot, espèce, bassin, dates\", function () { pm.expect(data.reference_lot).to.be.a(\"string\"); pm.expect(data.espece).to.eql(\"CARPE\"); pm.expect(data.id_bassin).to.eql(Number(pm.collectionVariables.get(\"bassin_trt\"))); pm.expect(data.date_cloture).to.eql(pm.collectionVariables.get(\"date_today\")); });",
+                  "pm.test(\"Effectifs et pertes\", function () { pm.expect(data.effectif_final).to.eql(9850); pm.expect(data.morts_et_pertes).to.eql(data.effectif_initial - 9850); pm.expect(data.taux_survie).to.be.a(\"string\"); });",
+                  "pm.test(\"Clôturable, rien écrit\", function () { pm.expect(data.cloturable).to.eql(true); pm.expect(data.statut).to.eql(\"EN_COURS\"); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/traitement/{{traitement_a}}/apercu-cloture/",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_employe}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "05.00b Refuser la clôture par un employé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
+                  "pm.test(\"Statut HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/traitement/{{traitement_a}}/cloturer/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_employe}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
           "name": "05.01 Clôturer traitement A",
           "request": {
             "method": "POST",
@@ -3287,6 +3377,7 @@
                   "let data; try { data = pm.response.json(); } catch (e) { data = {}; }",
                   "pm.test(\"Traitement clôturé avec l'effectif attendu\", function () { pm.expect(data.statut).to.eql('CLOTUREE'); pm.expect(data.effectif_final).to.eql(9850); });",
                   "pm.test(\"Final par hapa\", function () { const m = Object.fromEntries(data.hapas.map(x => [x.id_hapa, x.effectif_final])); pm.expect(m[Number(pm.collectionVariables.get('hapa_trt_a'))]).to.eql(5880); pm.expect(m[Number(pm.collectionVariables.get('hapa_trt_b'))]).to.eql(3970); });",
+                  "pm.test(\"Message et choix de la mise en stock\", function () { pm.expect(data.message).to.include(\"a bien été clôturé\"); pm.expect(data.mise_en_stock_possible).to.eql(true); });",
                   "for (const [key, value] of Object.entries(pm.collectionVariables.toObject())) if (key !== 'base_url' && value !== undefined) pm.environment.set(key, String(value));",
                   "}"
                 ]

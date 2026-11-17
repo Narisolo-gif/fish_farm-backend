@@ -1,245 +1,114 @@
-# Fish Farm : phase 4, suivi de cycle (contexte de la page et contrat JSON)
+# Fish Farm : page de suivi de cycle (contrat JSON et normes de la page)
 
-Ce document complète `REGLES_DE_GESTION_FISH_FARM.md` et `CONTEXTE_INDICATEURS_GROSSISSEMENT.md`, supposés déjà connus. Il ne répète pas les règles métier : il décrit la **page de suivi de cycle**, ce que le backend de la phase 4 doit fournir pour l'alimenter, et les normes à respecter. Les points marqués **[À CONFIRMER]** ne sont pas tranchés.
+Décrit la **page de suivi de cycle** d'un lot de grossissement, le contrat de l'API qui l'alimente (implémenté, phase 4) et les normes d'affichage. Les règles métier sont dans `REGLES_DE_GESTION_FISH_FARM.md` et `CONTEXTE_INDICATEURS_GROSSISSEMENT.md` ; les routes et les droits dans `GUIDE_INTEGRATION_FRONTEND.md`.
 
-Il accompagne `PROMPT_PHASE4_SUIVI_CYCLE_v2.md` (spécification du backend). En cas d'écart entre les deux, signaler l'écart et poser la question avant de coder.
+**Source de vérité du contrat** : les fichiers `docs/contrats/*.exemple.json`, produits par l'API réelle et contrôlés par un test (`apps/grossissement/tests/test_suivi.py`). Les extraits ci-dessous les résument ; en cas de doute, ce sont les fichiers qui font foi.
 
-## 0. Continuité avec les décisions déjà prises
+## 0. Principes
 
-- La pesée est désormais **plate** : une `Pesee` = un lot, une date (refonte « une pesée = un lot »). Partout où la spécification de la phase 4 parle de « lignes de pesée » ou de `PeseeLot`, lire `Pesee`.
-- Le suivi **lit** les instantanés `IndicateurLot` déjà calculés. Il ne recalcule rien. Le frontend **n'effectue aucun calcul** non plus : il affiche les valeurs reçues.
-- Le calendrier de pesée sert uniquement à la prochaine pesée prévue et à l'alerte de retard ; il ne bloque jamais la saisie.
+- La page **lit** ; elle ne calcule rien (ni somme, ni division, ni arrondi). Le backend lit les instantanés `IndicateurLot` sans les recalculer.
+- Noms et valeurs **du code** : statut `ACTIF` / `CLOTURE`, `code` du lot, espèce `CARPE` / `TILAPIA` (le libellé est à faire côté frontend), `id_bassin` + `reference_bassin`, mesures environnementales sous leurs noms de modèle.
 - Poids moyen **mesuré** sur échantillon, biomasse **estimée**. Aucune interpolation entre deux pesées.
-- Libellé visible : **ICA** (indice de conversion alimentaire). Les champs de l'API gardent `ic_periode` et `ic_cumule`.
-- Lecture du suivi permise à l'Administrateur, au Gestionnaire et à l'Employé ; utilisateur inactif ou non connecté refusé.
+- Libellé visible « ICA » ; les champs gardent `ic_periode` et `ic_cumule`.
+- Lecture permise à l'Administrateur, au Gestionnaire et à l'Employé ; non connecté : 401.
 
-## 1. Scénario utilisateur de la page
+## 1. Scénario utilisateur
 
-1. Dans la page de suivi, l'utilisateur **sélectionne un lot de grossissement en cours**.
-2. Il ouvre la section **Paramètres biologiques**.
-3. La page affiche, de haut en bas :
+1. L'utilisateur **sélectionne un lot de grossissement en cours** (liste, section 3).
+2. Il ouvre la section **Paramètres biologiques**, qui affiche de haut en bas :
    1. **Tableau de bord en chiffres** : poids moyen, GMQ, biomasse, ICA cumulé.
-   2. **Courbes** alignées horizontalement : poids moyen, biomasse, GMQ, ICA.
-   3. **Zone réservée** à la courbe de Gauss d'homogénéité des poids et au résultat du sexage (prochain sprint).
-   4. **Zone réservée** aux interactions avec le LLM (service IA, phases ultérieures).
+   2. **Courbes** alignées : poids moyen, biomasse, GMQ, ICA.
+   3. **Zone réservée** : courbe de Gauss d'homogénéité et sexage (à venir, sans appel d'API).
+   4. **Zone réservée** : interactions avec le service IA (à venir, sans appel d'API).
+3. Depuis la page : lien **Pesée** (formulaire de pesée), lien **Clôturer le lot** (si `seuil.fin_cycle_possible`), et pour un lot clôturé non évacué, l'action **Évacuer le bassin** (voir `CONTEXTE_CLOTURE_LOT.md`).
 
-Pour cette phase, seules les sections 1 et 2 sont alimentées. Les sections 3 et 4 sont des **emplacements vides** (« à venir »), sans appel d'API.
+## 2. Périmètre
 
-## 2. Périmètre de cette phase
+Backend : fait (suivi, liste, exemples). Frontend : sections 1 et 2 de la page, branchées d'abord sur les fichiers d'exemple puis sur l'API, sans changement d'affichage.
 
-**Backend** : l'endpoint de suivi d'un lot (contrat de la section 4) et la liste des lots à sélectionner (section 3). **Frontend** : les sections 1 et 2 de la page, branchées d'abord sur l'exemple JSON puis sur l'API.
+## 3. Sélection du lot
 
-Hors périmètre : formulaire de pesée, clôture du lot, courbe de Gauss, sexage, appels au LLM, alertes autres que les deux retenues, notifications, export.
+`GET /api/v1/grossissement/lots-grossissement/?statut=ACTIF` (filtres possibles : `espece`, `bassin`, `date_min`, `date_max`). Liste non paginée. Champs utiles à la sélection : `id`, `code`, `espece`, `id_bassin`, `reference_bassin`, `statut`, `date_entree`, `jour_de_cycle` (plus, entre autres, `poids_moyen_actuel`, `date_derniere_pesee`, `prochaine_echeance_pesee`, `pesee_en_retard`, `evacuation_requise`). Exemple complet : `docs/contrats/lots_en_cours.exemple.json`. Attention : dans cette liste, les décimaux sont des **chaînes** (`"40.00"`), comme dans toutes les ressources de l'API ; seuls les contrats de suivi et d'aperçu renvoient des nombres.
 
-## 3. Sélection du lot (liste)
+Un lot clôturé n'apparaît pas avec `?statut=ACTIF` mais reste consultable par son identifiant (et depuis l'historique des clôtures).
 
-Réutiliser la liste existante des lots de grossissement avec un filtre `statut=EN_COURS`. Chaque élément expose au minimum : `id`, `reference`, `espece`, `bassin` (`id`, `reference`), `statut`, `date_entree`, `jour_de_cycle`. Si la liste existante n'expose pas ces champs ou le filtre, les ajouter sans casser ses consommateurs actuels et le signaler. Un lot clôturé reste consultable (lecture seule) si l'utilisateur y accède par son identifiant, mais n'apparaît pas dans la sélection par défaut.
+## 4. Contrat du suivi
 
-Exemple :
-```json
-[
-  {
-    "id": 5,
-    "reference": "LG-0005",
-    "espece": "Tilapia",
-    "bassin": { "id": 3, "reference": "BG-03" },
-    "statut": "EN_COURS",
-    "date_entree": "2026-01-01",
-    "jour_de_cycle": 68
-  }
-]
-```
-
-## 4. Contrat JSON du suivi
-
-`GET lots-grossissement/{id}/suivi/` (adapter la route aux conventions existantes). Paramètre facultatif `date_reference` (`YYYY-MM-DD`, défaut : date locale du jour) : il sert aux tests et à la consultation des données simulées « à une date donnée ».
+`GET /api/v1/grossissement/lots-grossissement/{id}/suivi/?date_reference=AAAA-MM-JJ` (`date_reference` facultatif, défaut : aujourd'hui, fuseau Indian/Antananarivo ; outil de test, non exposé à l'utilisateur final).
 
 ### Règles du format
-- Dates au format ISO (`YYYY-MM-DD`, ou date-heure avec décalage pour les mesures horodatées).
-- Les valeurs décimales sont des **nombres JSON**, jamais des chaînes, arrondies à la précision enregistrée (poids moyen 2 décimales, biomasse 3, GMQ 2, ICA 2, provende 3).
-- Une valeur non calculable est `null`, jamais 0. Les listes vides sont `[]`.
-- Les messages d'alerte sont en français, prêts à être affichés.
-- Les champs listés sont **tous toujours présents** (jamais d'absence de clé) ; seules leurs valeurs peuvent être `null`.
+- Dates ISO (`AAAA-MM-JJ`) ; dates-heures avec décalage (`+03:00`).
+- Décimaux en **nombres JSON**, à la précision enregistrée (poids 2 décimales, biomasse 3, GMQ 2, ICA 2, provende 3).
+- Valeur non calculable : `null`, jamais 0. Listes vides : `[]`. **Toutes les clés sont toujours présentes.**
+- Tout est vu à `date_reference` (pesées, effectif, environnement, calendrier, alertes). Pour un lot clôturé, le jour de cycle et le calendrier s'arrêtent à la date de clôture, sans prochaine pesée ni alerte.
 
-### Exemple : lot avec deux pesées (`date_reference=2026-03-10`)
+### Structure (extrait de `docs/contrats/suivi_lot.exemple.json`, lot CARPE au 2026-03-10)
 ```json
 {
   "lot": {
-    "id": 5,
-    "reference": "LG-0005",
-    "espece": "Tilapia",
-    "bassin": { "id": 3, "reference": "BG-03" },
-    "statut": "EN_COURS",
-    "date_entree": "2026-01-01",
-    "jour_de_cycle": 68,
-    "effectif_initial": 1000,
-    "poids_moyen_initial": 20.0,
-    "effectif_vivant_actuel": 950
+    "id": 1, "code": "GR-2026-0001", "espece": "CARPE",
+    "id_bassin": 2, "reference_bassin": "GROSS-DEST", "statut": "ACTIF",
+    "date_entree": "2026-01-01", "jour_de_cycle": 68,
+    "effectif_initial": 1000, "poids_moyen_initial": 20.0,
+    "effectif_vivant_actuel": 950, "evacuation_requise": false
   },
   "nombre_pesees": 2,
   "dernieres_valeurs": {
-    "date_pesee": "2026-03-02",
-    "jour_de_cycle": 60,
-    "effectif_vivant": 950,
-    "poids_moyen": 80.0,
-    "biomasse_kg": 76.0,
-    "gmq_periode": 1.17,
-    "gmq_cumule": 1.0,
-    "ic_periode": 2.82,
-    "ic_cumule": 2.5,
+    "date_pesee": "2026-03-02", "jour_de_cycle": 60, "effectif_vivant": 950,
+    "poids_moyen": 80.0, "biomasse_kg": 76.0,
+    "gmq_periode": 1.17, "gmq_cumule": 1.0, "ic_periode": 2.82, "ic_cumule": 2.5,
     "provende_periode_kg": 90.0,
-    "nature": {
-      "poids_moyen": "mesuré sur échantillon",
-      "biomasse_kg": "estimée"
-    }
+    "nature": { "poids_moyen": "mesuré sur échantillon", "biomasse_kg": "estimée" }
   },
-  "point_initial": {
-    "date": "2026-01-01",
-    "jour_de_cycle": 0,
-    "poids_moyen": 20.0,
-    "biomasse_kg": 20.0
-  },
+  "point_initial": { "date": "2026-01-01", "jour_de_cycle": 0, "poids_moyen": 20.0, "biomasse_kg": 20.0 },
   "series": [
-    {
-      "pesee_id": 11,
-      "date": "2026-01-31",
-      "jour_de_cycle": 30,
-      "poids_moyen": 45.0,
-      "gmq_periode": 0.83,
-      "gmq_cumule": 0.83,
-      "ic_periode": 2.07,
-      "ic_cumule": 2.07,
-      "biomasse_kg": 44.1,
-      "effectif_vivant": 980,
-      "provende_periode_kg": 50.0
-    },
-    {
-      "pesee_id": 12,
-      "date": "2026-03-02",
-      "jour_de_cycle": 60,
-      "poids_moyen": 80.0,
-      "gmq_periode": 1.17,
-      "gmq_cumule": 1.0,
-      "ic_periode": 2.82,
-      "ic_cumule": 2.5,
-      "biomasse_kg": 76.0,
-      "effectif_vivant": 950,
-      "provende_periode_kg": 90.0
-    }
+    { "pesee_id": 1, "date": "2026-01-31", "jour_de_cycle": 30, "poids_moyen": 45.0,
+      "effectif_vivant": 980, "gmq_periode": 0.83, "gmq_cumule": 0.83,
+      "ic_periode": 2.07, "ic_cumule": 2.07, "biomasse_kg": 44.1, "provende_periode_kg": 50.0 }
   ],
   "calendrier": {
-    "prochaine_pesee": {
-      "numero": 3,
-      "jour_cible": 75,
-      "date_prevue": "2026-03-17",
-      "jours_restants": 7,
-      "en_retard": false,
-      "jours_de_retard": 0
-    },
-    "pesees_prevues": [
-      { "numero": 1, "jour_cible": 30, "date_prevue": "2026-01-31" },
-      { "numero": 2, "jour_cible": 60, "date_prevue": "2026-03-02" }
-    ]
+    "prochaine_pesee": { "numero": 3, "jour_cible": 75, "date_prevue": "2026-03-17",
+                         "jours_restants": 7, "en_retard": false, "jours_de_retard": 0 },
+    "pesees_prevues": [ { "numero": 1, "jour_cible": 30, "date_prevue": "2026-01-31" },
+                        { "numero": 2, "jour_cible": 60, "date_prevue": "2026-03-02" } ]
   },
-  "seuil": {
-    "poids_vente_g": 250,
-    "atteint": false,
-    "fin_cycle_possible": false,
-    "date_premiere_pesee_au_seuil": null
-  },
+  "seuil": { "poids_vente_g": 300, "atteint": false, "fin_cycle_possible": false,
+             "date_premiere_pesee_au_seuil": null },
   "alertes": [],
   "parametres_environnementaux": {
-    "date_heure": "2026-03-09T08:00:00+03:00",
-    "temperature_eau": 27.5,
-    "temperature_air": 29.0,
-    "taux_oxygene": 6.1
+    "date_heure_prelevement": "2026-03-09T08:00:00+03:00",
+    "temperature_eau": 27.5, "temperature_air": 29.0, "oxygene": 6.1,
+    "ph": 7.2, "nitrite": 0.05, "nitrate": 1.2, "ammoniac": 0.02
   },
   "autres_lots_du_bassin": []
 }
 ```
+- `series` : une entrée par pesée **valide** datée au plus tard à `date_reference`, en ordre chronologique. `effectif_vivant` est relu dans le registre.
+- `dernieres_valeurs` : `null` s'il n'y a aucune pesée (voir `docs/contrats/suivi_lot_vide.exemple.json`).
+- `point_initial` : J0 ; poids et biomasse `null` pour un lot sans pesée initiale.
+- `calendrier.prochaine_pesee` : première échéance (J30, J60, puis tous les 15 jours) strictement postérieure à la dernière pesée ; `null` pour un lot clôturé. `pesees_prevues` : échéances datées au plus tard à `date_reference`.
+- `seuil` : `poids_vente_g` = seuil de l'espèce (TILAPIA 250, CARPE 300) ; `atteint` et `fin_cycle_possible` portent sur la **dernière** pesée ; `date_premiere_pesee_au_seuil` est un repère historique.
+- `parametres_environnementaux` : dernier prélèvement du bassin au plus tard à `date_reference`, ou `null`. Unités non enregistrées en base (°C, mg/L… à afficher par le frontend).
+- `autres_lots_du_bassin` : autres lots `ACTIF` du bassin (`id`, `code`, `espece`).
 
-Les champs de `parametres_environnementaux` sont ceux du **modèle existant** (l'exemple en montre trois à titre indicatif) : ne pas en inventer.
-
-### Exemple : lot sans pesée (état vide, `date_reference=2026-01-11`)
-```json
-{
-  "lot": {
-    "id": 6,
-    "reference": "LG-0006",
-    "espece": "Carpe",
-    "bassin": { "id": 4, "reference": "BG-04" },
-    "statut": "EN_COURS",
-    "date_entree": "2026-01-01",
-    "jour_de_cycle": 10,
-    "effectif_initial": 500,
-    "poids_moyen_initial": 40.0,
-    "effectif_vivant_actuel": 500
-  },
-  "nombre_pesees": 0,
-  "dernieres_valeurs": null,
-  "point_initial": {
-    "date": "2026-01-01",
-    "jour_de_cycle": 0,
-    "poids_moyen": 40.0,
-    "biomasse_kg": 20.0
-  },
-  "series": [],
-  "calendrier": {
-    "prochaine_pesee": {
-      "numero": 1,
-      "jour_cible": 30,
-      "date_prevue": "2026-01-31",
-      "jours_restants": 20,
-      "en_retard": false,
-      "jours_de_retard": 0
-    },
-    "pesees_prevues": []
-  },
-  "seuil": {
-    "poids_vente_g": 250,
-    "atteint": false,
-    "fin_cycle_possible": false,
-    "date_premiere_pesee_au_seuil": null
-  },
-  "alertes": [],
-  "parametres_environnementaux": null,
-  "autres_lots_du_bassin": []
-}
-```
-
-### Exemples d'alertes
-Calculées à la volée, jamais stockées, uniquement pour un lot `EN_COURS`.
+### Alertes (calculées à la volée, lot `ACTIF` seulement)
 ```json
 [
-  {
-    "code": "PESEE_EN_RETARD",
-    "niveau": "attention",
-    "message": "La pesée prévue le 2026-01-31 n'a pas été saisie.",
-    "date_prevue": "2026-01-31",
-    "jours_de_retard": 5
-  },
-  {
-    "code": "POIDS_VENTE_ATTEINT",
-    "niveau": "info",
-    "message": "Le poids moyen a atteint 260 g, au-delà du seuil de 250 g : fin de cycle possible.",
-    "poids_moyen": 260.0,
-    "seuil_g": 250,
-    "date_pesee": "2026-01-31"
-  }
+  { "code": "PESEE_EN_RETARD", "niveau": "attention",
+    "message": "La pesée prévue le 2026-03-17 n'a pas été saisie.",
+    "date_prevue": "2026-03-17", "jours_de_retard": 8 },
+  { "code": "POIDS_VENTE_ATTEINT", "niveau": "info",
+    "message": "Le poids moyen a atteint 320 g, au-delà du seuil de 300 g : fin de cycle possible.",
+    "poids_moyen": 320.0, "seuil_g": 300, "date_pesee": "2026-04-10" }
 ]
 ```
 
 ### Erreurs
-Reprendre le format d'erreur existant. Lot inexistant : 404. `date_reference` invalide : 400. Non connecté : 401. Utilisateur inactif : refusé.
-
-### Fichier d'exemple pour le frontend
-Les exemples ci-dessus sont enregistrés dans `docs/contrats/` (par exemple `suivi_lot.exemple.json`, `suivi_lot_vide.exemple.json`, `lots_en_cours.exemple.json`). Le frontend s'en sert comme **données factices** avant de se brancher sur l'API : le passage des données factices à l'API ne doit rien changer à l'affichage.
+Lot inexistant : 404. `date_reference` invalide : 400 `{"date_reference": "Format invalide. Utilisez YYYY-MM-DD."}`. Non connecté : 401. Utilisateur inactif : 403.
 
 ## 5. Correspondance entre la page et le contrat
 
-### Tableau de bord en chiffres
-Source : `dernieres_valeurs`. Chaque carte affiche la valeur, son unité, la **date de la pesée** d'origine et la nature de la valeur.
-
+### Tableau de bord en chiffres (source : `dernieres_valeurs`)
 | Carte | Valeur principale | Information secondaire | Unité | Nature |
 |---|---|---|---|---|
 | Poids moyen | `poids_moyen` | `date_pesee`, jour de cycle | g | mesuré sur échantillon |
@@ -247,72 +116,61 @@ Source : `dernieres_valeurs`. Chaque carte affiche la valeur, son unité, la **d
 | Biomasse | `biomasse_kg` | `effectif_vivant` à la pesée | kg | **estimée** |
 | ICA cumulé | `ic_cumule` | `ic_periode` | kg d'aliment par kg de gain | calculé |
 
-**[À CONFIRMER]** : valeur principale du GMQ (cumulé retenu par défaut, la période en secondaire) et de l'ICA (cumulé, période en secondaire, d'après « ICA moyen cumulé »).
+Autres éléments d'en-tête, sans calcul : code du lot, espèce, bassin, jour de cycle, effectif vivant actuel, prochaine pesée prévue (avec le retard), seuil de l'espèce et signal « fin de cycle possible », dernières mesures environnementales avec leur date, alertes en bandeau.
 
-Autres éléments d'en-tête, sans calcul côté page : référence du lot, espèce, bassin, jour de cycle, effectif vivant actuel, prochaine pesée prévue (avec le retard si présent), le seuil de 250 g (rappel de la valeur, signal « fin de cycle possible »), dernières mesures environnementales du bassin avec leur date, et les alertes en bandeau.
-
-### Courbes
-Source : `point_initial` et `series`. Quatre graphiques alignés horizontalement.
-
+### Courbes (source : `point_initial` et `series`)
 | Courbe | Type | Séries | Départ |
 |---|---|---|---|
-| Poids moyen | ligne avec points | `poids_moyen`, point initial inclus ; ligne de référence horizontale au seuil de 250 g (`seuil.poids_vente_g`) | `point_initial` (J0) |
-| Biomasse | ligne avec points (aire légère possible) | `biomasse_kg`, point initial inclus ; marqueur différent pour signaler « estimée » | `point_initial` (J0) |
-| GMQ | **barres** pour `gmq_periode` + **ligne** pour `gmq_cumule` | une barre par pesée, rattachée à la **date de fin** de la période | pas de point J0 |
-| ICA | **barres** pour `ic_periode` + **ligne** pour `ic_cumule` | idem | pas de point J0 |
+| Poids moyen | ligne avec points | `poids_moyen` ; ligne de référence au seuil (`seuil.poids_vente_g`) | `point_initial` (J0) |
+| Biomasse | ligne avec points (aire légère possible) | `biomasse_kg`, marqueur « estimée » | `point_initial` (J0) |
+| GMQ | barres `gmq_periode` + ligne `gmq_cumule` | une barre par pesée, à la date de fin de période | pas de J0 |
+| ICA | barres `ic_periode` + ligne `ic_cumule` | idem | pas de J0 |
 
 ## 6. Normes de la page
 
 ### Données
-- Aucune formule dans le frontend : il n'additionne, ne divise ni ne ré-arrondit. Tout vient du contrat.
-- Un seul appel de suivi par lot affiché. Rechargement après toute action qui modifie les données (pesée, correction), pas de rafraîchissement automatique.
-- Le choix du lot et, le cas échéant, `date_reference` passent par l'API ; `date_reference` n'est pas exposé à l'utilisateur final (outil de test).
+- Aucune formule dans le frontend. Un seul appel de suivi par lot affiché ; rechargement après une action qui modifie les données (pesée, correction, annulation, clôture, évacuation) ; pas de rafraîchissement automatique.
 
 ### Valeurs absentes
-- Une valeur `null` s'affiche « — » avec une courte explication au survol (« non calculable : gain de biomasse nul ou provende non enregistrée », selon le cas). Jamais 0.
-- Dans les courbes, une valeur `null` crée un **trou** : pas de point, pas de barre, pas de segment qui relie les points voisins.
+- `null` s'affiche « — » avec une explication au survol (« non calculable : gain de biomasse nul ou provende non enregistrée », selon le cas). Jamais 0.
+- Dans les courbes, `null` crée un **trou** (pas de point, pas de barre, pas de segment).
 
 ### Courbes
-- **Bibliothèque de courbes déjà présente dans le template** : l'utiliser, sans ajouter de dépendance. S'il manque un type de graphique indispensable (barres et ligne combinées), le signaler plutôt que d'ajouter une bibliothèque.
-- Abscisse : **jour de cycle** (J0, J30…), avec la date dans l'infobulle. L'axe est **proportionnel au temps** : les dates de pesée étant libres, les intervalles sont irréguliers et ne doivent pas être affichés comme réguliers.
-- Pas de double axe vertical.
-- Infobulle : date, jour de cycle, valeur avec unité, et la nature (mesuré ou estimé) quand elle existe.
-- Mise en évidence du dernier point.
-- Pas de zone « bon / mauvais » sur l'ICA tant que l'exploitant n'a pas fixé de seuil.
-- Couleurs issues du thème du template, lisibles en mode clair et sombre, sans que la couleur seule porte l'information (légende et marqueurs différents).
-- Mise en page : quatre courbes en ligne sur grand écran, deux par ligne sur écran moyen, une par ligne sur téléphone. La courbe du poids moyen peut être mise en avant.
+- Bibliothèque déjà présente dans le template, sans nouvelle dépendance (signaler s'il manque les barres + ligne combinées).
+- Abscisse : **jour de cycle**, **proportionnelle au temps** (dates de pesée libres, intervalles irréguliers) ; date dans l'infobulle.
+- Pas de double axe vertical ; infobulle : date, jour de cycle, valeur avec unité, nature ; dernier point mis en évidence.
+- Pas de zone « bon / mauvais » sur l'ICA tant qu'aucun seuil n'est fixé.
+- Couleurs du thème, lisibles en clair et en sombre, information jamais portée par la couleur seule.
+- Quatre courbes en ligne sur grand écran, deux par ligne sur écran moyen, une par ligne sur téléphone.
 
 ### États de la page
 - **Chargement** : squelette des cartes et des courbes.
-- **Aucune pesée** (`nombre_pesees = 0`) : cartes à « — », courbes du poids moyen et de la biomasse réduites au point initial avec un message du type « Aucune pesée enregistrée. Première pesée prévue le … ».
-- **Lot clôturé** : bandeau « Cycle clôturé » ; pas d'alerte ni de prochaine pesée ; tout reste consultable.
-- **Erreur** : lot introuvable (404), accès refusé, erreur réseau, avec un message clair et un bouton pour réessayer.
-- **Alertes** : bandeau en tête, niveau « attention » (retard) visuellement distinct du niveau « info » (poids de vente atteint).
-- **Autre lot dans le bassin** (`autres_lots_du_bassin`) : mention discrète avec un lien pour passer à ce lot. Pas de superposition de deux lots dans les mêmes courbes pour l'instant.
+- **Aucune pesée** (`nombre_pesees = 0`) : cartes à « — », courbes réduites au point initial, message « Aucune pesée enregistrée. Première pesée prévue le … ».
+- **Lot clôturé** : bandeau « Cycle clôturé » ; pas d'alerte ni de prochaine pesée ; tout reste consultable ; si `lot.evacuation_requise`, rappel « Bassin non évacué » avec l'action d'évacuation (Administrateur, Gestionnaire).
+- **Erreur** : 404, accès refusé, erreur réseau, avec un message clair et un bouton « Réessayer ».
+- **Alertes** : bandeau en tête ; `attention` (retard) visuellement distinct de `info` (poids de vente atteint).
+- **Autre lot dans le bassin** : mention discrète avec un lien vers ce lot ; pas de superposition de deux lots dans les mêmes courbes.
 
 ### Présentation
-- Libellés en français, nombres au format français (virgule décimale, séparateur de milliers), unités toujours visibles. Le mot « ICA » dans les libellés.
-- Dates affichées en format local lisible ; fuseau du projet (Indian/Antananarivo).
-- Accessibilité : contrastes suffisants, alternatives textuelles pour les courbes, navigation au clavier sur les cartes et les onglets.
-- Rôles : la page est en lecture seule pour tous. Le bouton de saisie de pesée relève d'un autre lot de travail.
+- Français, nombres au format français (virgule décimale, séparateur de milliers), unités visibles, mot « ICA ».
+- Dates en format local lisible, fuseau Indian/Antananarivo.
+- Accessibilité : contrastes, alternatives textuelles des courbes, navigation au clavier.
+- La page est en lecture seule ; la saisie de pesée, la clôture et l'évacuation sont des actions séparées soumises aux droits.
 
 ## 7. Zones réservées
 
-- **Homogénéité des poids (courbe de Gauss) et sexage** : emplacements « à venir », sans donnée. **Point de vigilance pour ce futur sprint** : l'échantillon de pesée enregistre aujourd'hui seulement le nombre de poissons pesés et le poids total ; une courbe de Gauss (écart-type, coefficient de variation) demande les **poids individuels** ou au moins une mesure de dispersion, qui ne sont pas collectés. Ce sprint devra donc prévoir une saisie supplémentaire. Ne rien modifier du modèle de pesée dans cette phase.
-- **Interactions LLM** : emplacement « à venir ». Elles passeront plus tard par un endpoint dédié alimenté par le service IA (les explications et recommandations s'appuient sur les indicateurs et anomalies déjà calculés, voir `CONTEXTE_SERVICE_IA.md`). Aucune clé réservée dans le contrat de suivi.
+- **Homogénéité des poids et sexage** : à venir. La pesée n'enregistre que le nombre pesé et le poids total ; une courbe de Gauss demandera les poids individuels (saisie supplémentaire à prévoir).
+- **Interactions LLM** : à venir, par un endpoint dédié du service IA ; aucune clé réservée dans ce contrat.
 
-## 8. Critères de recette de la phase
+## 8. Critères de recette
 
-- La liste des lots en cours permet de choisir un lot, et la page se charge à partir de l'exemple JSON puis de l'API sans autre changement.
-- Les quatre cartes et les quatre courbes affichent les valeurs du contrat, sans calcul côté page.
-- Les valeurs nulles, l'état « aucune pesée », le lot clôturé et les erreurs sont gérés.
-- Les alertes s'affichent selon leur niveau.
-- Aucun appel pour les zones réservées.
-- Le comportement est correct à trois largeurs d'écran (téléphone, tablette, ordinateur) et en mode clair et sombre.
+- La liste des lots en cours permet de choisir un lot ; la page se charge depuis l'exemple JSON puis depuis l'API sans autre changement.
+- Les quatre cartes et les quatre courbes affichent les valeurs du contrat, sans calcul.
+- Valeurs nulles, absence de pesée, lot clôturé et erreurs sont gérés ; alertes selon leur niveau ; aucun appel pour les zones réservées.
+- Correct à trois largeurs d'écran et en mode clair et sombre.
 
 ## 9. Points ouverts
 
-1. Valeur principale des cartes GMQ et ICA (cumulé par défaut).
-2. Tolérance de retard de pesée (0 jour par défaut).
-3. Liste des champs des paramètres environnementaux et unité du taux d'oxygène.
-4. Comparaison de deux lots du même bassin dans un même graphique : écartée pour l'instant, à rouvrir si le besoin apparaît.
+1. Valeur principale des cartes GMQ et ICA (cumulé par défaut, période en secondaire).
+2. Unités des paramètres environnementaux.
+3. Comparaison de deux lots du même bassin dans un même graphique (écartée pour l'instant).

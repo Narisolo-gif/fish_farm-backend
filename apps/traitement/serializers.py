@@ -228,3 +228,33 @@ class TraitementSerializer(serializers.ModelSerializer):
             for ligne in lignes
         ]
         return representation
+
+
+class ApercuClotureTraitementSerializer(serializers.Serializer):
+    """Boîte de validation de la clôture : lot, espèce, bassin, dates, effectifs."""
+
+    def to_representation(self, contexte):
+        traitement = contexte["traitement"]
+        lot = traitement.lot
+        return {
+            "id_traitement": traitement.pk,
+            "id_lot": lot.pk,
+            "reference_lot": lot.reference,
+            "espece": lot.espece,
+            "id_bassin": traitement.bassin_id,
+            "reference_bassin": traitement.bassin.reference,
+            "statut": traitement.statut,
+            "date_ouverture": traitement.date_ouverture.isoformat(),
+            "date_cloture": contexte["date_cloture"].isoformat(),
+            "duree_jours": contexte["duree_jours"],
+            "effectif_initial": traitement.effectif_initial,
+            "effectif_final": contexte["effectif_final"],
+            "morts_et_pertes": contexte["morts_et_pertes"],
+            "taux_survie": (
+                f"{contexte['taux_survie']:.2f}"
+                if contexte["taux_survie"] is not None
+                else None
+            ),
+            "cloturable": contexte["cloturable"],
+            "raison_refus": contexte["raison_refus"],
+        }
